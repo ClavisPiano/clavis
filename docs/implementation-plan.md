@@ -1,6 +1,6 @@
 # Clavis: Implementation Plan
 
-Status: v0.1
+Status: v0.2 (R1-R13 approved 2026-10-10)
 Inputs: `docs/specs/piano-learning-model-spec.md` (v0.3), `docs/specs/piano-trainer-architecture.md` (v0.1)
 
 Scope of this document:
@@ -19,7 +19,7 @@ Working assumptions:
 
 ## 1. Spec resolutions
 
-These are proposed decisions. Each is cheap to change now and expensive after M2, because they shape event schemas and item identity.
+Approved 2026-10-10. Each was cheap to change now and expensive after M2, because they shape event schemas and item identity.
 
 | # | Issue in specs | Proposed resolution |
 |---|---|---|
@@ -186,8 +186,8 @@ Lane A can start as soon as T0.1 merges, in parallel with the rest of M0.
 
 ## 6. Open items for you
 
-1. Approve or amend resolutions R1-R13 (section 1). R1-R4 and R7 affect event schemas and should be settled before T2.2.
+1. ~~Approve or amend resolutions R1-R13~~ Approved.
 2. Cloudflare account and API token for T0.5.
 3. Recording session for the fixture corpus (T1.8): roughly 30-45 minutes across voice, acoustic and digital piano.
 4. Attempt replay retention (arch open question 2): proposal is last 50 attempts locally, benchmarks only in R2, revisit in M6.
-5. Whether to file section 4's tasks as GitHub issues (one per task, with deps and acceptance criteria) so each agent session can pick one up.
+5. ~~File section 4's tasks as GitHub issues~~ Filed; one issue per task (one per task, with deps and acceptance criteria) so each agent session can pick one up.
