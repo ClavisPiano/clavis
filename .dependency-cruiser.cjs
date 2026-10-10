@@ -47,6 +47,14 @@ module.exports = {
       to: { path: "(^|/)node_modules/(dexie|svelte)(/|$)|^(dexie|svelte)(/|$)" },
     },
     {
+      name: "store-imports-only-core",
+      severity: "error",
+      comment:
+        "packages/store is an adapter: it may import @clavis/core at runtime, but no other workspace package.",
+      from: { path: "^packages/store/" },
+      to: { path: "^(@clavis/(?!core(/|$))|packages/(?!store/|core/)|apps/|tools/)" },
+    },
+    {
       name: "scoring-only-core-types",
       severity: "error",
       comment: "packages/scoring may only import @clavis/core, and only as types.",
