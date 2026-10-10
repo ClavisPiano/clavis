@@ -147,3 +147,11 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Clavis monorepo
+.wrangler/
+playwright-report/
+test-results/
+.pnpm-store/
+*.tsbuildinfo
+.claude/worktrees/
