@@ -190,4 +190,4 @@ Lane A can start as soon as T0.1 merges, in parallel with the rest of M0.
 2. Cloudflare account and API token for T0.5.
 3. Recording session for the fixture corpus (T1.8): roughly 30-45 minutes across voice, acoustic and digital piano.
 4. Attempt replay retention (arch open question 2): proposal is last 50 attempts locally, benchmarks only in R2, revisit in M6.
-5. ~~File section 4's tasks as GitHub issues~~ Filed; one issue per task (one per task, with deps and acceptance criteria) so each agent session can pick one up.
+5. ~~File section 4's tasks as GitHub issues~~ Filed, one issue per task with deps and acceptance criteria.
