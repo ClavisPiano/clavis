@@ -36,6 +36,7 @@ These are proposed decisions. Each is cheap to change now and expensive after M2
 | R11 | Key-family unlocking rule (for key of the day and per-family mastery) is undefined | A node's family B items become eligible once that node is `mastered` in family A; family C once `fluent` in B. Key of the day rotates around the circle of fifths over keys whose family is unlocked for at least one `learning` node |
 | R12 | "Sing, then play" generators (`degreeSing`, `cellEcho`) have two responses but one `AttemptOutcome` | One attempt with sub-scores `{ sing?, play? }`. Rating uses `play` at the instrument, `sing` in Away mode. Sing score is logged for metacognition/metrics |
 | R13 | Estimated seconds per item (composer budget) has no data source at first | Derived from `item.presented -> attempt.completed` durations, rolling median per generator. Seed with constants per generator in content |
+| R14 | Spec 3.2 gives a node a single `itemGenerator`, but degree nodes are drilled by both `degreeSing` (sing then play) and `degreeId` (play only, and the Away tap variant) | `SkillNode.itemGenerators: GeneratorId[]`, non-empty, first entry is the default. Item identity (R1) excludes the generator, so all generators for a node share one FSRS card per item |
 
 ---
 
