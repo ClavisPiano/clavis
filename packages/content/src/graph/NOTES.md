@@ -1,0 +1,18 @@
+# v1 graph content notes
+
+JSON cannot carry comments, so the rationale for `v1.json` lives here.
+
+- **Counts.** 12 EAR, 9 READ, 7 HANDS, 3 BYEAR. READ and HANDS each include one R10 node (`read.minor.accidentals`, `hands.minor.leadingTone`).
+- **Bass landmarks.** Spec: "low C, F (clef line), middle C, low G". Chosen pitches: C2 (low C), F3 (the F line of the bass clef), C4 (middle C), G2 (low G). Scientific pitch notation, middle C = C4.
+- **`read.bass.skips` full range.** `fullRange: ["C2", "E4"]` covers the bass staff plus two ledger lines above.
+- **Key dependence.** EAR and BYEAR false. READ and HANDS true, except `read.rhythm.basic` (rhythm only, single pitch) which is false.
+- **Mastery defaults.** `minAccuracy 0.9`, `windowAttempts 20`, `distinctSessions 2`, `maxMedianLatencyMs` equal to the node `targetLatencyMs`.
+- **Rhythm nodes.** `ear.rhythm.echo` and `read.rhythm.basic` have no latency criterion: they are scored on onset deviation, not response speed. Reading uses a window of 15.
+- **HANDS and BYEAR.** Whole tasks are slow (spec 5.4), so `windowAttempts 5`, `minAccuracy 0.8` (4 of 5; 0.9 over 5 would demand a perfect run), no latency.
+- **Alignment-scored reading and `ear.real.phrase`.** Window of 10, no latency. `read.grand.2line` 0.85, `read.grand.sight` and `ear.real.phrase` 0.8, because whole-line scoring is harsher than single-note scoring.
+- **Target latencies (ms).** Single degrees 1500 (spec), bass landmarks/steps 1200 (spec, bass note naming), bass skips/intervals/minor accidentals 1500, bass chords 2500, triad quality 2000, cells 3000, bass motion 4000 (several roots), progressions and cadences 3000 (spec).
+- **Generators.** Degree nodes list `degreeSing` first, then `degreeId`. Everything is `implemented: false`; T2.6 flips `degreeSing`, `degreeId`, `cellEcho`, `rhythmEcho`.
+- **Away eligibility (spec 6.5).** True for EAR generators, `bassNoteRead` (locate on an on-screen keyboard) and `concept`. False for `rhythmRead`, `bassChordRead`, `sightLine`, `lhPattern`, `coordTask`, `byEarPhrase`.
+- **Seed durations (seconds per item).** degreeSing 8, degreeId 6, cellEcho 12, rhythmEcho 12, rhythmRead 12, bassMotion 15, chordQuality 8, progressionId 15, bassNoteRead 5, bassChordRead 8, sightLine 60, lhPattern 90, coordTask 90, byEarPhrase 180, concept 30.
+- **`ear.cadence`.** Reuses `progressionId` with a `cadences` param (two-chord endings) rather than a separate generator.
+- **`contentVersion`** must change whenever graph semantics change.
