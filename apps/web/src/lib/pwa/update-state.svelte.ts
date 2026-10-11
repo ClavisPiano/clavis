@@ -1,3 +1,4 @@
+import { WARM_NOTATION_MESSAGE } from "./precache";
 import { applyUpdate, watchForUpdate } from "./update";
 
 class UpdateState {
@@ -44,6 +45,9 @@ export async function watchServiceWorker(): Promise<void> {
   try {
     const registration = await navigator.serviceWorker.ready;
     updateState.attach(registration);
+    // Fill the notation cache in the background while we are online, so reading works offline
+    // later. The worker skips what it already holds.
+    if (navigator.onLine) registration.active?.postMessage({ type: WARM_NOTATION_MESSAGE });
     // Installed PWAs can stay alive for days; look for a new version when the app is foregrounded.
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") void registration.update().catch(() => undefined);

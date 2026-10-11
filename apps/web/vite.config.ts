@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [
     sveltekit({
       adapter: adapter({ pages: "build", assets: "build", fallback: "index.html", strict: false }),
+      // The SPA fallback serves every route, so relative asset paths would break on nested routes
+      // such as /dev/notation (it would ask for /dev/_app/... and /dev/service-worker.js).
+      paths: { relative: false },
       // The static build has an inline bootstrap script, so script-src uses hashes that SvelteKit
       // writes into a <meta> CSP tag. Directives a meta tag cannot carry (frame-ancestors) live in
       // static/_headers. Keep both in sync with docs/deploy.md.

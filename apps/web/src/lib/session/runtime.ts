@@ -17,6 +17,8 @@ import {
 } from "@clavis/core";
 import { scoreAttempt } from "@clavis/scoring";
 import { getLearnerState } from "../learner";
+import { getNotationClient } from "../notation/shared";
+import { createNotationViewPort, type NotationViewPort } from "../notation/view-port";
 import { createInput, detachFakeInput } from "../input";
 import { SessionMachine, type SessionDeps } from "./machine";
 import { findOpenSessions } from "./open";
@@ -35,6 +37,8 @@ export interface SessionRuntime {
   tone(midi: number): void;
   /** Call from a user gesture before `machine.start()` or `resume()`. */
   unlock(): Promise<void>;
+  /** The session's notation port. `NotationView` subscribes to it to draw reading items. */
+  readonly notation: NotationViewPort;
   /** Play a concept card example. Call from a tap; stops anything already sounding. */
   playExample(spec: StimulusSpec): void;
   /** True once the warm-up card has been shown in full on this device. */
@@ -106,6 +110,10 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
   const latency = parseLatency(await store.getMeta(LATENCY_META_KEY));
   let orientCardSeen = (await store.getMeta(ORIENT_CARD_META_KEY)) === true;
 
+  // Reading items draw through this port (R17: `show` resolves after the paint). The worker only
+  // starts when the machine first preloads, which it does only for plans with notation items.
+  const notation = createNotationViewPort(getNotationClient());
+
   const seedBytes = crypto.getRandomValues(new Uint32Array(1));
   const deps: SessionDeps = {
     deviceId,
@@ -126,6 +134,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
       load: () => stimulusPlayer.load(),
     },
     input: handle.adapter,
+    notation,
     createSingInput: () => createInput("mic").adapter,
     score: scoreAttempt,
     append: async (events: LearningEvent[]) => {
@@ -171,6 +180,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
     runtime: {
       machine,
       tap,
+      notation,
       tone(midi) {
         if (params.silent) return;
         void stimulusPlayer
@@ -215,6 +225,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
       teardown() {
         // Leaving mid-session closes it now; a killed tab is cleaned up by the next start.
         machine.finish();
+        notation.hide();
         handle.adapter.stop();
         if (fake) {
           detachFakeInput();

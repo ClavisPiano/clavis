@@ -1,15 +1,14 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  import { SvelteMap } from "svelte/reactivity";
+  import { onDestroy, onMount } from "svelte";
+  import { SCORE_FIXTURES } from "@clavis/core";
+  import NotationView from "../../../lib/components/NotationView.svelte";
   import { percentile, round1 } from "../../../lib/notation/bench-stats";
-  import { SPIKE_MEI, type SpikeFixtureKey } from "../../../lib/notation/spike-mei";
-  import type { SpikeRequest, SpikeResponse } from "../../../lib/notation/verovio.worker";
+  import { createNotationClient } from "../../../lib/notation/client";
+  import { getNotationClient } from "../../../lib/notation/shared";
+  import { createNotationViewPort } from "../../../lib/notation/view-port";
 
-  // T3.2 spike page. Renders the T3.1 fixtures through a Verovio module worker and benchmarks it.
-  // The MEI is hand-written spike data (spike-mei.ts) until T3.3 provides toMei(score).
-
-  type Ready = Extract<SpikeResponse, { type: "ready" }>;
-  type Rendered = Extract<SpikeResponse, { type: "rendered" }>;
+  // Dev page for the notation runtime (T3.4). Renders the T3.1 score fixtures through the real
+  // client and view, and keeps the T3.2 benchmark (cold init, first render, warm round trips).
 
   interface Stat {
     p50: number;
@@ -18,21 +17,16 @@
   }
   interface BenchResult {
     userAgent: string;
-    verovioVersion: string;
     coldInitMs: number;
-    workerInitMs: number;
-    workerModuleMs: number;
-    workerToolkitMs: number;
     firstRenderMs: number;
     warmRenders: number;
     warmRoundTripMs: Stat;
-    warmWorkerMs: Stat;
-    wasmHeapBytes: number | null;
     jsHeapUsedBytes: number | null;
     jsHeapLimitBytes: number | null;
   }
 
-  const FIXTURES: readonly { key: SpikeFixtureKey; label: string }[] = [
+  type FixtureKey = keyof typeof SCORE_FIXTURES;
+  const FIXTURES: readonly { key: FixtureKey; label: string }[] = [
     { key: "bassF3GMajor", label: "Bass F3, G major" },
     { key: "dMinorRaised7th", label: "D minor raised 7th" },
     { key: "intervalC3G3", label: "Interval C3-G3" },
@@ -41,92 +35,19 @@
   const WARM_RENDERS = 50;
   const WIDTH_PX = 600;
 
-  let worker: Worker | undefined;
-  let nextId = 1;
-  const pending = new SvelteMap<
-    number,
-    { resolve: (r: Rendered) => void; reject: (e: Error) => void }
-  >();
-  let readyWaiter: { resolve: (r: Ready) => void; reject: (e: Error) => void } | undefined;
+  const port = createNotationViewPort(getNotationClient(), { widthPx: WIDTH_PX });
 
-  let svg = $state("");
-  let status = $state("Worker not started. Render a fixture or run the benchmark.");
+  let status = $state("Starting the notation worker...");
   let busy = $state(false);
   let results = $state<BenchResult | undefined>();
   const json = $derived(results ? JSON.stringify(results, null, 2) : "");
 
-  function handle(msg: SpikeResponse): void {
-    if (msg.type === "ready") {
-      readyWaiter?.resolve(msg);
-      readyWaiter = undefined;
-    } else if (msg.type === "rendered") {
-      pending.get(msg.id)?.resolve(msg);
-      pending.delete(msg.id);
-    } else if (msg.id !== undefined) {
-      pending.get(msg.id)?.reject(new Error(msg.message));
-      pending.delete(msg.id);
-    } else {
-      readyWaiter?.reject(new Error(msg.message));
-      readyWaiter = undefined;
-    }
-  }
-
-  function stopWorker(): void {
-    worker?.terminate();
-    worker = undefined;
-    for (const p of pending.values()) p.reject(new Error("worker stopped"));
-    pending.clear();
-  }
-
-  /** Creates the worker and resolves when the toolkit is ready. Time is taken by the caller. */
-  function startWorker(): Promise<Ready> {
-    stopWorker();
-    const w = new Worker(new URL("../../../lib/notation/verovio.worker.ts", import.meta.url), {
-      type: "module",
-    });
-    worker = w;
-    const ready = new Promise<Ready>((resolve, reject) => {
-      readyWaiter = { resolve, reject };
-    });
-    w.onmessage = (event: MessageEvent<SpikeResponse>) => {
-      handle(event.data);
-    };
-    w.onerror = (event) => {
-      const err = new Error(event.message || "worker error");
-      readyWaiter?.reject(err);
-      readyWaiter = undefined;
-    };
-    const init: SpikeRequest = { type: "init" };
-    w.postMessage(init);
-    return ready;
-  }
-
-  async function ensureWorker(): Promise<void> {
-    if (!worker) {
-      status = "Starting worker...";
-      await startWorker();
-    }
-  }
-
-  function renderMei(mei: string): Promise<Rendered> {
-    const w = worker;
-    if (!w) return Promise.reject(new Error("worker not started"));
-    const id = nextId++;
-    return new Promise<Rendered>((resolve, reject) => {
-      pending.set(id, { resolve, reject });
-      const req: SpikeRequest = { type: "render", id, mei, widthPx: WIDTH_PX };
-      w.postMessage(req);
-    });
-  }
-
-  async function show(key: SpikeFixtureKey): Promise<void> {
+  async function show(key: FixtureKey): Promise<void> {
     busy = true;
     try {
-      await ensureWorker();
       const t0 = performance.now();
-      const out = await renderMei(SPIKE_MEI[key]);
-      svg = out.svg;
-      status = `Rendered ${key} in ${String(round1(performance.now() - t0))} ms (worker ${String(round1(out.totalMs))} ms)`;
+      await port.show(SCORE_FIXTURES[key]);
+      status = `Rendered ${key} in ${String(round1(performance.now() - t0))} ms`;
     } catch (err) {
       status = `Error: ${String(err)}`;
     } finally {
@@ -151,45 +72,37 @@
   async function benchmark(): Promise<void> {
     busy = true;
     results = undefined;
+    // A separate client, so the cold start is a fresh worker even after the page has rendered.
+    const client = createNotationClient();
     try {
       status = "Cold init: starting a fresh worker...";
       const t0 = performance.now();
-      const ready = await startWorker();
+      await client.preload();
       const coldInitMs = performance.now() - t0;
 
       status = "First render...";
       const keys = FIXTURES.map((f) => f.key);
       const first = keys[0] ?? "bassF3GMajor";
       const t1 = performance.now();
-      const firstOut = await renderMei(SPIKE_MEI[first]);
+      await client.render(SCORE_FIXTURES[first], { widthPx: WIDTH_PX });
       const firstRenderMs = performance.now() - t1;
-      svg = firstOut.svg;
 
       status = `Warm renders (${String(WARM_RENDERS)})...`;
       const roundTrip: number[] = [];
-      const inWorker: number[] = [];
       for (let i = 0; i < WARM_RENDERS; i++) {
         const key = keys[i % keys.length] ?? "bassF3GMajor";
         const t = performance.now();
-        const out = await renderMei(SPIKE_MEI[key]);
+        await client.render(SCORE_FIXTURES[key], { widthPx: WIDTH_PX });
         roundTrip.push(performance.now() - t);
-        inWorker.push(out.totalMs);
-        svg = out.svg;
       }
 
       const mem = (performance as unknown as { memory?: PerfMemory }).memory;
       results = {
         userAgent: navigator.userAgent,
-        verovioVersion: ready.version,
         coldInitMs: round1(coldInitMs),
-        workerInitMs: round1(ready.initMs),
-        workerModuleMs: round1(ready.moduleMs),
-        workerToolkitMs: round1(ready.toolkitMs),
         firstRenderMs: round1(firstRenderMs),
         warmRenders: WARM_RENDERS,
         warmRoundTripMs: stat(roundTrip),
-        warmWorkerMs: stat(inWorker),
-        wasmHeapBytes: ready.wasmHeapBytes,
         jsHeapUsedBytes: mem?.usedJSHeapSize ?? null,
         jsHeapLimitBytes: mem?.jsHeapSizeLimit ?? null,
       };
@@ -197,6 +110,7 @@
     } catch (err) {
       status = `Error: ${String(err)}`;
     } finally {
+      client.dispose();
       busy = false;
     }
   }
@@ -213,13 +127,19 @@
   const mb = (bytes: number | null): string =>
     bytes === null ? "n/a" : `${(bytes / 1048576).toFixed(1)} MB`;
 
-  onDestroy(stopWorker);
+  onMount(() => {
+    void show("bassF3GMajor");
+  });
+  onDestroy(() => {
+    port.hide();
+  });
 </script>
 
-<h1>Notation spike</h1>
+<h1>Notation</h1>
 <p>
-  Verovio in a module worker. Cold init is the time from creating the worker to the toolkit being
-  ready. Tap Benchmark twice: the second run measures init with the files in the HTTP cache.
+  The notation runtime: Verovio in a module worker, drawn by NotationView. The benchmark starts a
+  fresh worker and times its cold init, then 50 warm renders. Tap it twice: the second run measures
+  init with the files cached.
 </p>
 
 <div class="row">
@@ -237,23 +157,17 @@
 
 <p role="status" data-testid="status">{status}</p>
 
-<!-- eslint-disable-next-line svelte/no-at-html-tags -- trusted: SVG produced by our own Verovio worker from our own MEI -->
-<div class="score" data-testid="score">{@html svg}</div>
+<div class="score" data-testid="score">
+  <NotationView {port} label="Sample score" />
+</div>
 
 {#if results}
   <h2>Results</h2>
   <table data-testid="bench-table">
     <tbody>
-      <tr><th scope="row">Verovio</th><td>{results.verovioVersion}</td></tr>
       <tr
         ><th scope="row">Cold init (worker create to ready)</th><td>{results.coldInitMs} ms</td></tr
       >
-      <tr>
-        <th scope="row">Worker init (module / toolkit)</th>
-        <td>
-          {results.workerInitMs} ms ({results.workerModuleMs} / {results.workerToolkitMs})
-        </td>
-      </tr>
       <tr><th scope="row">First render</th><td>{results.firstRenderMs} ms</td></tr>
       <tr>
         <th scope="row">Warm round trip p50 / p95 / max ({results.warmRenders} renders)</th>
@@ -262,13 +176,6 @@
             .max} ms
         </td>
       </tr>
-      <tr>
-        <th scope="row">Warm in-worker p50 / p95 / max</th>
-        <td>
-          {results.warmWorkerMs.p50} / {results.warmWorkerMs.p95} / {results.warmWorkerMs.max} ms
-        </td>
-      </tr>
-      <tr><th scope="row">Worker WASM heap</th><td>{mb(results.wasmHeapBytes)}</td></tr>
       <tr><th scope="row">Page JS heap used</th><td>{mb(results.jsHeapUsedBytes)}</td></tr>
     </tbody>
   </table>
@@ -290,11 +197,11 @@
     padding: 0 var(--space-4, 1rem);
   }
   .score {
-    background: #fff;
-    color: #000;
-    padding: 0.5rem;
+    background: var(--color-surface);
+    padding: var(--space-3);
     min-height: 4rem;
-    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
   }
   table {
     border-collapse: collapse;
