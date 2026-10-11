@@ -92,18 +92,27 @@ describe("v1 skill graph", () => {
     for (const id of implemented) expect(getGenerator(id)).toBeDefined();
   });
 
-  it("enables exactly the four ear M2 nodes", () => {
+  it("enables the ear M2 nodes and the six reading nodes", () => {
     const enabled = graph.nodes.filter((n) => isNodeEnabled(n, graph.generators)).map((n) => n.id);
     for (const id of [
       "ear.degrees.major.135",
       "ear.rhythm.echo",
       "ear.degrees.major.diatonic",
       "ear.cells.major.2-4",
+      "ear.degrees.minor",
     ]) {
       expect(enabled).toContain(id);
     }
-    expect(enabled).toContain("ear.degrees.minor");
-    expect(enabled.every((id) => id.startsWith("ear."))).toBe(true);
+    // R18: bassNoteRead covers five nodes, rhythmRead one. Grand staff and chords wait for M5.
+    expect(enabled.filter((id) => id.startsWith("read.")).sort()).toEqual([
+      "read.bass.intervals",
+      "read.bass.landmarks",
+      "read.bass.skips",
+      "read.bass.steps",
+      "read.minor.accidentals",
+      "read.rhythm.basic",
+    ]);
+    expect(enabled.every((id) => id.startsWith("ear.") || id.startsWith("read."))).toBe(true);
   });
 
   it("every enabled node's generators can enumerate and generate items", () => {

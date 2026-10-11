@@ -15,11 +15,6 @@ export interface SessionParams {
   headphones: boolean | "ask" | undefined;
   /** `?practice=1`: extra practice on started items (T2.15). Cards and schedule stay untouched. */
   practice: boolean;
-  /**
-   * `?readstub=1` with silent audio: test-only seam that plans a stub READ item, because the real
-   * reading generators are not registered yet (T3.15). See `read-stub.ts`.
-   */
-  readStub: boolean;
 }
 
 export const MIN_BUDGET_SEC = 30;
@@ -48,7 +43,6 @@ export function parseSessionParams(
     silent,
     practice: searchParams.get("practice") === "1",
     headphones: headphones ?? (inputKind === "fake" ? true : undefined),
-    readStub: silent && searchParams.get("readstub") === "1",
   };
 }
 
