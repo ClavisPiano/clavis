@@ -2,30 +2,31 @@
 
 Clavis runs as one Cloudflare Worker named `clavis` (`apps/worker`). It serves the SvelteKit static build through Workers Static Assets and handles `/api/*` itself. There is no custom domain; it lives on the `workers.dev` subdomain.
 
-## Required GitHub secrets
+## Workers Builds
 
-Add these under Settings, Secrets and variables, Actions:
+Deploys run in Cloudflare Workers Builds, connected to this repository from the dashboard (Workers & Pages, clavis, Settings, Build). GitHub Actions only runs CI; it holds no Cloudflare credentials.
 
-- `CLOUDFLARE_ACCOUNT_ID`: the account id (Workers & Pages overview page, right sidebar).
-- `CLOUDFLARE_API_TOKEN`: a custom API token with these permissions:
-  - Account, Workers Scripts, Edit
-  - Account, Account Settings, Read
-  - Later (M4): Account, D1, Edit and Account, Workers R2 Storage, Edit
+| Setting | Value |
+| --- | --- |
+| Root directory | `/` (the pnpm workspace root) |
+| Build command | `pnpm --filter @clavis/web build` |
+| Deploy command | `npx wrangler deploy --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
+| Non-production branch deploy command | `npx wrangler versions upload --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
+| Production branch | `main` |
+| Build variable | `NODE_VERSION=22` if `.nvmrc` is not picked up |
 
-If either secret is missing, `.github/workflows/deploy.yml` still runs checks and the build, then skips the Cloudflare step with a notice instead of failing.
-
-## What the workflow does
-
-- Push to `main` or manual run: `pnpm check`, build the web app, then `wrangler deploy --var VERSION:<commit sha>`. `/api/health` reports that sha as `version`.
-- Pull request from the same repository: build, then `wrangler versions upload`, which creates a non-production Worker version and prints its preview URL in the job summary. Fork PRs are skipped because they get no secrets.
-- Preview URLs must be enabled for the Worker in the Cloudflare dashboard (Workers & Pages, clavis, Settings, Domains & Routes, Preview URLs). If the summary says no URL was returned, check that setting. Preview versions are not routed to production traffic.
+- The Worker name in the dashboard must match `name` in `apps/worker/wrangler.jsonc` (`clavis`), or the build fails.
+- The static assets directory comes from `wrangler.jsonc` (`../web/build`, relative to the config file), so no output directory is set in the dashboard.
+- `/api/health` reports the deployed commit sha as `version`.
+- Every push to `main` deploys, whether or not CI is green. Merge only green PRs.
+- Other branches upload a non-production version with a preview URL, shown on the PR by the Cloudflare GitHub app. Preview URLs must be enabled for the Worker (Settings, Domains & Routes, Preview URLs). Preview versions get no production traffic.
 
 ## Deploy manually
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm --filter @clavis/web build
-pnpm --filter @clavis/worker exec wrangler login   # once, or set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
+pnpm --filter @clavis/worker exec wrangler login   # once
 pnpm --filter @clavis/worker deploy
 ```
 
@@ -33,7 +34,7 @@ Local preview of the full stack: `pnpm --filter @clavis/worker dev` (builds the 
 
 ## Finding the workers.dev URL
 
-The deploy output ends with `https://clavis.<your-subdomain>.workers.dev`. It is also shown in the dashboard under Workers & Pages, clavis. The subdomain is chosen once per account under Workers & Pages, Account details.
+The deploy log ends with `https://clavis.<your-subdomain>.workers.dev`. It is also shown in the dashboard under Workers & Pages, clavis. The subdomain is chosen once per account under Workers & Pages, Account details.
 
 ## Security headers and CSP
 
