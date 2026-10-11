@@ -24,12 +24,7 @@ import { createInput, detachFakeInput } from "../input";
 import { SessionMachine, type SessionDeps } from "./machine";
 import { findOpenSessions } from "./open";
 import { parseLatency, type SessionParams } from "./params";
-import {
-  STUB_NOTATION,
-  STUB_READ_REGISTRY,
-  STUB_BASS_NOTE_READ,
-  withStubReadImplemented,
-} from "./read-stub";
+import { STUB_READ_REGISTRY, STUB_BASS_NOTE_READ, withStubReadImplemented } from "./read-stub";
 
 export const HEADPHONES_META_KEY = "headphones";
 export const LATENCY_META_KEY = "latency";
@@ -175,7 +170,6 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
     latency,
     headphones,
     askHeadphones: !fake || params.headphones === "ask",
-    ...(readStub ? { notation: STUB_NOTATION } : {}),
     saveHeadphones: async (value) => {
       await store.setMeta(HEADPHONES_META_KEY, value);
       await service.append([

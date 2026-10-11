@@ -6,14 +6,13 @@ import {
   type ItemParams,
   type SkillGraph,
 } from "@clavis/core";
-import type { NotationPort } from "../notation/port";
 
 /*
  * Test seam for reading items (T3.11). The real `bassNoteRead` is not registered until T3.15, so
  * Playwright cannot get a READ item into a session. `?readstub=1` (honoured only together with
- * `?audio=silent`, so it is never reached by a normal install) swaps in this one-item generator,
- * marks `bassNoteRead` implemented in the session's graph, and supplies a notation port that paints
- * nothing. Remove it when T3.15 lands and the real generator and renderer are wired.
+ * `?audio=silent`, so it is never reached by a normal install) swaps in this one-item generator and
+ * marks `bassNoteRead` implemented in the session's graph. The item is drawn by the real notation
+ * port. Remove this seam when T3.15 registers the real generator.
  */
 
 /** F3 in G major sounds F#3. */
@@ -58,10 +57,3 @@ export function withStubReadImplemented(graph: SkillGraph): SkillGraph {
     ),
   };
 }
-
-export const STUB_NOTATION: NotationPort = {
-  preload: () => Promise.resolve(),
-  show: () => Promise.resolve(),
-  highlight: () => undefined,
-  hide: () => undefined,
-};
