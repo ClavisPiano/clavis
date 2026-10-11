@@ -60,10 +60,15 @@ async function runToSummary(page: Page): Promise<string[]> {
     if (state === "summary") return answered;
     if (state === "error") throw new Error("session reached the error state");
     if (state === "orient" || state === "intro") {
-      await page.getByTestId("continue").click();
+      await page
+        .getByTestId("continue")
+        .click({ timeout: 2_000 })
+        .catch(() => undefined);
     } else if (state === "feedback") {
       const next = page.getByTestId("next");
-      if (await next.isVisible()) await next.click();
+      // The session can move on by itself (auto-advance, or the budget running out on a slow
+      // runner), so never block on a button that may have gone: try briefly, then re-check.
+      if (await next.isVisible()) await next.click({ timeout: 2_000 }).catch(() => undefined);
       else await page.waitForTimeout(100);
     } else if (state === "listening") {
       const phase = await page.evaluate(() => window.__clavisSession?.phase ?? "");
