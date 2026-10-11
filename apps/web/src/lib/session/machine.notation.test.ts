@@ -428,10 +428,10 @@ describe("event log", () => {
     const compose = (input: ComposeInput) => {
       const plan = composeSession(input);
       const first = plan.blocks.ear[0]?.nodeId ?? "";
-      // T3.9 shape: introductions that name their key family.
       return {
         ...plan,
-        introductions: [{ nodeId: first, keyFamily: "B" }] as unknown as string[],
+        introductions: [first],
+        introductionKeyFamilies: { [first]: "B" as const },
       };
     };
     const machine = new SessionMachine({ ...h.deps, compose });
@@ -441,7 +441,7 @@ describe("event log", () => {
     expect(introduced[0]?.keyFamily).toBe("B");
   });
 
-  it("node.introduced has no key family for plain node ids", async () => {
+  it("node.introduced has no key family for EAR introductions", async () => {
     const h = await makeHarness({ budgetSec: 90 });
     await h.machine.start();
     const introduced = byType(await h.log(), "node.introduced");

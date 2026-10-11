@@ -1132,14 +1132,12 @@ export class SessionMachine {
   }
 }
 
-/**
- * Introductions from the plan. T3.9 makes each carry the key family the node opens in; until then
- * entries are plain node ids, and either shape is read here.
- */
+/** Introductions from the plan, with the key family each key-dependent node opens in (R16). */
 function introductionsOf(plan: SessionPlan): { nodeId: string; keyFamily?: KeyFamily }[] {
-  const entries: readonly (string | { nodeId: string; keyFamily?: KeyFamily })[] =
-    plan.introductions;
-  return entries.map((e) => (typeof e === "string" ? { nodeId: e } : e));
+  return plan.introductions.map((nodeId) => {
+    const keyFamily = plan.introductionKeyFamilies[nodeId];
+    return keyFamily === undefined ? { nodeId } : { nodeId, keyFamily };
+  });
 }
 
 /**
