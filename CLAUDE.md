@@ -19,6 +19,7 @@ Run from the repo root. Use Node 22 and pnpm 10.
 - `packages/notation`: Verovio wrapper, score model, import
 - `packages/scoring`: alignment and note matching
 - `packages/content`: skill graph data, concept cards
+- `packages/store`: Dexie (IndexedDB) `EventStore` adapter. May import `@clavis/core` at runtime
 - `apps/web`: Svelte PWA. `apps/worker`: Cloudflare Worker. `tools/`: build-time tools
 
 Workspace packages export `src/index.ts` directly. There is no build step for packages.
@@ -28,6 +29,7 @@ Workspace packages export `src/index.ts` directly. There is no build step for pa
 - `core` imports no `@clavis/*` package and nothing outside itself. It must not use `dexie`, `svelte` or anything under `apps/`.
 - `scoring` imports only `@clavis/core`, and only with `import type`.
 - `audio` and `notation` may use `@clavis/core` only with `import type`. Runtime imports are errors.
+- `store` imports only `@clavis/core` (runtime allowed). `core` never imports `store`.
 - No package or tool imports from `apps/`.
 - No circular dependencies, no unresolvable imports.
 

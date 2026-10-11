@@ -7,6 +7,7 @@ import tseslint from "typescript-eslint";
 export default defineConfig(
   {
     ignores: [
+      ".claude/**",
       "**/node_modules/**",
       "**/dist/**",
       "**/.svelte-kit/**",
