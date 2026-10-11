@@ -5,6 +5,7 @@ export * from "./build.js";
 export * from "./degree.js";
 export * from "./cell.js";
 export * from "./rhythm.js";
+export * from "./rhythm-read.js";
 export * from "./registry.js";
 export { createRng, type Rng } from "../random.js";
 export * from "./family.js";
