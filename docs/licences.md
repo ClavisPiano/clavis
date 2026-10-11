@@ -23,3 +23,17 @@
 
 - `@tonaljs/key` and `@tonaljs/note` (used by `packages/core`), part of the `tonal` project
   (https://github.com/tonaljs/tonal), MIT licence.
+
+## ts-fsrs
+
+- Version 5.4.2, MIT licence (https://github.com/open-spaced-repetition/ts-fsrs). FSRS
+  scheduling, wrapped by `packages/core/src/scheduler`.
+
+## zod
+
+- MIT licence (https://github.com/colinhacks/zod). Schema validation in `packages/core`.
+
+## Dexie
+
+- Apache-2.0 licence (https://github.com/dexie/Dexie.js). IndexedDB event store in
+  `packages/store`.
