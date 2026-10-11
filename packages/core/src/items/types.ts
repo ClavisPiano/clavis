@@ -1,0 +1,46 @@
+import type { GeneratorId, SkillNode } from "../graph/schema.js";
+import type { JsonObject } from "../json.js";
+import type { SessionMode } from "../learning/rating.js";
+import type { Rng } from "../random.js";
+import type { StimulusSpec } from "../stimulus/types.js";
+import type { Key, VoiceRange } from "../theory/keys.js";
+import type { ExpectedResponse } from "./expected.js";
+
+/** Canonical item params: the identity of an item within a node (R1). Excludes key/tonic. */
+export type ItemParams = JsonObject;
+
+/** Default range for played items (C3..C6). */
+export const DEFAULT_KEYBOARD_RANGE: VoiceRange = { low: 48, high: 84 };
+
+export interface GenerateContext {
+  rng: Rng;
+  /** Key of the day. Used when its mode matches the item's mode (spec 6.3). */
+  preferredKey?: Key;
+  /** Singable range, for sung items. */
+  voiceRange: VoiceRange;
+  /** Range for played items. Defaults to C3..C6. */
+  keyboardRange?: VoiceRange;
+  mode: SessionMode;
+}
+
+export interface ItemInstance {
+  /** `nodeId|canonical params` (R1). Same for every tonic and generator of the node (R14). */
+  itemId: string;
+  nodeId: string;
+  /** The generator that produced this instance. */
+  generator: GeneratorId;
+  /** Canonical item params (the part of the identity after the node id). */
+  params: ItemParams;
+  /** Everything needed to replay the stimulus (R2): tonic, mode, tonicMidi, notes, tempo, seed. */
+  presentation: JsonObject;
+  stimulus: StimulusSpec;
+  expected: ExpectedResponse;
+  targetLatencyMs?: number;
+}
+
+export interface Generator {
+  id: GeneratorId;
+  /** The full item universe of a node, deterministic and in a stable order. */
+  listItems(node: SkillNode): ItemParams[];
+  generate(node: SkillNode, params: ItemParams, ctx: GenerateContext): ItemInstance;
+}

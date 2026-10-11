@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.0",
+  "contentVersion": "2026.10.1",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -627,28 +627,28 @@
   "generators": [
     {
       "id": "degreeSing",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 8,
       "awayEligible": true,
       "requires": ["mic", "keys"]
     },
     {
       "id": "degreeId",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 6,
       "awayEligible": true,
       "requires": ["keys"]
     },
     {
       "id": "cellEcho",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 12,
       "awayEligible": true,
       "requires": ["mic", "keys"]
     },
     {
       "id": "rhythmEcho",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 12,
       "awayEligible": true,
       "requires": ["keys"]

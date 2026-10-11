@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { describeGraphError, isNodeEnabled, validateGraph } from "@clavis/core";
+import {
+  GENERATORS,
+  createRng,
+  describeGraphError,
+  getGenerator,
+  isNodeEnabled,
+  validateGraph,
+} from "@clavis/core";
 import { loadGraph, parseGraph } from "./index";
 
 const SPEC_IDS = [
@@ -78,10 +85,43 @@ describe("v1 skill graph", () => {
     }
   });
 
-  it("lists every generator once and ships none implemented", () => {
+  it("lists every generator once and implements exactly the core registry", () => {
     expect(graph.generators).toHaveLength(15);
-    expect(graph.generators.every((g) => !g.implemented)).toBe(true);
-    expect(graph.nodes.some((n) => isNodeEnabled(n, graph.generators))).toBe(false);
+    const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
+    expect(implemented.sort()).toEqual(Object.keys(GENERATORS).sort());
+    for (const id of implemented) expect(getGenerator(id)).toBeDefined();
+  });
+
+  it("enables exactly the four ear M2 nodes", () => {
+    const enabled = graph.nodes.filter((n) => isNodeEnabled(n, graph.generators)).map((n) => n.id);
+    for (const id of [
+      "ear.degrees.major.135",
+      "ear.rhythm.echo",
+      "ear.degrees.major.diatonic",
+      "ear.cells.major.2-4",
+    ]) {
+      expect(enabled).toContain(id);
+    }
+    expect(enabled).toContain("ear.degrees.minor");
+    expect(enabled.every((id) => id.startsWith("ear."))).toBe(true);
+  });
+
+  it("every enabled node's generators can enumerate and generate items", () => {
+    for (const node of graph.nodes) {
+      for (const g of node.itemGenerators) {
+        const gen = GENERATORS[g];
+        if (gen === undefined) continue;
+        const items = gen.listItems(node);
+        const item = items[0];
+        if (item === undefined) throw new Error(`no items for ${node.id}`);
+        const inst = gen.generate(node, item, {
+          rng: createRng(1),
+          voiceRange: { low: 48, high: 72 },
+          mode: "instrument",
+        });
+        expect(inst.nodeId).toBe(node.id);
+      }
+    }
   });
 
   it("gives latency-gated nodes a matching target", () => {
