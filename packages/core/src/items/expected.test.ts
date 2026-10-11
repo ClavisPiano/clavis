@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+import { ExpectedResponseSchema } from "./expected.js";
+
+const labels = ["1", "b2", "2", "b3", "3", "4", "#4", "5", "b6", "6", "b7", "7"];
+
+describe("ExpectedResponseSchema", () => {
+  it("accepts a sing-then-play degree item", () => {
+    const r = ExpectedResponseSchema.safeParse({
+      sing: { kind: "sungPitch", targetMidi: 64, toleranceCents: 50 },
+      play: { kind: "pitchClass", targetMidi: 64, degreeLabels: labels },
+      responseWindowMs: 8000,
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts a rhythm item", () => {
+    const r = ExpectedResponseSchema.safeParse({
+      play: { kind: "rhythm", onsetsBeats: [0, 1, 1.5, 2], tempoBpm: 90, beatsPerBar: 4 },
+      responseWindowMs: 10000,
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects an empty response", () => {
+    expect(ExpectedResponseSchema.safeParse({ responseWindowMs: 1000 }).success).toBe(false);
+  });
+
+  it("rejects degree labels of the wrong length", () => {
+    const r = ExpectedResponseSchema.safeParse({
+      play: { kind: "pitchClass", targetMidi: 60, degreeLabels: ["1"] },
+      responseWindowMs: 1000,
+    });
+    expect(r.success).toBe(false);
+  });
+});
