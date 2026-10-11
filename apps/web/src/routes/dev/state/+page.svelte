@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { REDUCER_VERSION } from "@clavis/core";
+  import { makeBackupFile, saveFile } from "../../../lib/backup-file";
   import {
-    buildExport,
-    exportFilename,
     runImport,
     validateImportText,
     type ImportError,
@@ -40,29 +39,14 @@
 
   async function makeExport(): Promise<{ file: File; count: number }> {
     const { store, deviceId, graph: g } = learner.ctx;
-    const when = new Date();
-    const events = await store.list();
-    const doc = buildExport({ events, deviceId, contentVersion: g.contentVersion, now: when });
-    const file = new File([JSON.stringify(doc, null, 2)], exportFilename(deviceId, when), {
-      type: "application/json",
-    });
-    return { file, count: events.length };
+    return makeBackupFile({ store, deviceId, contentVersion: g.contentVersion });
   }
 
   async function download(): Promise<void> {
     exportStatus = "";
     try {
       const { file, count } = await makeExport();
-      const url = URL.createObjectURL(file);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = file.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 60_000);
+      saveFile(file);
       exportStatus = `Exported ${String(count)} events as ${file.name}`;
     } catch (e) {
       exportStatus = `Export failed: ${e instanceof Error ? e.message : String(e)}`;
