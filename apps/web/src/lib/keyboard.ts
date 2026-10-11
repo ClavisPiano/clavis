@@ -70,3 +70,36 @@ export function keySlots(low: number, high: number): KeySlot[] {
   }
   return slots;
 }
+
+/** Keyboard range when the item sets none: C3 to C6. */
+export const FALLBACK_INPUT_RANGE = { low: 48, high: 84 } as const;
+/** Keys added on each side of an item's `inputRange`, so wrong-octave answers can be tapped. */
+export const RANGE_PAD = 12;
+const PIANO_LOW = 21; // A0
+const PIANO_HIGH = 108; // C8
+
+export interface AwayKeyboard {
+  low: number;
+  high: number;
+  /** Scrolled to the middle of the item's range, never to the target note. */
+  focus: number;
+}
+
+/**
+ * The Away keyboard for an item. The keys cover the item's `inputRange` plus an octave each side
+ * (so an octave error is a key that exists), and the view is centred on the middle of the range,
+ * which says nothing about where the target is.
+ */
+export function awayKeyboard(inputRange?: { low: number; high: number }): AwayKeyboard {
+  if (!inputRange) {
+    const { low, high } = FALLBACK_INPUT_RANGE;
+    return { low, high, focus: Math.round((low + high) / 2) };
+  }
+  const lo = Math.min(inputRange.low, inputRange.high);
+  const hi = Math.max(inputRange.low, inputRange.high);
+  return {
+    low: Math.max(PIANO_LOW, lo - RANGE_PAD),
+    high: Math.min(PIANO_HIGH, hi + RANGE_PAD),
+    focus: Math.round((lo + hi) / 2),
+  };
+}

@@ -7,6 +7,7 @@
   import ConceptCardView from "../../lib/components/ConceptCard.svelte";
   import { cardById, cardForNode, ORIENT_CARD_ID } from "@clavis/content";
   import type { ConceptCard, ExpectedResponse, StimulusSpec } from "@clavis/core";
+  import { awayKeyboard } from "../../lib/keyboard";
   import { INPUT_STORAGE_KEY } from "../../lib/input";
   import { updateState } from "../../lib/pwa/update-state.svelte";
   import type { SessionState } from "../../lib/session/machine";
@@ -34,6 +35,9 @@
   );
   const showKeyboard = $derived(
     params?.mode === "away" && view.kind === "listening" && view.phase === "play",
+  );
+  const awayKeys = $derived(
+    awayKeyboard(view.kind === "listening" ? view.item.inputRange : undefined),
   );
   const showPad = $derived(showKeyboard && expected?.play?.kind === "rhythm");
 
@@ -451,9 +455,9 @@
     {#if showKeyboard}
       <div class="keys">
         <Keyboard
-          low={48}
-          high={84}
-          focusMidi={60}
+          low={awayKeys.low}
+          high={awayKeys.high}
+          focusMidi={awayKeys.focus}
           labels="c-only"
           playSound={(midi: number) => runtime?.tone(midi)}
           onpress={(midi: number, ts: number) => runtime?.tap?.press(midi, ts)}

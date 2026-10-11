@@ -90,7 +90,8 @@
   $effect(() => {
     const target = focusMidi;
     const el = scroller;
-    if (target === undefined || !el) return;
+    // Reading `slots` re-centres when the range changes (a new item), not only the focus.
+    if (target === undefined || !el || slots.length === 0) return;
     const key = el.querySelector<HTMLElement>(`[data-midi="${String(target)}"]`);
     if (!key) return;
     const slot = key.closest<HTMLElement>(".slot") ?? key;

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { awayKeyboard } from "../keyboard";
 import Keyboard from "./Keyboard.svelte";
 
 afterEach(() => {
@@ -116,5 +117,29 @@ describe("Keyboard", () => {
     render(Keyboard, { low: 60, high: 84, playSound });
     await fireEvent(key("G 4"), pointer("pointerdown", 1));
     expect(playSound).toHaveBeenCalledWith(67);
+  });
+});
+
+describe("Keyboard range for an Away item", () => {
+  it("follows the item's inputRange, with C2 reachable and an octave of room either side", () => {
+    const k = awayKeyboard({ low: 36, high: 60 });
+    expect(k).toEqual({ low: 24, high: 72, focus: 48 });
+    render(Keyboard, { low: k.low, high: k.high, focusMidi: k.focus });
+    expect(key("C 2").dataset.midi).toBe("36");
+    expect(key("C 1").dataset.midi).toBe("24");
+    expect(key("C 5").dataset.midi).toBe("72");
+    expect(screen.queryByRole("button", { name: "B 0" })).toBeNull();
+  });
+
+  it("falls back to 48..84 without a range, and clamps to the piano", () => {
+    expect(awayKeyboard()).toEqual({ low: 48, high: 84, focus: 66 });
+    expect(awayKeyboard({ low: 24, high: 100 })).toMatchObject({ low: 21, high: 108 });
+  });
+
+  it("centres on the middle of the range and highlights nothing", () => {
+    const k = awayKeyboard({ low: 40, high: 64 });
+    const { container } = render(Keyboard, { low: k.low, high: k.high, focusMidi: k.focus });
+    expect(container.querySelectorAll(".highlight")).toHaveLength(0);
+    expect(k.focus).toBe(52);
   });
 });

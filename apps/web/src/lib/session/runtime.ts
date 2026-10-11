@@ -12,6 +12,7 @@ import {
   composeSession,
   createUlidGenerator,
   getGenerator,
+  LearnerStateService,
   type LearningEvent,
   type StimulusSpec,
 } from "@clavis/core";
@@ -23,6 +24,12 @@ import { createInput, detachFakeInput } from "../input";
 import { SessionMachine, type SessionDeps } from "./machine";
 import { findOpenSessions } from "./open";
 import { parseLatency, type SessionParams } from "./params";
+import {
+  STUB_NOTATION,
+  STUB_READ_REGISTRY,
+  STUB_BASS_NOTE_READ,
+  withStubReadImplemented,
+} from "./read-stub";
 
 export const HEADPHONES_META_KEY = "headphones";
 export const LATENCY_META_KEY = "latency";
@@ -56,7 +63,17 @@ export type RuntimeResult = { ok: true; runtime: SessionRuntime } | { ok: false;
 export async function createSessionRuntime(params: SessionParams): Promise<RuntimeResult> {
   const learner = await getLearnerState();
   if (!learner.ok) return { ok: false, message: "Local storage is unavailable on this device." };
-  const { service, store, deviceId, graph } = learner;
+  const { store, deviceId } = learner;
+  // Test seam (see read-stub.ts): plan a stub READ item, as the real generator is not wired yet.
+  // The reading nodes only unlock when their generator is implemented, so the state is folded
+  // over the same store with the stub graph.
+  const readStub = params.readStub;
+  const graph = readStub ? withStubReadImplemented(learner.graph) : learner.graph;
+  let service = learner.service;
+  if (readStub) {
+    service = new LearnerStateService({ store, ctx: { graph, scheduler: learner.scheduler } });
+    await service.load();
+  }
 
   const fake = params.inputKind === "fake";
   const audio = getAudioContextManager();
@@ -120,10 +137,15 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
     mode: params.mode,
     ...(params.practice ? { practice: true } : {}),
     graph,
-    compose: composeSession,
+    compose: readStub
+      ? (input) => composeSession({ ...input, generators: STUB_READ_REGISTRY })
+      : composeSession,
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
       if (!node) throw new Error(`Unknown skill node ${item.nodeId}`);
+      if (readStub && item.generator === "bassNoteRead") {
+        return STUB_BASS_NOTE_READ.generate(node, item.params, ctx);
+      }
       return getGenerator(item.generator).generate(node, item.params, ctx);
     },
     player: {
@@ -150,6 +172,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
     latency,
     headphones,
     askHeadphones: !fake || params.headphones === "ask",
+    ...(readStub ? { notation: STUB_NOTATION } : {}),
     saveHeadphones: async (value) => {
       await store.setMeta(HEADPHONES_META_KEY, value);
       await service.append([
