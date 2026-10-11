@@ -59,6 +59,12 @@ importers:
 
   packages/core:
     dependencies:
+      '@tonaljs/key':
+        specifier: 4.10.0
+        version: 4.10.0
+      '@tonaljs/note':
+        specifier: 4.11.0
+        version: 4.11.0
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -269,6 +275,30 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@tonaljs/key@4.10.0':
+    resolution: {integrity: sha512-R+rD6JdeYjnNCRzXbERA5quIx1UrZhlHmA519UeSKzOB7Ia+3c/dQL7Um+zQ/TaWgBkM0/mYpHdlJfLpHixW/w==}
+
+  '@tonaljs/midi@4.10.0':
+    resolution: {integrity: sha512-LjwEzcBwJSNMLD+qDwVBWvkmIOAs59TPdlTQlooP3S1Au0jy7T+bZeIbBKtLEcDG14S2zyYZEZ1Mo+cxcumMmg==}
+
+  '@tonaljs/note@4.11.0':
+    resolution: {integrity: sha512-KJjtMaJ4Bc0wquFlKFDHk6RBrzHwHPgSvklqWSmhgxbklqQt+70wPn5RVwcJqNc5qnmZce+uvATwl+QVBXMCLQ==}
+
+  '@tonaljs/pitch-distance@5.0.4':
+    resolution: {integrity: sha512-c/Q/QpU0pE5QMxhf7VfP4p7C+gf5YfGt5mkwgMyQgpGNFSwQrKPPWSrWzArrFjJzejabUlDMREQyRU+Wj50iOQ==}
+
+  '@tonaljs/pitch-interval@6.0.0':
+    resolution: {integrity: sha512-0iaFWbgshYWjfmdxzF8jNmTqsNK2krwn+FqDRZb8vEsfaSNC8Jek0f5wYcE2to+7f0P5jJlJnj8CUGvlfKIT5A==}
+
+  '@tonaljs/pitch-note@6.0.0':
+    resolution: {integrity: sha512-m4Ei7zwSsKwotVfnodA7m1SR7zD5NNIea+V7Mo35EcK32ZJBg+SvxdwgfNNdLO8bkDbVrZIgVYqeP3R3Jq7VFQ==}
+
+  '@tonaljs/pitch@5.0.2':
+    resolution: {integrity: sha512-mxaXJPPe+LIJdjzpZEl8I8Wx3dEvlzkBbsr2Ltwc2dTAdnErAZ5R0TxVq2egF27lMvQN2QPQPWI9iDPPdVUmrg==}
+
+  '@tonaljs/roman-numeral@4.9.0':
+    resolution: {integrity: sha512-kegMCXUcLpdSSTI7YoU49kWv5DwVAkpyZAz6svYKtP1Vdjt4+q8c5hjSupM8QH4chQBNElRzqhZRgx90sMc/fw==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -1179,6 +1209,46 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@tonaljs/key@4.10.0':
+    dependencies:
+      '@tonaljs/note': 4.11.0
+      '@tonaljs/pitch-note': 6.0.0
+      '@tonaljs/roman-numeral': 4.9.0
+
+  '@tonaljs/midi@4.10.0':
+    dependencies:
+      '@tonaljs/pitch-note': 6.0.0
+
+  '@tonaljs/note@4.11.0':
+    dependencies:
+      '@tonaljs/midi': 4.10.0
+      '@tonaljs/pitch': 5.0.2
+      '@tonaljs/pitch-distance': 5.0.4
+      '@tonaljs/pitch-interval': 6.0.0
+      '@tonaljs/pitch-note': 6.0.0
+
+  '@tonaljs/pitch-distance@5.0.4':
+    dependencies:
+      '@tonaljs/pitch': 5.0.2
+      '@tonaljs/pitch-interval': 6.0.0
+      '@tonaljs/pitch-note': 6.0.0
+
+  '@tonaljs/pitch-interval@6.0.0':
+    dependencies:
+      '@tonaljs/pitch': 5.0.2
+
+  '@tonaljs/pitch-note@6.0.0':
+    dependencies:
+      '@tonaljs/pitch': 5.0.2
+
+  '@tonaljs/pitch@5.0.2': {}
+
+  '@tonaljs/roman-numeral@4.9.0':
+    dependencies:
+      '@tonaljs/pitch': 5.0.2
+      '@tonaljs/pitch-interval': 6.0.0
+      '@tonaljs/pitch-note': 6.0.0
 
   '@types/chai@5.2.3':
     dependencies:

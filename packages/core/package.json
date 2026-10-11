@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@tonaljs/key": "4.10.0",
+    "@tonaljs/note": "4.11.0",
     "zod": "4.6.5"
   }
 }
