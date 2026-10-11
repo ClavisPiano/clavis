@@ -283,7 +283,10 @@ describe("composeSession READ rules", () => {
 
   it("does not enable READ nodes whose generators are not in the registry", () => {
     const state = readLearner({ nodes: { [D135]: "mastered", [LANDMARKS]: "learning" } });
-    const plan = composeSession({ ...base, generators: GENERATORS, state, mode: "instrument" });
+    const earOnly = Object.fromEntries(
+      Object.entries(GENERATORS).filter(([id]) => id !== "bassNoteRead" && id !== "rhythmRead"),
+    );
+    const plan = composeSession({ ...base, generators: earOnly, state, mode: "instrument" });
     expect(plan.blocks.read).toEqual([]);
   });
 

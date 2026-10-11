@@ -83,9 +83,9 @@ describe("itemId", () => {
 });
 
 describe("registry and universes", () => {
-  it("registers the four ear generators", () => {
+  it("registers the ear and reading generators", () => {
     expect(Object.keys(GENERATORS).sort()).toEqual(
-      ["cellEcho", "degreeId", "degreeSing", "rhythmEcho"].sort(),
+      ["bassNoteRead", "cellEcho", "degreeId", "degreeSing", "rhythmEcho", "rhythmRead"].sort(),
     );
   });
 

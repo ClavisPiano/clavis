@@ -30,7 +30,8 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Three browser projects on one worker, with real-time session and offline specs.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:

@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.1",
+  "contentVersion": "2026.10.2",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -655,7 +655,7 @@
     },
     {
       "id": "rhythmRead",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 12,
       "awayEligible": false,
       "requires": ["keys", "notation"]
@@ -683,7 +683,7 @@
     },
     {
       "id": "bassNoteRead",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 5,
       "awayEligible": true,
       "requires": ["keys", "notation"]
