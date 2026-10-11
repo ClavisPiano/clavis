@@ -8,6 +8,7 @@
 
   const devPages: readonly DevPage[] = [
     { href: "/dev/events", label: "Event log" },
+    { href: "/dev/input", label: "Input adapters" },
     { href: "/dev/pitch", label: "Mic pitch" },
     { href: "/dev/state", label: "Learner state" },
     { href: "/dev/stimulus", label: "Stimulus player" },

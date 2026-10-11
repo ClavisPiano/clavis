@@ -8,3 +8,4 @@ export * from "./pitch/index.js";
 export * from "./fixtures/runner.js";
 export * from "./fixtures/wav.js";
 export * from "./mic/index.js";
+export * from "./input/index.js";
