@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { asset } from "$app/paths";
   import {
     COUNT_IN_BEATS,
     midiToHz,
@@ -75,17 +76,7 @@
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
-      // A tiny capture worklet, loaded from a Blob so the page stays self-contained.
-      const code = `registerProcessor("rec", class extends AudioWorkletProcessor {
-        process(inputs) {
-          const ch = inputs[0] && inputs[0][0];
-          if (ch) this.port.postMessage({ frame: currentFrame, samples: ch.slice() });
-          return true;
-        }
-      });`;
-      const moduleUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
-      await ctx.audioWorklet.addModule(moduleUrl);
-      URL.revokeObjectURL(moduleUrl);
+      await ctx.audioWorklet.addModule(asset("dev/record-processor.js"));
       const chunks: { frame: number; samples: Float32Array }[] = [];
       const node = new AudioWorkletNode(ctx, "rec");
       node.port.onmessage = (e: MessageEvent<{ frame: number; samples: Float32Array }>) => {
