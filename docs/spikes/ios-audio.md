@@ -81,6 +81,20 @@ Paste the output of **Copy report** here, one block per run, under a heading lik
 
 ### Desktop baseline
 
+## Latency calibration (T1.7)
+
+Screen: `/settings/latency`. Run it on each device with the output you will practise with, once in Safari and once as an installed PWA.
+
+1. Tap path: tap the pad along with the 12 clicks (100 bpm). `tapMs` is output latency plus touch and human offset. Expect a verdict of "ok"; retry if not.
+2. Mic path (optional): hold the phone next to the speaker or piano in a quiet room, no headphones. `micMs` is output plus input latency through speaker and mic.
+3. Press Save, then copy the numbers below. Run each path twice to see run-to-run variation.
+
+| Device | OS / browser | tapMs | micMs | Spread (ms, tap / mic) | Notes |
+| --- | --- | --- | --- | --- | --- |
+| iPhone | | | | | |
+| iPad | | | | | |
+| Laptop | | | | | |
+
 ## Decisions
 
 Fill after the runs.

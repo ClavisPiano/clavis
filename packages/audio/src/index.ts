@@ -12,3 +12,4 @@ export * from "./input/index.js";
 export * from "./fixtures/manifest.js";
 export * from "./fixtures/accuracy.js";
 export * from "./fixtures/takes.js";
+export * from "./latency/index.js";
