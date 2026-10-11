@@ -110,9 +110,10 @@ test.describe("concept tips in feedback", () => {
       fake.emitNote(play.targetMidi, { onsetMs: fake.nowMs() + 300 });
     });
 
-    // The played answer decides the result; the wrong sung note is listed as an issue.
+    // Both parts must be right (R12), so a wrong sung note makes the attempt incorrect.
     const feedback = page.getByTestId("feedback");
-    await expect(feedback.getByTestId("issues")).toContainText("the target was");
+    await expect(feedback).toHaveAttribute("data-correct", "false");
+    await expect(feedback.getByTestId("issues")).toContainText(/You sang \d; the target was/);
     const tip = feedback.getByTestId("tip");
     await expect(tip).toContainText(/ while /);
     await tip.getByTestId("tip-more").click();

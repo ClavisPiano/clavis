@@ -21,15 +21,22 @@ function noteLabel(detail: AttemptError["detail"]): string {
   return i === undefined ? "A note" : `Note ${String(i + 1)}`;
 }
 
+/** "sang" for errors from the sung part, "played" otherwise (scoring tags each error). */
+function verb(detail: AttemptError["detail"]): string {
+  return detail?.part === "sing" ? "sang" : "played";
+}
+
 /** One short sentence for an error code. */
 export function describeError(error: AttemptError): string {
   const { code, detail } = error;
   if (code.startsWith(CONFUSION_PREFIX)) {
     const [expected, played] = code.slice(CONFUSION_PREFIX.length).split("-");
     if (expected !== undefined && played !== undefined && expected !== "" && played !== "") {
-      return `You found ${played}; the target was ${expected}`;
+      return `You ${verb(detail)} ${played}; the target was ${expected}`;
     }
-    return "That was a different note from the target";
+    return detail?.part === "sing"
+      ? "You sang a different note from the target"
+      : "That was a different note from the target";
   }
   switch (code) {
     case "pitch.wrong":
@@ -63,7 +70,7 @@ export function describeError(error: AttemptError): string {
       const expected = detail?.expectedDegree;
       const played = detail?.playedDegree;
       if (typeof expected === "string" && typeof played === "string") {
-        return `${noteLabel(detail)}: you found ${played}; the target was ${expected}`;
+        return `${noteLabel(detail)}: you ${verb(detail)} ${played}; the target was ${expected}`;
       }
       return `${noteLabel(detail)} was not the target`;
     }

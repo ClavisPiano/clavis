@@ -6,6 +6,7 @@ import {
   RHYTHM_TOLERANCE_MS,
   align,
   analyseRhythm,
+  combineParts,
   compareSequences,
   findStableSegments,
   scoreAttempt,
@@ -442,7 +443,7 @@ describe("scoreAttempt", () => {
     responseWindowMs: WINDOW,
   };
 
-  it("takes the outcome from play when both parts are scored", () => {
+  it("is incorrect when the sung part is wrong, even with the right played note (R12)", () => {
     const r = scoreAttempt({
       expected: degreeSing,
       notes: [note(57, END + 900)],
@@ -450,9 +451,21 @@ describe("scoreAttempt", () => {
       stimulusEndMs: END,
       source: "midi",
     });
-    expect(r.outcome).toEqual({ correct: true, latencyMs: 900, retries: 0 });
+    expect(r.outcome).toEqual({ correct: false, latencyMs: 900, retries: 0 });
     expect(r.subScores).toEqual({ sing: 0, play: 1 });
-    expect(r.errors.map((e) => e.code)).toEqual(["sing.sharp"]);
+    expect(r.errors).toEqual([{ code: "sing.sharp", detail: { cents: 70, part: "sing" } }]);
+  });
+
+  it("is correct when both parts are right, with latency from the played part", () => {
+    const r = scoreAttempt({
+      expected: degreeSing,
+      notes: [note(57, END + 900)],
+      frames: frames(69, END + 300, END + 800),
+      stimulusEndMs: END,
+      source: "midi",
+    });
+    expect(r.outcome).toEqual({ correct: true, latencyMs: 900, retries: 0 });
+    expect(r.errors).toEqual([]);
   });
 
   it("names sung confusion with labels from the play target", () => {
@@ -638,5 +651,51 @@ describe("properties", () => {
         },
       ),
     );
+  });
+});
+
+describe("combineParts (R12)", () => {
+  const part = (
+    correct: boolean,
+    latencyMs: number,
+    errors: { code: string }[] = [],
+    partial?: number,
+  ) => ({
+    outcome: { correct, latencyMs, retries: 0, ...(partial === undefined ? {} : { partial }) },
+    errors,
+  });
+
+  it.each([
+    ["both right", true, true, true],
+    ["sung wrong", false, true, false],
+    ["played wrong", true, false, false],
+    ["both wrong", false, false, false],
+  ] as const)("%s -> correct %s", (_name, sing, play, correct) => {
+    const r = combineParts({ sing: part(sing, 300), play: part(play, 900) });
+    expect(r.outcome).toEqual({ correct, latencyMs: 900, retries: 0 });
+  });
+
+  it("averages sub-scores into partial when a part has partial credit", () => {
+    const r = combineParts({ sing: part(false, 300, [], 0.5), play: part(true, 900) });
+    expect(r.outcome.partial).toBe(0.75);
+  });
+
+  it("uses a single part as is", () => {
+    expect(combineParts({ sing: part(true, 400) }).outcome).toEqual({
+      correct: true,
+      latencyMs: 400,
+      retries: 0,
+    });
+  });
+
+  it("tags errors with their part, played first", () => {
+    const r = combineParts({
+      sing: part(false, 300, [{ code: "degree.confusion.1-5" }]),
+      play: part(false, 900, [{ code: "degree.confusion.1-5" }]),
+    });
+    expect(r.errors).toEqual([
+      { code: "degree.confusion.1-5", detail: { part: "play" } },
+      { code: "degree.confusion.1-5", detail: { part: "sing" } },
+    ]);
   });
 });

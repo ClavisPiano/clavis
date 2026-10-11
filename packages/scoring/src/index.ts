@@ -1,6 +1,6 @@
 export const PACKAGE_NAME = "@clavis/scoring";
 
-export { scoreAttempt } from "./score.js";
+export { combineParts, scoreAttempt } from "./score.js";
 export type { ScoreInput, ScoreResult } from "./score.js";
 export { scorePitchClass, scoreExactPitch } from "./single.js";
 export type { PartResult, SingleNoteInput } from "./single.js";

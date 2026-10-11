@@ -71,7 +71,51 @@ function scorePlay(play: PlayTarget, input: ScoreInput): PartResult {
 
 const subScore = (o: AttemptOutcome): number => o.partial ?? (o.correct ? 1 : 0);
 
-/** R12: the outcome comes from the played part when one was scored, else from the sung part. */
+/** Mark each error with the part it came from, so feedback can say "you sang" or "you played". */
+function tagPart(errors: readonly AttemptError[], part: "sing" | "play"): AttemptError[] {
+  return errors.map((e) => ({ ...e, detail: { ...e.detail, part } }));
+}
+
+/**
+ * R12 (amended): one outcome from the scored parts. Correct only when every part is correct
+ * (spec 7: "sung pitch within 50 cents; key correct"). Latency comes from the played part when
+ * there is one (finding the note is the fluency measure), else from the sung part. With two
+ * parts, `partial` is the mean of their sub-scores. Errors are tagged with their part, played
+ * first, without repeats.
+ */
+export function combineParts(parts: {
+  sing?: PartResult | undefined;
+  play?: PartResult | undefined;
+}): Pick<ScoreResult, "outcome" | "errors"> {
+  const { sing, play } = parts;
+  const main = req(play ?? sing);
+  let outcome: AttemptOutcome = main.outcome;
+  if (sing && play) {
+    const correct = sing.outcome.correct && play.outcome.correct;
+    const anyPartial = sing.outcome.partial !== undefined || play.outcome.partial !== undefined;
+    outcome = {
+      correct,
+      latencyMs: play.outcome.latencyMs,
+      retries: Math.max(sing.outcome.retries, play.outcome.retries),
+      ...(anyPartial ? { partial: (subScore(sing.outcome) + subScore(play.outcome)) / 2 } : {}),
+    };
+  }
+  const seen = new Set<string>();
+  const errors: AttemptError[] = [];
+  for (const e of [
+    ...(play ? tagPart(play.errors, "play") : []),
+    ...(sing ? tagPart(sing.errors, "sing") : []),
+  ]) {
+    const key = JSON.stringify(e);
+    if (!seen.has(key)) {
+      seen.add(key);
+      errors.push(e);
+    }
+  }
+  return { outcome, errors };
+}
+
+/** Score whatever parts `input.part` asks for and combine them (see `combineParts`). */
 export function scoreAttempt(input: ScoreInput): ScoreResult {
   const part = input.part ?? "both";
   const { sing, play } = input.expected;
@@ -106,15 +150,5 @@ export function scoreAttempt(input: ScoreInput): ScoreResult {
   if (sung) subScores.sing = subScore(sung.outcome);
   if (played) subScores.play = subScore(played.outcome);
 
-  const main = req(played ?? sung);
-  const seen = new Set<string>();
-  const errors: AttemptError[] = [];
-  for (const e of [...(played?.errors ?? []), ...(sung?.errors ?? [])]) {
-    const key = JSON.stringify(e);
-    if (!seen.has(key)) {
-      seen.add(key);
-      errors.push(e);
-    }
-  }
-  return { outcome: main.outcome, subScores, errors };
+  return { ...combineParts({ sing: sung, play: played }), subScores };
 }
