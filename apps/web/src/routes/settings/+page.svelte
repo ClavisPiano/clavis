@@ -21,6 +21,7 @@
     type EffectiveSettings,
   } from "../../lib/home";
   import { INPUT_STORAGE_KEY } from "../../lib/input";
+  import { createTapCounter, devToolsEnabled, setDevToolsEnabled } from "../../lib/dev-tools";
   import pkg from "../../../package.json";
 
   type InputChoice = "auto" | "mic" | "tap";
@@ -100,6 +101,22 @@
   const contentVersion = $derived(
     learner.status === "ready" ? learner.ctx.graph.contentVersion : "",
   );
+
+  // Seven quick taps on the version turn on a link to the dev pages (no address bar in a PWA).
+  let devTools = $state(false);
+  onMount(() => {
+    devTools = devToolsEnabled();
+  });
+  const versionTaps = createTapCounter();
+  function tapVersion(): void {
+    if (devTools || !versionTaps.tap(performance.now())) return;
+    setDevToolsEnabled(true);
+    devTools = true;
+  }
+  function hideDevTools(): void {
+    setDevToolsEnabled(false);
+    devTools = false;
+  }
 </script>
 
 <h1>Settings</h1>
@@ -297,17 +314,44 @@
     (only ever raises what you have already reached)
   </li>
   <li><a href={resolve("/dev/state")}>Backup and restore (export or import your data)</a></li>
+  {#if devTools}
+    <li>
+      <a href={resolve("/dev")} data-testid="dev-tools-link">Developer tools</a>
+      <button type="button" class="link" data-testid="dev-tools-off" onclick={hideDevTools}>
+        Hide
+      </button>
+    </li>
+  {/if}
 </ul>
 
 <h2>About</h2>
 <p class="muted">
-  Clavis version <span data-testid="app-version">{pkg.version}</span>
+  Clavis version
+  <button type="button" class="version" data-testid="app-version" onclick={tapVersion}>
+    {pkg.version}
+  </button>
   {#if contentVersion}
     <br />Content version <span data-testid="content-version">{contentVersion}</span>
   {/if}
 </p>
 
 <style>
+  .version,
+  .link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .link {
+    margin-left: var(--space-2);
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+
   fieldset {
     display: flex;
     flex-direction: column;
