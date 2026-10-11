@@ -2,8 +2,10 @@ import { z } from "zod";
 import { cadenceStimulus } from "../items/build.js";
 import { COUNT_IN_PITCH, COUNT_IN_VELOCITY, RHYTHM_PITCH } from "../items/rhythm.js";
 import type { StimulusEvent, StimulusSpec } from "../stimulus/types.js";
+import { spelledToMidi, type ScoreSpec, type SpelledPitch, type Step } from "../score/schema.js";
 import { degreeToMidi } from "../theory/degrees.js";
 import { ALL_KEYS, tonicChroma, type Key, type MinorVariant } from "../theory/keys.js";
+import { majorSignature, minorSignature } from "../theory/tonal.js";
 
 /**
  * Tonal examples sound in the learner's key of the day. `mode` switches to the parallel key (same
@@ -33,6 +35,21 @@ export const CardExampleSchema = z.discriminatedUnion("kind", [
     kind: z.literal("rhythm"),
     label: z.string().min(1),
     onsetsBeats: z.array(z.number().min(0).max(8)).min(1),
+  }),
+  /**
+   * Notes on the staff, as staff positions (letter and octave, such as "F3"; the key signature
+   * decides any sharp or flat). The visual comes from `cardExampleScore`; the button plays them in
+   * order. C major unless `useKeyOfDay`.
+   */
+  z.strictObject({
+    kind: z.literal("staff"),
+    label: z.string().min(1),
+    clef: z.enum(["bass", "treble"]),
+    positions: z
+      .array(z.string().regex(/^[A-G][0-9]$/))
+      .min(1)
+      .max(8),
+    useKeyOfDay: z.boolean().optional(),
   }),
 ]);
 export type CardExample = z.infer<typeof CardExampleSchema>;
@@ -77,10 +94,15 @@ export function parallelKey(keyOfDay: Key, mode: Key["mode"]): Key {
  */
 export function cardExampleStimulus(example: CardExample, keyOfDay: Key): StimulusSpec {
   const key =
-    example.kind === "rhythm" ? keyOfDay : parallelKey(keyOfDay, example.mode ?? keyOfDay.mode);
+    example.kind === "rhythm" || example.kind === "staff"
+      ? keyOfDay
+      : parallelKey(keyOfDay, example.mode ?? keyOfDay.mode);
   const tonicMidi = 60 + tonicChroma(key);
   const variant: { minorVariant: MinorVariant } | undefined =
-    example.kind !== "rhythm" && example.minorVariant !== undefined && key.mode === "minor"
+    example.kind !== "rhythm" &&
+    example.kind !== "staff" &&
+    example.minorVariant !== undefined &&
+    key.mode === "minor"
       ? { minorVariant: example.minorVariant }
       : undefined;
   const beat = 60 / CARD_EXAMPLE_TEMPO_BPM;
@@ -118,6 +140,15 @@ export function cardExampleStimulus(example: CardExample, keyOfDay: Key): Stimul
         tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
       };
     }
+    case "staff": {
+      const staffKey = staffExampleKey(example, keyOfDay);
+      return {
+        events: example.positions.map((pos, i) =>
+          note(i * beat, spelledToMidi(positionToPitch(pos, staffKey)), beat * 0.9),
+        ),
+        tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
+      };
+    }
     case "rhythm": {
       const clicks = [0, 1, 2, 3].map((i): StimulusEvent => ({
         atSec: i * beat,
@@ -135,6 +166,57 @@ export function cardExampleStimulus(example: CardExample, keyOfDay: Key): Stimul
       };
     }
   }
+}
+
+type StaffExample = Extract<CardExample, { kind: "staff" }>;
+
+function staffExampleKey(example: StaffExample, keyOfDay: Key): Key {
+  return example.useKeyOfDay === true ? keyOfDay : { tonic: "C", mode: "major" };
+}
+
+const SHARP_ORDER: readonly Step[] = ["F", "C", "G", "D", "A", "E", "B"];
+const FLAT_ORDER: readonly Step[] = ["B", "E", "A", "D", "G", "C", "F"];
+
+/**
+ * Staff position ("F3") to the sounding pitch under `key`'s signature. Deliberately small and
+ * private to cards; it may be replaced by the staff helpers from T3.5.
+ */
+function positionToPitch(position: string, key: Key): SpelledPitch {
+  const step = position.charAt(0) as Step;
+  const octave = Number(position.slice(1));
+  const sig = key.mode === "major" ? majorSignature(key.tonic) : minorSignature(key.tonic);
+  let alter = 0;
+  if (sig > 0 && SHARP_ORDER.slice(0, sig).includes(step)) alter = 1;
+  else if (sig < 0 && FLAT_ORDER.slice(0, -sig).includes(step)) alter = -1;
+  return { step, alter, octave };
+}
+
+/**
+ * The score for a staff example: one staff, one whole note per measure, ids n1.., in C major or
+ * the key of the day. Other example kinds have no score. Notes carry the sounding pitch, with the
+ * key signature applied and no written accidental (the signature implies it).
+ */
+export function cardExampleScore(example: CardExample, keyOfDay: Key): ScoreSpec | undefined {
+  if (example.kind !== "staff") return undefined;
+  const key = staffExampleKey(example, keyOfDay);
+  return {
+    staves: [
+      {
+        clef: example.clef,
+        lines: 5,
+        measures: example.positions.map((pos, i) => [
+          {
+            kind: "note",
+            id: `n${String(i + 1)}`,
+            pitches: [positionToPitch(pos, key)],
+            duration: { value: 1, dots: 0 },
+          },
+        ]),
+      },
+    ],
+    key: { tonic: key.tonic, mode: key.mode },
+    meter: { beats: 4, beatValue: 4 },
+  };
 }
 
 /** Words in a card's body and how-to, for the length budget in content tests. */

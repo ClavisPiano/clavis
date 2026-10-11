@@ -17,6 +17,8 @@
     <p>{paragraph}</p>
   {/each}
 
+  <!-- Staff examples are play buttons with their label for now. The score is available from
+       cardExampleScore(example, keyOfDay); the visual comes with NotationView (T3.4). -->
   {#if card.examples.length > 0}
     <div class="examples" role="group" aria-label="Listen">
       {#each card.examples as example, i (i)}

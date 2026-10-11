@@ -6,6 +6,8 @@
  * learner's key of the day.
  */
 
+import { READ_CARDS_V1 } from "./read.js";
+
 const MT = "https://www.musictheory.net/lessons";
 
 export const ORIENT_CARD_ID = "concept.orient";
@@ -179,4 +181,5 @@ export const CARDS_V1: unknown[] = [
       { label: "Measures and time signatures (musictheory.net)", url: `${MT}/12` },
     ],
   },
+  ...READ_CARDS_V1,
 ];

@@ -41,6 +41,11 @@ const RHYTHM_TEMPO =
 const SING_NONE =
   'Sing on an open vowel such as "ah", loud enough to be heard, and hold the note steady for about a second.';
 
+const PITCH_OCTAVE =
+  "Right letter, wrong octave. Count ledger lines from middle C, or up and down from the F line, and check which register your hand is in.";
+const READ_PITCH_WRONG =
+  "Find the nearest landmark (low C, the F line, middle C) and count lines and spaces from it. Check the key signature for sharps or flats.";
+
 const CONFUSION_PREFIX = "degree.confusion.";
 
 function degreeTip(expected: string, played: string, mode: TipMode): ConceptTip | undefined {
@@ -54,7 +59,12 @@ function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function tipFor(error: AttemptError, mode: TipMode): ConceptTip | undefined {
+export interface TipOptions {
+  /** The item is a reading item (notation shown, no audio). Gives `pitch.wrong` a tip. */
+  reading?: boolean;
+}
+
+function tipFor(error: AttemptError, mode: TipMode, opts?: TipOptions): ConceptTip | undefined {
   const { code, detail } = error;
   if (code.startsWith(CONFUSION_PREFIX)) {
     const [expected, played] = code.slice(CONFUSION_PREFIX.length).split("-");
@@ -77,6 +87,10 @@ function tipFor(error: AttemptError, mode: TipMode): ConceptTip | undefined {
       return { text: RHYTHM_EXTRA };
     case "rhythm.tempo-drift":
       return { text: RHYTHM_TEMPO };
+    case "pitch.octave":
+      return { text: PITCH_OCTAVE };
+    case "pitch.wrong":
+      return opts?.reading === true ? { text: READ_PITCH_WRONG } : undefined;
     case "sing.none":
       return { text: SING_NONE };
     default:
@@ -87,10 +101,15 @@ function tipFor(error: AttemptError, mode: TipMode): ConceptTip | undefined {
 /**
  * The tip for the first error, in scoring's order, that has one. `mode` is the item's mode
  * (degree labels mean different notes in major and minor); rhythm items can pass "major".
+ * `opts.reading` marks a reading item, the only place `pitch.wrong` gets a tip.
  */
-export function conceptTip(errors: readonly AttemptError[], mode: TipMode): ConceptTip | undefined {
+export function conceptTip(
+  errors: readonly AttemptError[],
+  mode: TipMode,
+  opts?: TipOptions,
+): ConceptTip | undefined {
   for (const e of errors) {
-    const tip = tipFor(e, mode);
+    const tip = tipFor(e, mode, opts);
     if (tip) return tip;
   }
   return undefined;
