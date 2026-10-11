@@ -10,3 +10,4 @@ export * from "./items/index.js";
 export * from "./scheduler/index.js";
 export * from "./grading/index.js";
 export * from "./state/index.js";
+export * from "./composer/index.js";
