@@ -75,14 +75,22 @@ export interface CreateInputDeps {
    * so `nowMs()` and `onsetMs` are comparable with `stimulusEndMs`. Default `performance.now`.
    */
   clock?: FakeClock;
+  /**
+   * For tap input: the session clock when it is not the AudioContext (silent audio, where headless
+   * WebKit may never start a context). Tap times are then read on this clock instead.
+   */
+  tapClockMs?: () => number;
 }
 
 /** Build the adapter for `kind` on the shared AudioContext. */
 export function createInput(kind: InputKind, deps: CreateInputDeps = {}): InputHandle {
   const audio = getAudioContextManager();
   if (kind === "tap") {
+    const tapClockMs = deps.tapClockMs;
     const tap = new TapInputAdapter({
-      getContext: () => audio.getContext(),
+      getContext: tapClockMs
+        ? () => ({ currentTime: tapClockMs() / 1000 })
+        : () => audio.getContext(),
     });
     return { kind, adapter: tap, tap };
   }

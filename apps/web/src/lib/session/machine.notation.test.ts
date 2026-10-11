@@ -3,6 +3,7 @@ import {
   FIXTURE_INTERVAL_C3_G3,
   composeSession,
   getGenerator,
+  rate,
   type ComposeInput,
   type ExpectedResponse,
   type GenerateContext,
@@ -558,5 +559,56 @@ describe("feedbackMarks", () => {
       { noteId: "n1", kind: "wrong" },
       { noteId: "n2", kind: "target" },
     ]);
+  });
+});
+
+describe("Away reading on the tap keyboard (T3.11)", () => {
+  /** Tap a key just after the gate opens, as the on-screen keyboard would. */
+  async function tapAnswer(r: ReadHarness, midi: number): Promise<void> {
+    await until(r.h, r.machine, listening);
+    r.h.input.emitNote(noteAt(midi, r.h.clock.ctxMs + 100, "tap"));
+    await until(r.h, r.machine, feedback);
+  }
+
+  it("scores an Away read item exact-pitch from a tap", async () => {
+    const r = await makeReadHarness({ mode: "away" });
+    await r.machine.start();
+    await tapAnswer(r, 54);
+    const attempts = byType(await r.h.log(), "attempt.completed");
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]?.outcome.correct).toBe(true);
+    expect(attempts[0]?.inputSource).toBe("tap");
+    expect(attempts[0]?.errors).toBeUndefined();
+    const s = r.machine.state;
+    if (s.kind !== "feedback") throw new Error("no feedback");
+    expect(s.item.block).toBe("read");
+  });
+
+  it("an octave-above tap is pitch.octave, not a plain miss", async () => {
+    const r = await makeReadHarness({ mode: "away" });
+    await r.machine.start();
+    await tapAnswer(r, 66);
+    const attempt = byType(await r.h.log(), "attempt.completed")[0];
+    expect(attempt?.outcome.correct).toBe(false);
+    expect(attempt?.errors?.map((e) => e.code)).toEqual(["pitch.octave"]);
+  });
+
+  it("applies the Away rating cap to read items (R3)", async () => {
+    const r = await makeReadHarness({ mode: "away" });
+    await r.machine.start();
+    await tapAnswer(r, 54);
+    const attempt = byType(await r.h.log(), "attempt.completed")[0];
+    if (!attempt) throw new Error("no attempt");
+    expect(r.h.service.state.sessions[attempt.sessionId]?.mode).toBe("away");
+    expect(r.h.service.state.cards[attempt.itemId]?.reps).toBe(1);
+    // The reducer rates with the session's mode: a fast correct answer is easy only at the
+    // instrument.
+    const target = r.h.graph.nodes.find((n) => n.id === READ_NODE)?.targetLatencyMs;
+    const fast = { ...attempt.outcome, latencyMs: 1 };
+    const opts = target === undefined ? {} : { targetLatencyMs: target };
+    expect(rate(fast, { mode: "instrument", ...opts })).toBe(
+      target === undefined ? "good" : "easy",
+    );
+    expect(rate(fast, { mode: "away", ...opts })).toBe("good");
   });
 });

@@ -12,6 +12,7 @@ describe("parseSessionParams", () => {
       silent: false,
       headphones: undefined,
       practice: false,
+      readStub: false,
     });
   });
 
@@ -24,6 +25,12 @@ describe("parseSessionParams", () => {
     for (const raw of ["practice=0", "practice=true", "practice=", ""]) {
       expect(parseSessionParams(q(raw)).practice).toBe(false);
     }
+  });
+
+  it("the read stub seam needs silent audio as well", () => {
+    expect(parseSessionParams(q("readstub=1")).readStub).toBe(false);
+    expect(parseSessionParams(q("readstub=1&audio=silent")).readStub).toBe(true);
+    expect(parseSessionParams(q("readstub=1&input=fake")).readStub).toBe(true);
   });
 
   it("away mode taps by default", () => {
