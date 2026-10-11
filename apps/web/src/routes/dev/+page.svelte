@@ -11,6 +11,7 @@
     { href: "/dev/input", label: "Input adapters" },
     { href: "/dev/pitch", label: "Mic pitch" },
     { href: "/dev/state", label: "Learner state" },
+    { href: "/dev/reset", label: "Reset progress or all data" },
     { href: "/dev/stimulus", label: "Stimulus player" },
     { href: "/dev/audio", label: "iOS audio spike" },
     { href: "/dev/record", label: "Record fixture" },
