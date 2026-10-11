@@ -8,3 +8,4 @@ export * from "./stimulus/index.js";
 export * from "./learning/index.js";
 export * from "./items/index.js";
 export * from "./scheduler/index.js";
+export * from "./grading/index.js";
