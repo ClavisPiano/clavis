@@ -2,6 +2,7 @@ import type { GeneratorId, SkillNode } from "../graph/schema.js";
 import type { JsonObject } from "../json.js";
 import type { SessionMode } from "../learning/rating.js";
 import type { Rng } from "../random.js";
+import type { ScoreSpec } from "../score/schema.js";
 import type { StimulusSpec } from "../stimulus/types.js";
 import type { Key, VoiceRange } from "../theory/keys.js";
 import type { ExpectedResponse } from "./expected.js";
@@ -36,6 +37,13 @@ export interface ItemInstance {
   stimulus: StimulusSpec;
   expected: ExpectedResponse;
   targetLatencyMs?: number;
+  /**
+   * What to draw for visual items (R17). Derived from the item on demand, never written to
+   * events; `presentation` still carries the replay params (R2).
+   */
+  display?: ScoreSpec;
+  /** Playable range for the on-screen keyboard or MIDI input, when it differs from the default. */
+  inputRange?: VoiceRange;
 }
 
 export interface Generator {
