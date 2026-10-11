@@ -1,18 +1,24 @@
 import { version } from "$app/env";
 import { assets, immutable, prerendered } from "$app/manifest";
 import { self as sw } from "$app/service-worker";
+import {
+  WARM_NOTATION_MESSAGE,
+  isWorkerChunk,
+  relativeImports,
+  splitPrecache,
+} from "../lib/pwa/precache";
 
 // Versioned precache: replaced wholesale on every deploy, old ones deleted on activate.
 const PRECACHE = `clavis-precache-${version}`;
 const PRECACHE_PREFIX = "clavis-precache-";
 
-// Reserved for runtime caching of large, rarely changing assets (piano samples, WASM, Verovio
-// fonts). Intended strategy, not implemented yet: these are fetched on demand (or by an explicit
-// "download for offline" action), stored here under their content-hashed URL, served cache-first,
-// and never evicted by deploys. This cache is deliberately not versioned by app release so that
-// hundreds of MB are not re-downloaded on every update. Bump the suffix only when the asset
-// format changes, and delete older `clavis-assets-*` caches then. The activate handler below
-// only ever deletes `clavis-precache-*` caches, so this one survives updates.
+// Runtime cache for large, rarely changing assets. Today that is the notation (Verovio) chunk;
+// piano samples and Verovio fonts are intended to follow. Files are stored under their
+// content-hashed URL, served cache-first, and never evicted by deploys. This cache is deliberately
+// not versioned by app release so that large files are not re-downloaded on every update. Bump
+// the suffix only when the asset format changes, and delete older `clavis-assets-*` caches then.
+// The activate handler below only ever deletes `clavis-precache-*` caches, so this one survives
+// updates.
 export const ASSET_CACHE = "clavis-assets-v1";
 
 // adapter-static emits the SPA fallback as index.html, which hosts serve for "/". It is not listed
@@ -22,15 +28,13 @@ const SHELL = "/";
 // Manifest paths are relative to the worker's own URL (no leading slash, no base), so resolve
 // them to absolute URLs. This also makes the requests below comparable by href.
 // The Verovio worker chunk (about 8 MB, WASM inlined) stays out of the precache: it would make
-// every install and update download it. T3.4 serves it cache-first from ASSET_CACHE instead.
-const NOTATION_ASSET = /verovio/i;
-const PRECACHE_URLS: string[] = [
-  ...[...immutable, ...assets, ...prerendered]
-    .map((entry) => entry.path)
-    .filter((path) => !NOTATION_ASSET.test(path)),
-  SHELL,
-].map((path) => new URL(path, sw.location.href).href);
+// every install and update download it. It is served cache-first from ASSET_CACHE instead.
+const split = splitPrecache([...immutable, ...assets, ...prerendered].map((entry) => entry.path));
+const toUrl = (path: string): string => new URL(path, sw.location.href).href;
+const PRECACHE_URLS: string[] = [...split.precache, SHELL].map(toUrl);
+const NOTATION_URLS: string[] = split.notation.map(toUrl);
 const PRECACHED = new Set(PRECACHE_URLS);
+const NOTATION = new Set(NOTATION_URLS);
 
 sw.addEventListener("install", (event) => {
   // No skipWaiting here: a new worker waits until the app asks for it (see lib/pwa/update.ts),
@@ -56,8 +60,13 @@ sw.addEventListener("activate", (event) => {
 
 sw.addEventListener("message", (event) => {
   const data: unknown = event.data;
-  if (typeof data === "object" && data !== null && "type" in data && data.type === "SKIP_WAITING") {
+  if (typeof data !== "object" || data === null || !("type" in data)) return;
+  if (data.type === "SKIP_WAITING") {
     void sw.skipWaiting();
+  } else if (data.type === WARM_NOTATION_MESSAGE) {
+    // The app sends this after its first online load. Failures are fine: the next load retries,
+    // and a notation request that finds the cache empty fills it itself.
+    event.waitUntil(warmNotation().catch(() => undefined));
   }
 });
 
@@ -69,16 +78,56 @@ sw.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(navigate(request));
-  } else if (PRECACHED.has(url.href)) {
-    event.respondWith(cacheFirst(request));
+    return;
+  }
+  const href = url.href;
+  if (PRECACHED.has(href)) {
+    event.respondWith(cacheFirst(href, request));
+  } else if (NOTATION.has(href) || isWorkerChunk(href)) {
+    event.respondWith(assetCacheFirst(href));
   }
 });
 
-async function cacheFirst(request: Request): Promise<Response> {
+// Cache-first from the asset cache, filled on first fetch. Only complete 200 responses are stored.
+async function assetCacheFirst(href: string): Promise<Response> {
+  const cache = await caches.open(ASSET_CACHE);
+  const cached = await cache.match(href, { ignoreVary: true });
+  if (cached) return cached;
+  const response = await fetch(href);
+  if (response.status === 200) await cache.put(href, response.clone());
+  return response;
+}
+
+// Background fill after the first online load, so notation works offline without having been used.
+async function warmNotation(): Promise<void> {
+  const cache = await caches.open(ASSET_CACHE);
+  // The queue grows with each script's relative imports: Rolldown puts small shared chunks next to
+  // the worker bundle, and the manifest does not list them.
+  const queue = [...NOTATION_URLS];
+  const seen = new Set(queue);
+  for (let url = queue.shift(); url !== undefined; url = queue.shift()) {
+    let response = await cache.match(url, { ignoreVary: true });
+    if (!response) {
+      const fetched = await fetch(url);
+      if (fetched.status !== 200) continue;
+      await cache.put(url, fetched.clone());
+      response = fetched;
+    }
+    if (!url.endsWith(".js")) continue;
+    for (const dep of relativeImports(await response.text(), url)) {
+      if (!seen.has(dep) && !PRECACHED.has(dep)) {
+        seen.add(dep);
+        queue.push(dep);
+      }
+    }
+  }
+}
+
+async function cacheFirst(href: string, request: Request): Promise<Response> {
   // ignoreVary: some servers send `Vary: Origin`, and module script requests carry different
   // headers than the plain requests used to fill the cache. Precached files are immutable.
-  const cached = await caches.match(request, { cacheName: PRECACHE, ignoreVary: true });
-  return cached ?? fetch(request);
+  const cached = await caches.match(href, { cacheName: PRECACHE, ignoreVary: true });
+  return cached ?? fetch(href === request.url ? request : href);
 }
 
 // Network first so a fresh deploy's shell is used when online, falling back to the precached SPA

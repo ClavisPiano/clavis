@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
+  import NotationView from "../../lib/components/NotationView.svelte";
   import Keyboard from "../../lib/components/Keyboard.svelte";
   import ConceptCardView from "../../lib/components/ConceptCard.svelte";
   import { cardById, cardForNode, ORIENT_CARD_ID } from "@clavis/content";
@@ -173,8 +174,11 @@
     {/if}
 
     {#if "item" in view && view.item.display}
-      <!-- The painted score goes here once NotationView arrives (T3.4); the port draws into it. -->
-      <div class="notation-slot" data-testid="notation-slot" data-block={view.item.block}></div>
+      <div class="notation-slot" data-testid="notation-slot" data-block={view.item.block}>
+        {#if runtime}
+          <NotationView port={runtime.notation} label="Music notation to read" />
+        {/if}
+      </div>
     {/if}
 
     {#if view.kind === "idle"}

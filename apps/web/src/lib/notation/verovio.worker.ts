@@ -1,92 +1,69 @@
-// T3.2 spike worker. Loads the Verovio toolkit (WASM is inlined in the module as base64 and
-// instantiated from memory, so there is no extra network fetch) and renders MEI to SVG on request.
-// Replaced by the T3.4 notation runtime.
+// Notation worker (T3.4). Loads the Verovio toolkit (the WASM is inlined in the module as base64
+// and instantiated from memory, so there is no extra network fetch) and renders ScoreSpecs to SVG.
+// The page talks to it through `createNotationClient`, which sits behind `NotationRenderer`, so a
+// different engine could replace this file without touching the callers.
 import createVerovioModule from "verovio/wasm";
 import { VerovioToolkit } from "verovio/esm";
-
-export type SpikeRequest =
-  { type: "init" } | { type: "render"; id: number; mei: string; widthPx: number };
-
-export type SpikeResponse =
-  | {
-      type: "ready";
-      version: string;
-      moduleMs: number;
-      toolkitMs: number;
-      initMs: number;
-      wasmHeapBytes: number | null;
-    }
-  | { type: "rendered"; id: number; svg: string; loadMs: number; renderMs: number; totalMs: number }
-  | { type: "error"; id?: number; message: string };
+import { toMei } from "@clavis/notation";
+import type { ScoreSpec } from "@clavis/core";
+import type { NotationRequest, NotationResponse } from "./protocol";
 
 // The tsconfig has no WebWorker lib, so describe the bits of the worker scope we use.
 interface WorkerScope {
-  onmessage: ((event: MessageEvent<SpikeRequest>) => void) | null;
-  postMessage(message: SpikeResponse): void;
+  onmessage: ((event: MessageEvent<NotationRequest>) => void) | null;
+  postMessage(message: NotationResponse): void;
 }
 const scope = globalThis as unknown as WorkerScope;
 
-let toolkit: VerovioToolkit | undefined;
+let toolkit: Promise<VerovioToolkit> | undefined;
 
-async function init(): Promise<void> {
-  const initStart = performance.now();
-  const mod = await createVerovioModule();
-  const moduleEnd = performance.now();
-  const tk = new VerovioToolkit(mod);
-  tk.setOptions({
-    scale: 40,
-    adjustPageHeight: true,
-    adjustPageWidth: true,
-    breaks: "none",
-    svgViewBox: true,
-    footer: "none",
-    header: "none",
+function loadToolkit(): Promise<VerovioToolkit> {
+  toolkit ??= createVerovioModule().then((mod) => {
+    const tk = new VerovioToolkit(mod);
+    tk.setOptions({
+      scale: 40,
+      adjustPageHeight: true,
+      adjustPageWidth: true,
+      breaks: "none",
+      svgViewBox: true,
+      footer: "none",
+      header: "none",
+    });
+    return tk;
   });
-  const initEnd = performance.now();
-  toolkit = tk;
-  scope.postMessage({
-    type: "ready",
-    version: tk.getVersion(),
-    moduleMs: moduleEnd - initStart,
-    toolkitMs: initEnd - moduleEnd,
-    initMs: initEnd - initStart,
-    wasmHeapBytes: mod.HEAPU8?.length ?? null,
-  });
+  return toolkit;
 }
 
-function render(id: number, mei: string): void {
-  if (!toolkit) throw new Error("toolkit not ready");
-  const t0 = performance.now();
-  const ok = toolkit.loadData(mei);
-  const t1 = performance.now();
-  if (!ok) throw new Error("Verovio could not load the MEI");
-  const svg = toolkit.renderToSVG(1);
-  const t2 = performance.now();
-  scope.postMessage({
+function noteIdsOf(score: ScoreSpec): string[] {
+  const ids: string[] = [];
+  for (const staff of score.staves)
+    for (const measure of staff.measures)
+      for (const el of measure) if (el.kind === "note") ids.push(el.id);
+  return ids;
+}
+
+async function handle(msg: NotationRequest): Promise<NotationResponse> {
+  const tk = await loadToolkit();
+  if (msg.type === "preload") return { id: msg.id, type: "ready" };
+  if (!tk.loadData(toMei(msg.score))) throw new Error("Verovio could not load the score");
+  return {
+    id: msg.id,
     type: "rendered",
-    id,
-    svg,
-    loadMs: t1 - t0,
-    renderMs: t2 - t1,
-    totalMs: t2 - t0,
-  });
+    svg: tk.renderToSVG(1),
+    noteIds: noteIdsOf(msg.score),
+  };
 }
 
 scope.onmessage = (event) => {
   const msg = event.data;
-  try {
-    if (msg.type === "init") {
-      init().catch((err: unknown) => {
-        scope.postMessage({ type: "error", message: String(err) });
-      });
-    } else {
-      render(msg.id, msg.mei);
-    }
-  } catch (err) {
-    scope.postMessage({
-      type: "error",
-      ...(msg.type === "render" ? { id: msg.id } : {}),
-      message: String(err),
-    });
-  }
+  handle(msg).then(
+    (res) => {
+      scope.postMessage(res);
+    },
+    (err: unknown) => {
+      // A failed engine load must not stick: let the next request try again.
+      if (msg.type === "preload") toolkit = undefined;
+      scope.postMessage({ id: msg.id, type: "error", message: String(err) });
+    },
+  );
 };

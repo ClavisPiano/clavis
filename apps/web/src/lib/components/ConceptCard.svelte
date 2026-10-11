@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { cardExampleStimulus, type ConceptCard, type Key, type StimulusSpec } from "@clavis/core";
+  import {
+    cardExampleScore,
+    cardExampleStimulus,
+    type ConceptCard,
+    type Key,
+    type StimulusSpec,
+  } from "@clavis/core";
+  import CardStaff from "./CardStaff.svelte";
 
   interface Props {
     card: ConceptCard;
@@ -17,8 +24,7 @@
     <p>{paragraph}</p>
   {/each}
 
-  <!-- Staff examples are play buttons with their label for now. The score is available from
-       cardExampleScore(example, keyOfDay); the visual comes with NotationView (T3.4). -->
+  <!-- Staff examples show their score (cardExampleScore) next to the play button's label. -->
   {#if card.examples.length > 0}
     <div class="examples" role="group" aria-label="Listen">
       {#each card.examples as example, i (i)}
@@ -33,6 +39,15 @@
         >
           <span aria-hidden="true">&#9654;</span>
           {example.label}
+          {#if example.kind === "staff"}
+            {@const score = cardExampleScore(example, keyOfDay)}
+            {#if score}
+              <!-- The button's label already describes the example. -->
+              <div class="staff" aria-hidden="true">
+                <CardStaff {score} label={example.label} />
+              </div>
+            {/if}
+          {/if}
         </button>
       {/each}
     </div>
@@ -106,6 +121,12 @@
     font: inherit;
     text-align: left;
     cursor: pointer;
+  }
+
+  .staff {
+    flex: 0 1 12rem;
+    min-width: 6rem;
+    margin-left: auto;
   }
 
   .example span {
