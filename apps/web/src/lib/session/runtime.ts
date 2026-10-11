@@ -176,7 +176,9 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
           .catch(() => undefined);
       },
       async unlock() {
-        if (!fake) await audio.unlock();
+        // Every mode can ask for sung answers, so set up capture now: changing the iOS audio
+        // session category later would interrupt the running context.
+        if (!fake) await audio.unlock({ capture: true });
       },
       teardown() {
         // Leaving mid-session closes it now; a killed tab is cleaned up by the next start.

@@ -45,7 +45,7 @@
     error = undefined;
     try {
       // Both calls must begin inside the tap: the context resume and the permission prompt.
-      await audio.unlock();
+      await audio.unlock({ capture: true });
       await mic.start({ context: audio.getContext() as unknown as AudioContext });
       micState = mic.state;
     } catch (e) {

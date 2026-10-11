@@ -132,6 +132,17 @@ describe("AudioContextManager", () => {
     expect(audioSession.type).toBe("playback");
   });
 
+  it("unlock({ capture: true }) switches the session to play-and-record and keeps it", async () => {
+    const { mgr, audioSession } = setup();
+    await mgr.unlock();
+    expect(audioSession.type).toBe("playback");
+    await mgr.unlock({ capture: true });
+    expect(audioSession.type).toBe("play-and-record");
+    // A later plain unlock (for example a stimulus replay tap) must not drop capture.
+    await mgr.unlock();
+    expect(audioSession.type).toBe("play-and-record");
+  });
+
   it("unlock() is idempotent and reuses the context", async () => {
     const { mgr, contexts } = setup();
     await mgr.unlock();
