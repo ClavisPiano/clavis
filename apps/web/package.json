@@ -16,7 +16,8 @@
   "dependencies": {
     "@clavis/audio": "workspace:*",
     "@clavis/core": "workspace:*",
-    "@clavis/store": "workspace:*"
+    "@clavis/store": "workspace:*",
+    "pitchy": "4.1.0"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",
