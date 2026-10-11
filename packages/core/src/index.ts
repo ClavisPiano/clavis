@@ -13,3 +13,4 @@ export * from "./state/index.js";
 export * from "./composer/index.js";
 export * from "./cards/index.js";
 export * from "./score/index.js";
+export * from "./placement/index.js";
