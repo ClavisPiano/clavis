@@ -49,6 +49,13 @@ export const SessionStartedV1 = z.strictObject({
   contentVersion: z.string().min(1),
 });
 
+/** v2 (T2.15) adds `practice`: an extra session that records attempts but leaves FSRS cards alone. */
+export const SessionStartedV2 = z.strictObject({
+  ...SessionStartedV1.shape,
+  v: z.literal(2),
+  practice: z.boolean().optional(),
+});
+
 export const ItemPresentedV1 = z.strictObject({
   ...envelopeShape,
   type: z.literal("item.presented"),

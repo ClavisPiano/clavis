@@ -220,6 +220,99 @@ describe("fold properties", () => {
 
 /* ---------- service ---------- */
 
+describe("practice sessions (T2.15)", () => {
+  const DAY1 = T0 + 6 * 3_600_000;
+  const DAY2 = T0 + DAY_MS + 6 * 3_600_000;
+
+  it("keeps REDUCER_VERSION at 2 or more so v1 snapshots are discarded", () => {
+    expect(REDUCER_VERSION).toBeGreaterThanOrEqual(2);
+  });
+
+  it("leaves cards unchanged but records the attempts", () => {
+    const b = new Builder();
+    const base = b.session(DAY1, 1, "n1", 3, { introduce: true });
+    const before = fold(base);
+    const after = fold([...base, ...b.session(DAY2, 2, "n1", 6, { practice: true })]);
+    expect(after.cards).toStrictEqual(before.cards);
+    expect(after.cards["n1:0"]?.reps).toBe(1);
+    expect(after.attempts.n1).toHaveLength(9);
+    expect(after.sessions[b.sessionId(2)]?.practice).toBe(true);
+    expect(after.sessions[b.sessionId(1)]?.practice).toBeUndefined();
+    expect(after.daily["2026-01-02"]?.sessions).toBe(1);
+  });
+
+  it("does not create a card for an item first seen in practice", () => {
+    const b = new Builder();
+    const s = fold([...b.session(DAY1, 1, "n1", 1, { introduce: true, practice: true })]);
+    expect(s.cards).toEqual({});
+    expect(s.attempts.n1).toHaveLength(1);
+  });
+
+  it("counts toward mastery windows exactly like a normal session", () => {
+    const b1 = new Builder();
+    const b2 = new Builder();
+    const day1 = (b: Builder) => b.session(DAY1, 1, "n1", 3, { introduce: true });
+    const normal = fold([...day1(b1), ...b1.session(DAY2, 2, "n1", 3)]);
+    const practice = fold([...day1(b2), ...b2.session(DAY2, 2, "n1", 3, { practice: true })]);
+    expect(normal.nodes.n1?.state).toBe("mastered");
+    expect(practice.nodes.n1?.state).toBe("mastered");
+    expect(practice.attempts).toStrictEqual(normal.attempts);
+    expect(practice.durations).toStrictEqual(normal.durations);
+    expect(practice.nodes).toStrictEqual(normal.nodes);
+  });
+
+  it("folds newItemsPerDay into settings", () => {
+    const b = new Builder();
+    const s = fold([
+      b.settings(T0 + 1, { newItemsPerDay: 9 }),
+      b.settings(T0 + 2, { budgetSec: 300 }),
+    ]);
+    expect(s.settings).toEqual({ newItemsPerDay: 9, budgetSec: 300 });
+  });
+
+  const practiceFlags = fc.array(fc.boolean(), { minLength: 2, maxLength: 5 });
+
+  it("property: refold is order independent with practice sessions", () => {
+    fc.assert(
+      fc.property(
+        practiceFlags,
+        fc.array(fc.integer({ min: 0, max: 1000 }), { minLength: 1, maxLength: 40 }),
+        (flags, keys) => {
+          const b = new Builder();
+          const events = flags.flatMap((practice, i) =>
+            b.session(T0 + i * DAY_MS + 6 * 3_600_000, i, "n1", 3, {
+              introduce: i === 0,
+              practice: practice && i > 0,
+            }),
+          );
+          expect(fold(shuffled(events, keys))).toStrictEqual(fold([...events].sort(compareEvents)));
+        },
+      ),
+      { numRuns: 60 },
+    );
+  });
+
+  it("property: cards equal the fold of the non-practice sessions alone, and replay is idempotent", () => {
+    fc.assert(
+      fc.property(practiceFlags, (flags) => {
+        const b = new Builder();
+        const sessions = flags.map((practice, i) => ({
+          practice: practice && i > 0,
+          events: b.session(T0 + i * DAY_MS + 6 * 3_600_000, i, "n1", 3, {
+            introduce: i === 0,
+            practice: practice && i > 0,
+          }),
+        }));
+        const all = sessions.flatMap((s) => s.events);
+        const normalOnly = sessions.filter((s) => !s.practice).flatMap((s) => s.events);
+        expect(fold(all).cards).toStrictEqual(fold(normalOnly).cards);
+        expect(fold([...all, ...all])).toStrictEqual(fold(all));
+      }),
+      { numRuns: 60 },
+    );
+  });
+});
+
 describe("LearnerStateService", () => {
   const history = (): LearningEvent[] => {
     const b = new Builder();

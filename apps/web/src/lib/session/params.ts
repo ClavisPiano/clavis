@@ -13,6 +13,8 @@ export interface SessionParams {
    * forces the prompt. Undefined means: use the remembered answer, else ask.
    */
   headphones: boolean | "ask" | undefined;
+  /** `?practice=1`: extra practice on started items (T2.15). Cards and schedule stay untouched. */
+  practice: boolean;
 }
 
 export const MIN_BUDGET_SEC = 30;
@@ -38,6 +40,7 @@ export function parseSessionParams(
     budgetSec: parseBudget(searchParams.get("budget")),
     inputKind,
     silent: searchParams.get("audio") === "silent" || inputKind === "fake",
+    practice: searchParams.get("practice") === "1",
     headphones: headphones ?? (inputKind === "fake" ? true : undefined),
   };
 }

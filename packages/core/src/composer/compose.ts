@@ -14,6 +14,7 @@ import { medianDurationSec } from "../state/reduce.js";
 import type { LearnerState } from "../state/types.js";
 import { allocate, DEFAULT_BUDGET_SEC, SCALE_ORIENT_SEC } from "./budget.js";
 import { interleave } from "./interleave.js";
+import { rankWeakest } from "./practice.js";
 import { keyFamily, type KeyFamily } from "../theory/keys.js";
 import { keyOfDay, NODE_RANK } from "./key.js";
 import type { ComposeInput, PlannedItem, SessionPlan } from "./types.js";
@@ -208,7 +209,9 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const key = keyOfDay(state, graph, input.now, input.tzOffsetMin);
   const dayFamily = keyFamily(key);
   const introducedToday = state.daily[today]?.newItems ?? 0;
-  const newAllowance = newItemAllowance({ introducedToday });
+  const newAllowance = input.practice
+    ? 0
+    : newItemAllowance({ introducedToday, cap: state.settings.newItemsPerDay });
   const notes: string[] = [];
 
   const infos = new Map<string, NodeInfo>();
@@ -229,7 +232,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
         nodeEnabled(n, graph, registry) &&
         state.nodes[n.id]?.state === "learning",
     );
-    if (learning) return undefined;
+    if (learning || input.practice) return undefined;
     return graph.nodes
       .map((node, order) => ({ node, order }))
       .filter(
@@ -292,12 +295,18 @@ export function composeSession(input: ComposeInput): SessionPlan {
         if (card) {
           if (card.nodeId === nodeId)
             dueAll.push({ ...u, nodeId, isNew: false, card: card.card, ...famPart });
-        } else if (fam !== undefined ? open.includes(fam) : learning || introducing) {
+        } else if (
+          // Practice (T2.15) drills items that already have cards only.
+          !input.practice &&
+          (fam !== undefined ? open.includes(fam) : learning || introducing)
+        ) {
           fresh.push({ ...u, nodeId, isNew: true, ...famPart });
         }
       }
     }
-    const due = rankDue(dueAll, input.now) as Candidate[];
+    const due = (
+      input.practice ? rankWeakest(dueAll, input.now) : rankDue(dueAll, input.now)
+    ) as Candidate[];
     // Stable sort: key-of-the-day family first, then A, B, C; graph and item order within.
     fresh.sort((a, b) => famRank(a.fam) - famRank(b.fam));
     return { due, fresh };
@@ -374,6 +383,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     blocks: { ear: earItems, read: readItems, apply: null },
     introductions,
     introductionKeyFamilies,
+    ...(input.practice ? { practice: true as const } : {}),
     diagnostics: {
       dueCount: ear.due.length + read.due.length,
       newAllowance,

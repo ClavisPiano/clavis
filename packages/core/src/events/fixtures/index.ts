@@ -1,6 +1,8 @@
 import deviceRegistered from "./device.registered.json";
 import settingsChanged from "./settings.changed.json";
+import settingsChangedV1 from "./settings.changed.v1.json";
 import sessionStarted from "./session.started.json";
+import sessionStartedV1 from "./session.started.v1.json";
 import itemPresented from "./item.presented.json";
 import attemptCompleted from "./attempt.completed.json";
 import nodeIntroduced from "./node.introduced.json";
@@ -18,3 +20,6 @@ export const eventFixtures: Readonly<Record<string, unknown>> = {
   "placement.completed": placementCompleted,
   "session.ended": sessionEnded,
 };
+
+/** Shipped v1 events that must keep parsing and upcasting to the latest version. */
+export const legacyEventFixtures: readonly unknown[] = [settingsChangedV1, sessionStartedV1];

@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 
 /** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
-export const REDUCER_VERSION = 1;
+export const REDUCER_VERSION = 2;
 
 export const DURATION_WINDOW = 20;
 /** Fewer samples than this and the graph seed is used instead of the median. */
@@ -141,6 +141,7 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
         key: { tonic: event.key.tonic, mode: event.key.mode },
         budgetSec: event.budgetSec,
         itemsPresented: 0,
+        ...(event.practice ? { practice: true } : {}),
       };
       const d = daily(state, day);
       d.sessions++;
@@ -271,14 +272,17 @@ function reduceAttempt(
     mode: session.mode,
     ...(node.targetLatencyMs !== undefined ? { targetLatencyMs: node.targetLatencyMs } : {}),
   });
-  const existing = state.cards[event.itemId];
-  const base = existing ? existing.card : ctx.scheduler.newCard(event.at);
-  state.cards[event.itemId] = {
-    nodeId: event.nodeId,
-    card: ctx.scheduler.review(base, rating, event.at),
-    lastAttemptAt: event.at,
-    reps: (existing?.reps ?? 0) + 1,
-  };
+  // Practice sessions (T2.15) count as evidence but never move the review schedule.
+  if (!session.practice) {
+    const existing = state.cards[event.itemId];
+    const base = existing ? existing.card : ctx.scheduler.newCard(event.at);
+    state.cards[event.itemId] = {
+      nodeId: event.nodeId,
+      card: ctx.scheduler.review(base, rating, event.at),
+      lastAttemptAt: event.at,
+      reps: (existing?.reps ?? 0) + 1,
+    };
+  }
 
   const attempt: StoredAttempt = {
     at: event.at,

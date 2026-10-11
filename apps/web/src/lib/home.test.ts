@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { learnerDay, type LearnerState } from "@clavis/core";
 import {
+  clampNewItems,
   effectiveSettings,
+  hasStartedItems,
   isFirstRun,
   lastDays,
   minutesLabel,
@@ -63,7 +65,20 @@ describe("settings", () => {
     expect(e.awayBudgetSec).toBe(300);
     expect([e.voiceRangeLow, e.voiceRangeHigh]).toEqual([48, 72]);
     expect(e.weeklyTargetDays).toBe(5);
+    expect(e.newItemsPerDay).toBe(5);
+    expect(effectiveSettings({ newItemsPerDay: 9 }).newItemsPerDay).toBe(9);
     expect(minutesLabel(e.budgetSec)).toBe("12 min");
+  });
+  it("diffs newItemsPerDay", () => {
+    const cur = effectiveSettings({});
+    expect(settingsDiff(cur, { ...cur, newItemsPerDay: 8 })).toEqual({ newItemsPerDay: 8 });
+  });
+  it("clamps new items per day to 3..15", () => {
+    expect([0, 3, 7.4, 15, 99, Number.NaN].map(clampNewItems)).toEqual([3, 3, 7, 15, 15, 5]);
+  });
+  it("Practise more needs at least one card", () => {
+    expect(hasStartedItems({ cards: {} } as unknown as LearnerState)).toBe(false);
+    expect(hasStartedItems({ cards: { a: {} } } as unknown as LearnerState)).toBe(true);
   });
   it("diffs only changed keys", () => {
     const cur = effectiveSettings({});

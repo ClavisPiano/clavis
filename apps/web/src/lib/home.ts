@@ -1,4 +1,5 @@
 import {
+  DEFAULT_NEW_ITEM_CAP,
   dayNumberToIso,
   learnerDayNumber,
   type LearnerState,
@@ -14,6 +15,8 @@ import {
 export const DEFAULT_BUDGET_SEC = 720;
 export const DEFAULT_AWAY_BUDGET_SEC = 300;
 export const DEFAULT_WEEKLY_TARGET_DAYS = 5;
+export const NEW_ITEMS_PER_DAY_MIN = 3;
+export const NEW_ITEMS_PER_DAY_MAX = 15;
 export const DEFAULT_VOICE_LOW = 48;
 export const DEFAULT_VOICE_HIGH = 72;
 
@@ -33,6 +36,7 @@ export interface EffectiveSettings {
   /** Undefined until the learner has answered (the session asks once). */
   headphones: boolean | undefined;
   weeklyTargetDays: number;
+  newItemsPerDay: number;
 }
 
 export function effectiveSettings(s: SettingsPatch): EffectiveSettings {
@@ -43,6 +47,7 @@ export function effectiveSettings(s: SettingsPatch): EffectiveSettings {
     voiceRangeHigh: s.voiceRangeHigh ?? DEFAULT_VOICE_HIGH,
     headphones: s.headphones,
     weeklyTargetDays: s.weeklyTargetDays ?? DEFAULT_WEEKLY_TARGET_DAYS,
+    newItemsPerDay: s.newItemsPerDay ?? DEFAULT_NEW_ITEM_CAP,
   };
 }
 
@@ -100,6 +105,9 @@ export function settingsDiff(
   }
   if (draft.weeklyTargetDays !== current.weeklyTargetDays) {
     patch.weeklyTargetDays = draft.weeklyTargetDays;
+  }
+  if (draft.newItemsPerDay !== current.newItemsPerDay) {
+    patch.newItemsPerDay = draft.newItemsPerDay;
   }
   return Object.keys(patch).length === 0 ? undefined : patch;
 }
@@ -187,6 +195,17 @@ export interface WeekProgress {
 export function weekProgress(cells: readonly DayCell[], target: number): WeekProgress {
   const daysPractised = cells.filter((c) => c.practised).length;
   return { daysPractised, target, met: daysPractised >= target };
+}
+
+/** Practise more needs at least one item that has been answered before (it has a card). */
+export function hasStartedItems(state: LearnerState): boolean {
+  return Object.keys(state.cards).length > 0;
+}
+
+/** Clamp a typed value to the allowed new-items range; non-numbers fall back to the default. */
+export function clampNewItems(raw: number): number {
+  if (!Number.isFinite(raw)) return DEFAULT_NEW_ITEM_CAP;
+  return Math.min(NEW_ITEMS_PER_DAY_MAX, Math.max(NEW_ITEMS_PER_DAY_MIN, Math.round(raw)));
 }
 
 /** No session has ever been started: show the welcome. */

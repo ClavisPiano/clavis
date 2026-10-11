@@ -110,6 +110,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
   const deps: SessionDeps = {
     deviceId,
     mode: params.mode,
+    ...(params.practice ? { practice: true } : {}),
     graph,
     compose: composeSession,
     generate: (item, ctx) => {
@@ -148,7 +149,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
           deviceId,
           at: Date.now(),
           type: "settings.changed",
-          v: 1,
+          v: 2,
           patch: { headphones: value },
         },
       ]);

@@ -9,7 +9,10 @@
     PICKER_MIDI_MAX,
     PICKER_MIDI_MIN,
     RANGE_PRESETS,
+    NEW_ITEMS_PER_DAY_MAX,
+    NEW_ITEMS_PER_DAY_MIN,
     WEEKLY_TARGET_OPTIONS,
+    clampNewItems,
     effectiveSettings,
     noteName,
     presetFor,
@@ -75,7 +78,7 @@
           randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
         });
         await learner.append([
-          { id: newId(), deviceId, at: Date.now(), type: "settings.changed", v: 1, patch },
+          { id: newId(), deviceId, at: Date.now(), type: "settings.changed", v: 2, patch },
         ]);
         // The session runner reads headphones from device meta first.
         if (patch.headphones !== undefined) {
@@ -154,6 +157,27 @@
           {/each}
         </select>
       </label>
+      <label>
+        New items per day
+        <input
+          type="number"
+          inputmode="numeric"
+          data-testid="new-items-per-day"
+          min={NEW_ITEMS_PER_DAY_MIN}
+          max={NEW_ITEMS_PER_DAY_MAX}
+          step="1"
+          value={draft.newItemsPerDay}
+          aria-describedby="new-items-help"
+          onchange={(e) => {
+            if (draft) draft.newItemsPerDay = clampNewItems(e.currentTarget.valueAsNumber);
+            e.currentTarget.value = String(draft?.newItemsPerDay ?? "");
+            touch();
+          }}
+        />
+      </label>
+      <p class="muted" id="new-items-help">
+        More new items means faster progress but more to review later.
+      </p>
     </fieldset>
 
     <fieldset>
@@ -315,7 +339,8 @@
     gap: var(--space-4);
   }
 
-  select {
+  select,
+  input[type="number"] {
     min-height: var(--touch-target);
     padding: 0 var(--space-3);
     font: inherit;

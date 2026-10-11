@@ -28,7 +28,11 @@
   <p>Showing the latest {events.length} events (max 50).</p>
   <ul data-testid="events">
     {#each events as event (event.id)}
-      <li data-testid="event">
+      <li
+        data-testid="event"
+        data-v={event.v}
+        data-practice={event.type === "session.started" && event.practice === true}
+      >
         <strong>{event.type}</strong>
         <time datetime={new Date(event.at).toISOString()}>{new Date(event.at).toISOString()}</time>
         <code>{event.id}</code>

@@ -42,7 +42,7 @@ function stream(): LearningEvent[] {
     out.push({
       ...base(start),
       type: "session.started",
-      v: 1,
+      v: 2,
       sessionId: s,
       mode: "instrument",
       budgetSec: 600,

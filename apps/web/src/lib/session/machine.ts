@@ -66,6 +66,8 @@ export interface SessionPlayer {
 export interface SessionDeps {
   deviceId: string;
   mode: SessionMode;
+  /** Extra practice (T2.15): compose with `practice` and write `session.started` with it. */
+  practice?: boolean;
   graph: SkillGraph;
   compose(input: ComposeInput): SessionPlan;
   generate(item: PlannedItem, ctx: GenerateContext): ItemInstance;
@@ -504,8 +506,12 @@ export class SessionMachine {
       tzOffsetMin: d.tzOffsetMin,
       mode: d.mode,
       ...(d.budgetSec === undefined ? {} : { budgetSec: d.budgetSec }),
+      ...(d.practice ? { practice: true } : {}),
       seed: d.seed,
     });
+    if (d.practice && plan.blocks.ear.length + plan.blocks.read.length === 0) {
+      throw new Error("Nothing to practise yet. Finish a regular session first, then come back.");
+    }
     this.#plan = plan;
     this.#items = [
       ...plan.blocks.ear.map((planned) => ({ planned, block: "ear" as const })),
@@ -549,6 +555,8 @@ export class SessionMachine {
       {
         ...this.#base(),
         type: "session.started" as const,
+        v: 2 as const,
+        ...(d.practice ? { practice: true } : {}),
         sessionId: this.#sessionId,
         mode: d.mode,
         budgetSec: Math.round(plan.budgetSec),

@@ -20,6 +20,11 @@ export interface ComposeInput {
    * implemented in the graph and present here, so tests can stub READ generators.
    */
   generators?: Partial<Record<GeneratorId, Generator>>;
+  /**
+   * Extra practice (T2.15): no introductions and no new items; every item that already has a card
+   * in a node at learning or beyond is a candidate, weakest first, whether or not it is due.
+   */
+  practice?: boolean;
 }
 
 /** One item the session runner will turn into a stimulus via `getGenerator(generator).generate(...)`. */
@@ -58,6 +63,8 @@ export interface SessionPlan {
    * (always "A", R16). Empty for EAR introductions.
    */
   introductionKeyFamilies: Record<string, KeyFamily>;
+  /** Present and true only for a practice plan. */
+  practice?: true;
   diagnostics: {
     /** Due cards found in the strands considered (ear plus read), before the budget cut. */
     dueCount: number;

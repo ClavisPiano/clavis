@@ -862,3 +862,48 @@ describe("end of session", () => {
     expect(await types(h)).toEqual([]);
   });
 });
+
+describe("practice session (T2.15)", () => {
+  it("logs session.started with practice, leaves cards alone and still records attempts", async () => {
+    const first = await makeHarness({ budgetSec: 90 });
+    await runWholeSession(first);
+    const history = await first.log();
+    const cardsBefore = JSON.stringify(first.service.state.cards);
+    const attemptsBefore = Object.values(first.service.state.attempts).flat().length;
+    expect(Object.keys(first.service.state.cards).length).toBeGreaterThan(0);
+
+    const h = await makeHarness({ budgetSec: 90, practice: true, history, idSalt: 77 });
+    await runWholeSession(h);
+    expect(h.machine.state.kind).toBe("summary");
+    expect(h.machine.plan?.practice).toBe(true);
+    expect(h.machine.plan?.introductions).toEqual([]);
+
+    const events = (await h.log()).filter((e) => !history.some((o) => o.id === e.id));
+    const started = byType(events, "session.started");
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ v: 2, practice: true });
+    expect(byType(events, "node.introduced")).toEqual([]);
+    expect(byType(events, "item.presented").every((e) => !e.isNew)).toBe(true);
+    expect(byType(events, "attempt.completed").length).toBeGreaterThan(0);
+
+    expect(JSON.stringify(h.service.state.cards)).toBe(cardsBefore);
+    expect(Object.values(h.service.state.attempts).flat().length).toBeGreaterThan(attemptsBefore);
+  });
+
+  it("normal sessions write session.started v2 without practice", async () => {
+    const h = await makeHarness({ budgetSec: 90 });
+    await h.machine.start();
+    const started = byType(await h.log(), "session.started")[0];
+    expect(started?.v).toBe(2);
+    expect(started?.practice).toBeUndefined();
+  });
+
+  it("an empty practice plan ends with a friendly message and writes no events", async () => {
+    const h = await makeHarness({ budgetSec: 90, practice: true });
+    await h.machine.start();
+    const s = h.machine.state;
+    expect(s.kind).toBe("error");
+    if (s.kind === "error") expect(s.message).toMatch(/Nothing to practise yet/);
+    expect(await h.log()).toEqual([]);
+  });
+});
