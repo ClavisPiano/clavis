@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { ScoreSpecSchema, spelledToMidi } from "../score/schema.js";
 import { StimulusSpecSchema } from "../stimulus/types.js";
 import { ALL_KEYS } from "../theory/keys.js";
 import { COUNT_IN_PITCH, RHYTHM_PITCH } from "../items/rhythm.js";
 import {
   CARD_EXAMPLE_TEMPO_BPM,
+  cardExampleScore,
   cardExampleStimulus,
   cardWordCount,
   ConceptCardSchema,
@@ -136,5 +138,80 @@ describe("cardWordCount", () => {
       body: 3,
       howTo: 1,
     });
+  });
+});
+
+describe("staff examples", () => {
+  const staff = {
+    kind: "staff",
+    label: "Low C, F and middle C",
+    clef: "bass",
+    positions: ["C2", "F3", "C4"],
+  } as const satisfies CardExample;
+  const gMajor = { tonic: "G", mode: "major" } as const;
+
+  it("builds a valid one-staff score in C major by default", () => {
+    const score = cardExampleScore(staff, gMajor);
+    expect(ScoreSpecSchema.safeParse(score).success).toBe(true);
+    expect(score?.key).toEqual({ tonic: "C", mode: "major" });
+    expect(score?.staves[0]?.clef).toBe("bass");
+    expect(score?.staves[0]?.measures.flat().map((n) => (n.kind === "note" ? n.id : ""))).toEqual([
+      "n1",
+      "n2",
+      "n3",
+    ]);
+  });
+
+  it.each([
+    ["C", "major", "F3", 53],
+    ["G", "major", "F3", 54],
+    ["F", "major", "B3", 58],
+    ["D", "major", "C4", 61],
+    ["A", "minor", "F3", 53],
+    ["E", "minor", "F3", 54],
+  ] as const)("applies the %s %s signature to %s", (tonic, mode, pos, midi) => {
+    const score = cardExampleScore(
+      { kind: "staff", label: "x", clef: "bass", positions: [pos], useKeyOfDay: true },
+      { tonic, mode },
+    );
+    const n = score?.staves[0]?.measures[0]?.[0];
+    expect(
+      n?.kind === "note"
+        ? spelledToMidi(n.pitches[0] ?? { step: "C", alter: 0, octave: 0 })
+        : undefined,
+    ).toBe(midi);
+    expect(score?.key).toEqual({ tonic, mode });
+  });
+
+  it("has no score for other kinds", () => {
+    expect(cardExampleScore({ kind: "scale", label: "s" }, gMajor)).toBeUndefined();
+  });
+
+  it("plays the notes in sequence, in the key of the day only when asked", () => {
+    const spec = cardExampleStimulus(staff, gMajor);
+    expect(StimulusSpecSchema.safeParse(spec).success).toBe(true);
+    expect(spec.events.map((e) => e.midi[0])).toEqual([36, 53, 60]);
+    expect(spec.events.map((e) => e.atSec)).toEqual([0, 60 / 90, 120 / 90]);
+    const keyed = cardExampleStimulus({ ...staff, useKeyOfDay: true }, gMajor);
+    expect(keyed.events.map((e) => e.midi[0])).toEqual([36, 54, 60]);
+  });
+
+  it.each([
+    ["a bad position", { positions: ["H3"] }],
+    ["no positions", { positions: [] }],
+    ["nine positions", { positions: Array.from({ length: 9 }, () => "C4") }],
+    ["a percussion clef", { clef: "percussion" }],
+  ])("rejects %s", (_n, patch) => {
+    expect(
+      ConceptCardSchema.safeParse({
+        id: "concept.t",
+        nodeIds: [],
+        title: "t",
+        body: ["b"],
+        howTo: ["h"],
+        examples: [{ ...staff, ...patch }],
+        links: [],
+      }).success,
+    ).toBe(false);
   });
 });

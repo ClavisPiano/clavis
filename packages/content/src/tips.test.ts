@@ -75,3 +75,38 @@ describe("conceptTip", () => {
     expect(conceptTip(errors, "major")).toBeUndefined();
   });
 });
+
+describe("conceptTip for reading", () => {
+  const octave =
+    "Right letter, wrong octave. Count ledger lines from middle C, or up and down from the F line, and check which register your hand is in.";
+  const wrong =
+    "Find the nearest landmark (low C, the F line, middle C) and count lines and spaces from it. Check the key signature for sharps or flats.";
+
+  it.each([
+    ["octave, not reading", [e("pitch.octave", { expected: 41, played: 53 })], undefined, octave],
+    ["octave, reading", [e("pitch.octave")], { reading: true }, octave],
+    [
+      "wrong pitch, reading",
+      [e("pitch.wrong", { expected: "F", played: "G" })],
+      { reading: true },
+      wrong,
+    ],
+    [
+      "octave beats a later wrong pitch",
+      [e("pitch.octave"), e("pitch.wrong")],
+      { reading: true },
+      octave,
+    ],
+  ] as const)("%s", (_name, errors, opts, text) => {
+    expect(conceptTip(errors, "major", opts)).toEqual({ text });
+  });
+
+  it.each([
+    ["wrong pitch, no options", undefined],
+    ["wrong pitch, reading false", { reading: false }],
+  ] as const)("gives no pitch.wrong tip for %s", (_name, opts) => {
+    expect(
+      conceptTip([e("pitch.wrong", { expected: "F", played: "G" })], "major", opts),
+    ).toBeUndefined();
+  });
+});

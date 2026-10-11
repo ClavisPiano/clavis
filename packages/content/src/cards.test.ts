@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cardWordCount, isNodeEnabled } from "@clavis/core";
 import { CARDS_V1 } from "./cards/v1";
+import { READ_CARD_NODE_IDS } from "./cards/read";
 import { cardById, cardForNode, loadCards, loadGraph, ORIENT_CARD_ID, parseCards } from "./index";
 
 /** Spec 13 targets about 120 words; cards here also carry "what you'll do". */
@@ -38,6 +39,14 @@ describe("concept cards v1", () => {
       .map((n) => n.id);
     expect(missing).toEqual([]);
   });
+
+  it.each(READ_CARD_NODE_IDS.map((id) => [id] as const))(
+    "has a card for READ node %s, ready for T3.15 to enable it",
+    (id) => {
+      expect(graph.nodes.some((n) => n.id === id)).toBe(true);
+      expect(cardForNode(id)).toBeDefined();
+    },
+  );
 
   it("has the warm-up card, tied to no node", () => {
     expect(cardById(ORIENT_CARD_ID)?.nodeIds).toEqual([]);
