@@ -56,6 +56,9 @@ importers:
       '@clavis/audio':
         specifier: workspace:*
         version: link:../../packages/audio
+      '@clavis/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@clavis/core':
         specifier: workspace:*
         version: link:../../packages/core
