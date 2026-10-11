@@ -3,12 +3,28 @@
   import "../app.css";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { onMount } from "svelte";
   import { NAV_ITEMS, isActive } from "../lib/nav";
+  import UpdateBanner from "../lib/pwa/UpdateBanner.svelte";
+  import { requestPersistentStorage } from "../lib/pwa/persist";
+  import { watchServiceWorker } from "../lib/pwa/update-state.svelte";
 
   let { children }: { children: Snippet } = $props();
+
+  onMount(() => {
+    void watchServiceWorker();
+    let local: Storage | undefined;
+    try {
+      local = localStorage;
+    } catch {
+      local = undefined;
+    }
+    void requestPersistentStorage(navigator.storage, local);
+  });
 </script>
 
 <div class="shell">
+  <UpdateBanner />
   <main>
     {@render children()}
   </main>
