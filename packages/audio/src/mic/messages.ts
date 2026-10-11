@@ -1,4 +1,5 @@
 import type { NoteEvent, PitchFrame } from "@clavis/core";
+import type { MidiRange } from "../pitch/midi.js";
 import type { NoteSegmenterOptions } from "../pitch/segmenter.js";
 import type { PitchTrackerOptions } from "../pitch/tracker.js";
 
@@ -37,6 +38,8 @@ export type WorkerInbound =
   | { type: "init"; port: MessagePort; config?: PipelineConfig }
   | { type: "pause" }
   | { type: "resume" }
+  /** Live register hint for the octave check and fold; `null` clears it. */
+  | { type: "range"; range: MidiRange | null }
   | { type: "stop" };
 
 /** Worker -> main thread. */

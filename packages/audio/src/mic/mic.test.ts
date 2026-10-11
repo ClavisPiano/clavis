@@ -236,6 +236,17 @@ describe("MicPitchSource", () => {
     expect(notes).toEqual(["start:69", "end:69"]);
   });
 
+  it("posts the expected range to the worker, now and on the next start", async () => {
+    const { mic, worker } = setup();
+    const { ctx } = fakeContext();
+    mic.setExpectedRange({ low: 36, high: 64 });
+    await mic.start({ context: ctx });
+    expect(worker.sent.map((m) => m.type)).toEqual(["init", "range"]);
+    expect(worker.sent[1]).toEqual({ type: "range", range: { minMidi: 36, maxMidi: 64 } });
+    mic.setExpectedRange(null);
+    expect(worker.sent.at(-1)).toEqual({ type: "range", range: null });
+  });
+
   it("stop releases the stream and the worker", async () => {
     const { mic, worker, stopTrack } = setup();
     const { ctx } = fakeContext();

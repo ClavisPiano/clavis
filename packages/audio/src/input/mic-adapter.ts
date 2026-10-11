@@ -1,4 +1,4 @@
-import type { NoteEvent, PitchFrame } from "@clavis/core";
+import type { NoteEvent, PitchFrame, VoiceRange } from "@clavis/core";
 import type { CaptureContext, MicStartOptions, NotePhase } from "../mic/mic-source.js";
 import { Emitter, type InputAdapter } from "./types.js";
 
@@ -8,6 +8,7 @@ export interface MicSourceLike {
   stop(): Promise<void>;
   pause(): void;
   resume(): void;
+  setExpectedRange?(range: VoiceRange | null): void;
   onNote(cb: (note: NoteEvent, phase: NotePhase) => void): () => void;
   onFrame(cb: (frame: PitchFrame) => void): () => void;
 }
@@ -73,6 +74,10 @@ export class MicInputAdapter implements InputAdapter {
   resume(): void {
     this.#paused = false;
     this.#mic.resume();
+  }
+
+  setExpectedRange(range: VoiceRange | null): void {
+    this.#mic.setExpectedRange?.(range);
   }
 
   onNote(cb: (e: NoteEvent) => void): () => void {

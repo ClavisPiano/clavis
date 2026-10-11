@@ -1,4 +1,4 @@
-import type { InputSource, NoteEvent, PitchFrame } from "@clavis/core";
+import type { InputSource, NoteEvent, PitchFrame, VoiceRange } from "@clavis/core";
 
 /**
  * A source of played or sung notes (architecture 4.1). Mic, on-screen keyboard (tap) and MIDI all
@@ -21,6 +21,12 @@ export interface InputAdapter {
   resume(): void;
   /** Returns an unsubscribe function. */
   onNote(cb: (e: NoteEvent) => void): () => void;
+  /**
+   * Optional. Tell a pitch-detecting input which register (MIDI numbers, inclusive) the next
+   * answer is in, so it can resolve octave ambiguity; `null` clears it. Inputs that report exact
+   * keys (tap, MIDI) ignore it.
+   */
+  setExpectedRange?(range: VoiceRange | null): void;
   /** Continuous pitch frames. Never called for tap input. */
   onFrame(cb: (f: PitchFrame) => void): () => void;
 }

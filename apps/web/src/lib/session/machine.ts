@@ -451,6 +451,7 @@ export class SessionMachine {
     this.#unsubscribeInput();
     this.#d.player.stop();
     this.#d.input.pause();
+    this.#d.input.setExpectedRange?.(null);
     this.#singInput?.pause();
   }
 
@@ -742,6 +743,9 @@ export class SessionMachine {
         this.#onFrame(f, phase);
       }),
     );
+    if (phase === "play" && cur.instance.inputRange) {
+      adapter.setExpectedRange?.(cur.instance.inputRange);
+    }
     adapter.resume();
     this.#setState({
       kind: "listening",
@@ -813,6 +817,7 @@ export class SessionMachine {
     this.#cancelTimers();
     this.#unsubscribeInput();
     this.#adapterFor(phase).pause();
+    if (phase === "play") this.#d.input.setExpectedRange?.(null);
     const nextIdx = cur.phaseIdx + 1;
     if (nextIdx < cur.phases.length) {
       this.#beginPhase(nextIdx);

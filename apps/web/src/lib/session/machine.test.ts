@@ -255,6 +255,55 @@ describe("sing then play (R12)", () => {
     expect(fb.feedback.lines[0]).toMatch(/^You sang /);
   });
 
+  it("sets the item's input range while the play phase listens, and clears it after (T3.12)", async () => {
+    const h = await makeHarness({ budgetSec: 90 });
+    const range = { low: 36, high: 64 };
+    const generate = h.deps.generate.bind(h.deps);
+    h.deps.generate = (item, ctx) => ({ ...generate(item, ctx), inputRange: range });
+    await h.machine.start();
+    h.machine.next();
+    h.machine.next();
+    await until(h, isListening("sing"));
+    // Not set while the sung part listens: it only concerns the played answer.
+    expect(h.input.expectedRange).toBeNull();
+    await answer(h);
+    await until(h, isListening("play"));
+    expect(h.input.expectedRange).toEqual(range);
+    await answer(h);
+    await until(h, isKind("feedback"));
+    expect(h.input.expectedRange).toBeNull();
+    expect(h.input.expectedRangeCalls.filter((r) => r !== null)).toEqual([range]);
+  });
+
+  it("never sets a range for items without inputRange", async () => {
+    const h = await makeHarness({ budgetSec: 90 });
+    await h.machine.start();
+    h.machine.next();
+    h.machine.next();
+    await until(h, isListening("sing"));
+    await answer(h);
+    await until(h, isListening("play"));
+    await answer(h);
+    await until(h, isKind("feedback"));
+    expect(h.input.expectedRangeCalls.every((r) => r === null)).toBe(true);
+  });
+
+  it("clears the range when the item is interrupted by a pause", async () => {
+    const h = await makeHarness({ budgetSec: 90 });
+    const range = { low: 36, high: 64 };
+    const generate = h.deps.generate.bind(h.deps);
+    h.deps.generate = (item, ctx) => ({ ...generate(item, ctx), inputRange: range });
+    await h.machine.start();
+    h.machine.next();
+    h.machine.next();
+    await until(h, isListening("sing"));
+    await answer(h);
+    await until(h, isListening("play"));
+    expect(h.input.expectedRange).toEqual(range);
+    h.machine.pause();
+    expect(h.input.expectedRange).toBeNull();
+  });
+
   it("the Done button ends a phase early", async () => {
     const h = await makeHarness({ budgetSec: 90 });
     await h.machine.start();

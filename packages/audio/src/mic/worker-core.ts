@@ -1,3 +1,4 @@
+import type { MidiRange } from "../pitch/midi.js";
 import { PitchPipeline } from "../pitch/pipeline.js";
 import type { CaptureChunk, PipelineConfig, WorkerOutbound } from "./messages.js";
 
@@ -11,6 +12,8 @@ export class PitchWorkerCore {
   #pipeline: PitchPipeline | undefined;
   #sampleRate = 0;
   #paused = false;
+  /** Live override of the configured range. `undefined`: none was set, use the config. */
+  #range: MidiRange | null | undefined;
 
   constructor(post: (message: WorkerOutbound) => void) {
     this.#post = post;
@@ -19,6 +22,12 @@ export class PitchWorkerCore {
   configure(config: PipelineConfig | undefined): void {
     this.#config = config ?? {};
     this.#pipeline = undefined;
+  }
+
+  /** Set (or with `null` clear) the expected register. Applies to the running pipeline at once. */
+  setExpectedRange(range: MidiRange | null): void {
+    this.#range = range;
+    this.#pipeline?.setExpectedRange(range ?? undefined);
   }
 
   pause(): void {
@@ -41,6 +50,7 @@ export class PitchWorkerCore {
     if (!this.#pipeline || chunk.sampleRate !== this.#sampleRate) {
       this.#sampleRate = chunk.sampleRate;
       this.#pipeline = new PitchPipeline(chunk.sampleRate, this.#config);
+      if (this.#range !== undefined) this.#pipeline.setExpectedRange(this.#range ?? undefined);
     }
     const startMs = (chunk.startFrame * 1000) / chunk.sampleRate;
     const { frames, events } = this.#pipeline.push(chunk.samples, startMs);

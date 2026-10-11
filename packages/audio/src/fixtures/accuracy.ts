@@ -15,6 +15,14 @@ import type { FixtureEntry, FixtureKind, FixtureManifest, TruthNote } from "./ma
 
 export const DEFAULT_ONSET_TOLERANCE_MS = 100;
 
+/** Bass register for R20: C2..B2. Only piano entries count, because the risk is the mic on a piano. */
+export const BASS_MIDI_MIN = 36;
+export const BASS_MIDI_MAX = 47;
+
+export function isBassNote(midi: number): boolean {
+  return midi >= BASS_MIDI_MIN && midi <= BASS_MIDI_MAX;
+}
+
 export interface MatchPair {
   truth: TruthNote;
   detectedPitch: number;
@@ -77,6 +85,10 @@ export interface Counts {
   pitchClass: number;
   /** Matched pairs with the right pitch class but the wrong octave. */
   octaveErrors: number;
+  /** Onset-matched pairs whose truth note is in the bass register (piano entries only). */
+  bassMatched: number;
+  /** Of those, the right pitch class in the wrong octave. */
+  bassOctaveErrors: number;
   onsetErrorsMs: number[];
 }
 
@@ -92,6 +104,10 @@ export interface Metrics {
   /** Pitch class among onset-matched notes. */
   pitchClass: number | null;
   octaveErrorRate: number | null;
+  /** Matched bass-register notes on piano entries (C2..B2). */
+  bassMatched: number;
+  /** Octave errors among those, as a rate. Null ("n/a") when the corpus has none. */
+  bassOctaveErrorRate: number | null;
   onsetMedianMs: number | null;
   onsetP90Ms: number | null;
 }
@@ -104,11 +120,14 @@ export function emptyCounts(): Counts {
     exact: 0,
     pitchClass: 0,
     octaveErrors: 0,
+    bassMatched: 0,
+    bassOctaveErrors: 0,
     onsetErrorsMs: [],
   };
 }
 
-export function countsFromMatch(m: MatchResult): Counts {
+/** `bass`: count this entry's bass-register notes in the bass octave metric (piano entries). */
+export function countsFromMatch(m: MatchResult, bass = false): Counts {
   const c = emptyCounts();
   c.truth = m.truthCount;
   c.detected = m.detectedCount;
@@ -118,6 +137,10 @@ export function countsFromMatch(m: MatchResult): Counts {
     if (p.detectedPitch === p.truth.midi) c.exact++;
     if (samePc) c.pitchClass++;
     if (samePc && p.detectedPitch !== p.truth.midi) c.octaveErrors++;
+    if (bass && isBassNote(p.truth.midi)) {
+      c.bassMatched++;
+      if (samePc && p.detectedPitch !== p.truth.midi) c.bassOctaveErrors++;
+    }
     c.onsetErrorsMs.push(p.onsetErrorMs);
   }
   return c;
@@ -131,6 +154,8 @@ export function addCounts(a: Counts, b: Counts): Counts {
     exact: a.exact + b.exact,
     pitchClass: a.pitchClass + b.pitchClass,
     octaveErrors: a.octaveErrors + b.octaveErrors,
+    bassMatched: a.bassMatched + b.bassMatched,
+    bassOctaveErrors: a.bassOctaveErrors + b.bassOctaveErrors,
     onsetErrorsMs: [...a.onsetErrorsMs, ...b.onsetErrorsMs],
   };
 }
@@ -164,6 +189,8 @@ export function metricsFromCounts(c: Counts): Metrics {
     pitchExact: ratio(c.exact, c.matched),
     pitchClass: ratio(c.pitchClass, c.matched),
     octaveErrorRate: ratio(c.octaveErrors, c.matched),
+    bassMatched: c.bassMatched,
+    bassOctaveErrorRate: ratio(c.bassOctaveErrors, c.bassMatched),
     onsetMedianMs: has ? median(c.onsetErrorsMs) : null,
     onsetP90Ms: has ? percentile(c.onsetErrorsMs, 0.9) : null,
   };
@@ -185,7 +212,10 @@ export function scoreDetections(
   const kinds = new Map<FixtureKind, Counts>();
   let all = emptyCounts();
   for (const e of manifest) {
-    const counts = countsFromMatch(matchNotes(e.notes, detected.get(e.id) ?? [], toleranceMs));
+    const counts = countsFromMatch(
+      matchNotes(e.notes, detected.get(e.id) ?? [], toleranceMs),
+      e.instrument !== "voice",
+    );
     entries[e.id] = metricsFromCounts(counts);
     kinds.set(e.kind, addCounts(kinds.get(e.kind) ?? emptyCounts(), counts));
     all = addCounts(all, counts);
@@ -234,9 +264,15 @@ export interface Tolerance {
   f1Drop: number;
   /** Median onset error may not worsen by more than this many ms. Default 10. */
   onsetMedianMs: number;
+  /** Bass octave error rate may not rise by more than this. Default 0.02. */
+  bassOctaveError: number;
 }
 
-export const DEFAULT_TOLERANCE: Tolerance = { f1Drop: 0.02, onsetMedianMs: 10 };
+export const DEFAULT_TOLERANCE: Tolerance = {
+  f1Drop: 0.02,
+  onsetMedianMs: 10,
+  bassOctaveError: 0.02,
+};
 
 /** Round numbers so the committed baseline is stable and readable. */
 export function roundReport(r: AccuracyReport): AccuracyReport {
@@ -275,6 +311,20 @@ export function compareToBaseline(
       problems.push(
         `${label}: F1 ${fmt(cur.f1, 3)} is more than ${String(tolerance.f1Drop)} below baseline ${fmt(base.f1, 3)}`,
       );
+    }
+    // Baselines written before T3.12 have no bass fields; they count as "n/a".
+    const baseBass = base.bassOctaveErrorRate ?? null;
+    if (baseBass !== null) {
+      const curBass = cur.bassOctaveErrorRate ?? null;
+      if (curBass === null) {
+        problems.push(
+          `${label}: no bass-register notes matched, baseline octave error ${fmt(baseBass, 3)}`,
+        );
+      } else if (curBass > baseBass + tolerance.bassOctaveError + eps) {
+        problems.push(
+          `${label}: bass octave error ${fmt(curBass, 3)} is more than ${String(tolerance.bassOctaveError)} above baseline ${fmt(baseBass, 3)}`,
+        );
+      }
     }
     if (base.onsetMedianMs !== null) {
       if (cur.onsetMedianMs === null) {
@@ -318,18 +368,19 @@ export function formatReport(
       fmt(m.pitchExact, 3),
       fmt(m.pitchClass, 3),
       fmt(m.octaveErrorRate, 3),
+      fmt(m.bassOctaveErrorRate ?? null, 3),
       fmt(m.onsetMedianMs, 1),
       fmt(m.onsetP90Ms, 1),
     ].join(" | ");
   const cols =
-    "Truth | Detected | Precision | Recall | F1 | Pitch exact | Pitch class | Octave err | Onset median ms | Onset p90 ms";
-  const rule = "---|".repeat(10);
+    "Truth | Detected | Precision | Recall | F1 | Pitch exact | Pitch class | Octave err | Bass octave err | Onset median ms | Onset p90 ms";
+  const rule = "---|".repeat(11);
   const lines = [
     "# Audio fixture accuracy",
     "",
     "Generated by `pnpm --filter @clavis/audio accuracy:update`. Do not edit by hand.",
     "",
-    `Onset match tolerance: ${String(toleranceMs)} ms. Precision and recall count a note only when the onset matches and the MIDI pitch is exact. Pitch and octave columns are measured over onset-matched notes. Onset errors are absolute.`,
+    `Onset match tolerance: ${String(toleranceMs)} ms. Precision and recall count a note only when the onset matches and the MIDI pitch is exact. Pitch and octave columns are measured over onset-matched notes. Bass octave err covers matched C2..B2 notes on piano entries only (R20), and reads n/a while the corpus has none. Onset errors are absolute.`,
     "",
     "## Overall and by kind",
     "",

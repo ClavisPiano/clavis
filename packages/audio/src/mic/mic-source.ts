@@ -1,4 +1,4 @@
-import type { NoteEvent, PitchFrame } from "@clavis/core";
+import type { NoteEvent, PitchFrame, VoiceRange } from "@clavis/core";
 import {
   CAPTURE_PROCESSOR_NAME,
   DEFAULT_CAPTURE_CHUNK,
@@ -103,6 +103,7 @@ export class MicPitchSource {
   #worker: WorkerLike | undefined;
   #nodes: AudioNode[] = [];
   #stopped: (() => void) | undefined;
+  #range: VoiceRange | null = null;
 
   constructor(options: MicPitchSourceOptions) {
     this.#assets = options.assets;
@@ -152,6 +153,8 @@ export class MicPitchSource {
         channel.port1,
       ]);
 
+      if (this.#range) worker.postMessage(rangeMessage(this.#range), []);
+
       const node = this.#deps.createWorkletNode(context, CAPTURE_PROCESSOR_NAME, {
         numberOfInputs: 1,
         numberOfOutputs: 1,
@@ -194,6 +197,15 @@ export class MicPitchSource {
     if (this.#state !== "paused") return;
     this.#state = "running";
     this.#worker?.postMessage({ type: "resume" }, []);
+  }
+
+  /**
+   * Tell the pitch worker which register the answer is in (MIDI numbers), or `null` to clear it.
+   * Remembered across `start()`, and applies to the next frames without restarting the stream.
+   */
+  setExpectedRange(range: VoiceRange | null): void {
+    this.#range = range;
+    this.#worker?.postMessage(rangeMessage(range), []);
   }
 
   /** Release the microphone and the worker. A note in progress is ended and delivered first. */
@@ -241,4 +253,8 @@ export class MicPitchSource {
       for (const l of this.#noteListeners) l(message.note, message.phase);
     }
   }
+}
+
+function rangeMessage(range: VoiceRange | null): WorkerInbound {
+  return { type: "range", range: range && { minMidi: range.low, maxMidi: range.high } };
 }
