@@ -2,8 +2,9 @@ import { at } from "../theory/util.js";
 import type { GeneratorId, SkillGraph, SkillNode, Strand } from "../graph/schema.js";
 import { isNodeEnabled } from "../graph/validate.js";
 import { itemId as makeItemId } from "../items/ids.js";
+import { familyOfParams, keyForFamily, openFamilies } from "../items/family.js";
 import { GENERATORS } from "../items/registry.js";
-import type { ItemParams } from "../items/types.js";
+import type { Generator, ItemParams } from "../items/types.js";
 import { learnerDay } from "../learning/day.js";
 import { createRng } from "../random.js";
 import { newItemAllowance } from "../scheduler/new-items.js";
@@ -13,6 +14,7 @@ import { medianDurationSec } from "../state/reduce.js";
 import type { LearnerState } from "../state/types.js";
 import { allocate, DEFAULT_BUDGET_SEC, SCALE_ORIENT_SEC } from "./budget.js";
 import { interleave } from "./interleave.js";
+import { keyFamily, type KeyFamily } from "../theory/keys.js";
 import { keyOfDay, NODE_RANK } from "./key.js";
 import type { ComposeInput, PlannedItem, SessionPlan } from "./types.js";
 
@@ -30,7 +32,15 @@ interface Candidate {
   params: ItemParams;
   isNew: boolean;
   card?: CardState;
+  /** Key family of the item, for key-dependent nodes (R15). */
+  fam?: KeyFamily;
 }
+
+type Registry = Partial<Record<GeneratorId, Generator>>;
+
+/** The READ node whose fluency ends the C-major-first rule (R15). */
+const LANDMARKS_NODE = "read.bass.landmarks";
+const FAMILY_ORDER: readonly KeyFamily[] = ["A", "B", "C"];
 
 /** True when the node, or anything on a hard prerequisite chain below it, is a HANDS node. */
 export function dependsOnHands(graph: SkillGraph, nodeId: string): boolean {
@@ -50,28 +60,47 @@ export function dependsOnHands(graph: SkillGraph, nodeId: string): boolean {
   return false;
 }
 
+/**
+ * A node is enabled when the graph marks one of its generators implemented and the (possibly
+ * injected) registry has it. With the default registry this is the same as `isNodeEnabled`.
+ */
+function nodeEnabled(node: SkillNode, graph: SkillGraph, registry: Registry): boolean {
+  return (
+    isNodeEnabled(node, graph.generators) &&
+    node.itemGenerators.some(
+      (g) => registry[g] !== undefined && graph.generators.some((i) => i.id === g && i.implemented),
+    )
+  );
+}
+
 function usableGenerators(
   node: SkillNode,
   graph: SkillGraph,
   mode: ComposeInput["mode"],
+  registry: Registry,
 ): GeneratorId[] {
-  if (!isNodeEnabled(node, graph.generators)) return [];
+  if (!nodeEnabled(node, graph, registry)) return [];
   return node.itemGenerators.filter((g) => {
     const info = graph.generators.find((i) => i.id === g);
     return (
       info !== undefined &&
       info.implemented &&
-      GENERATORS[g] !== undefined &&
+      registry[g] !== undefined &&
       (mode === "instrument" || info.awayEligible)
     );
   });
 }
 
-function buildInfo(node: SkillNode, graph: SkillGraph, mode: ComposeInput["mode"]) {
-  const gens = usableGenerators(node, graph, mode);
+function buildInfo(
+  node: SkillNode,
+  graph: SkillGraph,
+  mode: ComposeInput["mode"],
+  registry: Registry,
+) {
+  const gens = usableGenerators(node, graph, mode, registry);
   const first = gens[0];
   if (first === undefined) return undefined;
-  const gen = GENERATORS[first];
+  const gen = registry[first];
   if (!gen) return undefined;
   const info: NodeInfo = {
     node,
@@ -134,6 +163,7 @@ function fillBlock(opts: {
       params: c.params,
       isNew: c.isNew,
       estimatedSec,
+      ...(c.fam !== undefined ? { fam: c.fam } : {}),
     });
     out.usedSec += estimatedSec;
     if (c.isNew) out.newCount++;
@@ -143,21 +173,31 @@ function fillBlock(opts: {
 }
 
 /**
- * Compose a session (spec 6, plan T2.8). Pure and deterministic: the same input, including the
- * seed, always gives the same plan. Choices that are not obvious from the spec:
+ * Compose a session (spec 6, plan T2.8, T3.9). Pure and deterministic: the same input, including
+ * the seed, always gives the same plan. Choices that are not obvious from the spec:
  *
  * - Cards are per item id and shared by all generators of a node (R14), so "new" means the item id
  *   has no card yet.
  * - Due items come first and may use the whole ear block, as in the spec's fill order; new items
  *   follow, so a deep backlog defers new material.
- * - New items come only from nodes in `learning` state, in graph order, then `listItems` order.
- * - A node is introduced only when no enabled EAR node is learning, the daily allowance is above
- *   zero and at least one of its items fits; the introduction is dropped otherwise.
- * - Read is filled with the same rules but never introduces nodes (READ recognition arrives in M3).
+ * - New items of a non-key-dependent node come only from nodes in `learning` state, in graph
+ *   order, then `listItems` order. For key-dependent nodes (READ) they come from every open key
+ *   family of any node at `learning` or beyond, the key-of-the-day family first, then A, B, C
+ *   (R15). Due items keep their stored params.
+ * - Each strand (EAR, READ) may introduce a node when none of its own enabled nodes is learning
+ *   (R16), but a session introduces at most one. When both have a candidate the strand whose most
+ *   recent introduction is older wins, ties go to EAR. A node is introduced only when the daily
+ *   allowance is above zero and at least one of its items fits; otherwise the introduction is
+ *   dropped.
+ * - When READ has new candidates it reserves floor(allowance / 2) new items, EAR gets the rest.
+ * - Away has no Orient, uses only Away-eligible generators, and splits the budget 60/40 between
+ *   Ear and Read when Read has content, else all Ear.
+ * - Generators come from `input.generators` (default `GENERATORS`).
  * - Apply is always null (M5).
  */
 export function composeSession(input: ComposeInput): SessionPlan {
   const { state, graph, mode } = input;
+  const registry: Registry = input.generators ?? GENERATORS;
   const today = learnerDay(input.now, input.tzOffsetMin);
   const settingsBudget = mode === "away" ? state.settings.awayBudgetSec : state.settings.budgetSec;
   const budgetSec = input.budgetSec ?? settingsBudget ?? DEFAULT_BUDGET_SEC[mode];
@@ -166,81 +206,117 @@ export function composeSession(input: ComposeInput): SessionPlan {
   }
 
   const key = keyOfDay(state, graph, input.now, input.tzOffsetMin);
+  const dayFamily = keyFamily(key);
   const introducedToday = state.daily[today]?.newItems ?? 0;
   const newAllowance = newItemAllowance({ introducedToday });
   const notes: string[] = [];
 
   const infos = new Map<string, NodeInfo>();
-  const strands: Strand[] = mode === "away" ? ["EAR"] : ["EAR", "READ"];
+  const strands: Strand[] = ["EAR", "READ"];
   for (const node of graph.nodes) {
     if (!strands.includes(node.strand)) continue;
-    const info = buildInfo(node, graph, mode);
+    const info = buildInfo(node, graph, mode, registry);
     if (info) infos.set(node.id, info);
   }
   const stateOf = (id: string) => NODE_RANK[state.nodes[id]?.state ?? "locked"];
 
-  // One introduction at most, and only while no EAR node is mid-learning (spec 13).
-  let intro: SkillNode | undefined;
-  const earLearning = graph.nodes.some(
-    (n) =>
-      n.strand === "EAR" &&
-      isNodeEnabled(n, graph.generators) &&
-      state.nodes[n.id]?.state === "learning",
-  );
-  if (!earLearning) {
-    const available = graph.nodes
+  // One introduction at most, and each strand only while none of its own nodes is mid-learning
+  // (spec 13, R16).
+  const introCandidate = (strand: Strand): SkillNode | undefined => {
+    const learning = graph.nodes.some(
+      (n) =>
+        n.strand === strand &&
+        nodeEnabled(n, graph, registry) &&
+        state.nodes[n.id]?.state === "learning",
+    );
+    if (learning) return undefined;
+    return graph.nodes
       .map((node, order) => ({ node, order }))
       .filter(
         ({ node }) =>
-          node.strand === "EAR" &&
+          node.strand === strand &&
           infos.has(node.id) &&
           state.nodes[node.id]?.state === "available" &&
           (mode === "instrument" || !dependsOnHands(graph, node.id)),
       )
       .sort(
         (a, b) => a.node.prerequisites.length - b.node.prerequisites.length || a.order - b.order,
-      );
-    if (available[0]) {
-      if (newAllowance > 0) intro = available[0].node;
-      else notes.push("daily new-item cap reached: introduction deferred");
-    }
+      )[0]?.node;
+  };
+  const lastIntroduction = (strand: Strand): number =>
+    graph.nodes.reduce(
+      (latest, n) =>
+        n.strand === strand
+          ? Math.max(latest, state.nodes[n.id]?.introducedAt ?? -Infinity)
+          : latest,
+      -Infinity,
+    );
+
+  let intro: SkillNode | undefined;
+  const earIntro = introCandidate("EAR");
+  const readIntro = introCandidate("READ");
+  const chosen =
+    earIntro && readIntro
+      ? lastIntroduction("READ") < lastIntroduction("EAR")
+        ? readIntro
+        : earIntro
+      : (earIntro ?? readIntro);
+  if (chosen) {
+    if (newAllowance > 0) intro = chosen;
+    else notes.push("daily new-item cap reached: introduction deferred");
   }
 
-  const candidates = (strand: Strand, withIntro: boolean) => {
+  const famRank = (fam: KeyFamily | undefined): number =>
+    fam === undefined || fam === dayFamily ? 0 : 1 + FAMILY_ORDER.indexOf(fam);
+
+  const candidates = (strand: Strand) => {
     const dueAll: (Candidate & { card: CardState })[] = [];
     const fresh: Candidate[] = [];
     for (const [nodeId, info] of infos) {
       if (info.node.strand !== strand) continue;
-      const rank = stateOf(nodeId);
-      const learning = state.nodes[nodeId]?.state === "learning";
-      const introducing = withIntro && intro?.id === nodeId;
-      if (rank < NODE_RANK.learning && !introducing) continue;
+      const rec = state.nodes[nodeId];
+      const learning = rec?.state === "learning";
+      const introducing = intro?.id === nodeId;
+      if (stateOf(nodeId) < NODE_RANK.learning && !introducing) continue;
+      const keyDependent = info.node.keyDependent;
+      // Families that may supply new items (R15). A node being introduced opens family A.
+      const open: KeyFamily[] = !keyDependent
+        ? []
+        : introducing
+          ? ["A"]
+          : openFamilies(rec ?? { state: "locked" });
       for (const u of info.universe) {
-        const rec = state.cards[u.itemId];
-        if (rec) {
-          if (rec.nodeId === nodeId) dueAll.push({ ...u, nodeId, isNew: false, card: rec.card });
-        } else if (learning || introducing) {
-          fresh.push({ ...u, nodeId, isNew: true });
+        const fam = keyDependent ? (familyOfParams(u.params) ?? "A") : undefined;
+        const famPart = fam !== undefined ? { fam } : {};
+        const card = state.cards[u.itemId];
+        if (card) {
+          if (card.nodeId === nodeId)
+            dueAll.push({ ...u, nodeId, isNew: false, card: card.card, ...famPart });
+        } else if (fam !== undefined ? open.includes(fam) : learning || introducing) {
+          fresh.push({ ...u, nodeId, isNew: true, ...famPart });
         }
       }
     }
     const due = rankDue(dueAll, input.now) as Candidate[];
+    // Stable sort: key-of-the-day family first, then A, B, C; graph and item order within.
+    fresh.sort((a, b) => famRank(a.fam) - famRank(b.fam));
     return { due, fresh };
   };
 
-  const ear = candidates("EAR", true);
-  const read = mode === "away" ? { due: [], fresh: [] } : candidates("READ", false);
+  const ear = candidates("EAR");
+  const read = candidates("READ");
   const readHasContent = read.due.length > 0 || (read.fresh.length > 0 && newAllowance > 0);
 
   const alloc = allocate({ budgetSec, mode, readHasContent, applyHasContent: false });
   notes.push(...alloc.notes);
 
+  const readReserve = read.fresh.length > 0 ? Math.floor(newAllowance / 2) : 0;
   const taken = new Map<string, number>();
   const earFill = fillBlock({
     blockSec: alloc.earSec,
     due: ear.due,
     fresh: ear.fresh,
-    allowance: newAllowance,
+    allowance: newAllowance - readReserve,
     forceFirst: true,
     infos,
     taken,
@@ -259,12 +335,26 @@ export function composeSession(input: ComposeInput): SessionPlan {
     graph,
   });
 
-  const introductions = intro && earFill.items.some((i) => i.nodeId === intro.id) ? [intro.id] : [];
-  if (intro && introductions.length === 0)
-    notes.push(`introduction of ${intro.id} dropped: no fit`);
+  const introduced =
+    intro !== undefined && [...earFill.items, ...readFill.items].some((i) => i.nodeId === intro.id);
+  const introductions = intro && introduced ? [intro.id] : [];
+  const introductionKeyFamilies: Record<string, KeyFamily> =
+    intro && introduced && intro.keyDependent ? { [intro.id]: "A" } : {};
+  if (intro && !introduced) notes.push(`introduction of ${intro.id} dropped: no fit`);
 
-  const earItems = interleave(earFill.items, createRng(input.seed));
-  const readItems = interleave(readFill.items, createRng((input.seed ^ 0x5bd1e995) >>> 0));
+  // Key per key-dependent item (R15): the key of the day when it is in the item's family, else a
+  // seeded pick. Until bass landmarks are fluent, family A means C major (A minor) only.
+  const keyRng = createRng((input.seed ^ 0x2545f491) >>> 0);
+  const cMajorFirst = stateOf(LANDMARKS_NODE) < NODE_RANK.fluent;
+  const withKey = (items: PlannedItem[]): PlannedItem[] =>
+    items.map((item) => {
+      if (item.fam === undefined) return item;
+      const itemMode = infos.get(item.nodeId)?.node.params.mode === "minor" ? "minor" : "major";
+      return { ...item, key: keyForFamily(item.fam, itemMode, key, keyRng, { cMajorFirst }) };
+    });
+
+  const earItems = withKey(interleave(earFill.items, createRng(input.seed)));
+  const readItems = withKey(interleave(readFill.items, createRng((input.seed ^ 0x5bd1e995) >>> 0)));
 
   const orient =
     mode === "away"
@@ -283,6 +373,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     orient,
     blocks: { ear: earItems, read: readItems, apply: null },
     introductions,
+    introductionKeyFamilies,
     diagnostics: {
       dueCount: ear.due.length + read.due.length,
       newAllowance,
