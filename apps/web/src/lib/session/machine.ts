@@ -1,6 +1,7 @@
 import {
   DEFAULT_KEYBOARD_RANGE,
   createRng,
+  scoreNoteIds,
   type AttemptError,
   type AttemptOutcome,
   type ComposeInput,
@@ -8,12 +9,14 @@ import {
   type GenerateContext,
   type InputSource,
   type ItemInstance,
+  type KeyFamily,
   type LearnerState,
   type LearningEvent,
   type NodeState,
   type NoteEvent,
   type PitchFrame,
   type PlannedItem,
+  type ScoreSpec,
   type SessionMode,
   type SessionPlan,
   type SkillGraph,
@@ -24,8 +27,10 @@ import type { InputAdapter } from "@clavis/audio";
 import { combineParts, type ScoreInput, type ScoreResult } from "@clavis/scoring";
 import { checkPlayDone, checkSingDone, type DoneCheck } from "./completion";
 import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
+import type { NotationMark, NotationPort } from "../notation/port";
 import { orientSpec } from "./orient";
 import { buildReplaySpec } from "./replay";
+import { noteNamer } from "./spelling";
 
 /*
  * The session state machine (T2.9, T1.6). No DOM and no audio APIs: everything it touches is
@@ -33,6 +38,9 @@ import { buildReplaySpec } from "./replay";
  *
  *   idle -> [headphones] -> preparing -> [orient] -> ( [intro] -> presenting -> listening
  *     (sing, then play) -> feedback )* -> summary
+ *
+ * Reading items (`instance.display`) show notation while presenting. Their reference time is the
+ * moment the score is painted, or the end of a count-in that starts then (R17).
  *
  * `paused` can interrupt any step and `error` ends the session. Time is the AudioContext clock
  * in ms (`clock.contextNowMs()`), the same clock as `player.play().endAt` and the input adapters.
@@ -97,6 +105,11 @@ export interface SessionDeps {
   /** Ids of this device's sessions that started but never ended (abandoned by a reload). */
   openSessions?(): Promise<string[]>;
   gateTailMs?: { headphones: number; speakers: number };
+  /**
+   * Draws the score of reading items (R17). Without it, items that need notation are dropped
+   * from the plan and the summary says so.
+   */
+  notation?: NotationPort;
 }
 
 export interface ItemView {
@@ -108,6 +121,10 @@ export interface ItemView {
   generator: string;
   isNew: boolean;
   block: "ear" | "read";
+  /** What to draw, for reading items. */
+  display?: ScoreSpec;
+  /** Playable range for the on-screen keyboard, when the item sets one. */
+  inputRange?: VoiceRange;
 }
 
 export interface NodeChange {
@@ -125,6 +142,8 @@ export interface SessionSummary {
   accuracy: number;
   elapsedSec: number;
   nodeChanges: NodeChange[];
+  /** Things the learner should know about, such as items skipped because notation did not load. */
+  notes?: string[];
 }
 
 export type SessionState =
@@ -167,6 +186,8 @@ interface Current {
   refMs: Partial<Record<Phase, number>>;
   phaseStartMs: number;
   gateMs: number;
+  /** Quiet time after the stimulus before answers count. Zero when nothing was played. */
+  tailMs: number;
   playNotes: NoteEvent[];
   singFrames: PitchFrame[];
 }
@@ -188,10 +209,17 @@ export function promptFor(
   phases: readonly Phase[],
   expected: ExpectedResponse,
   mode: SessionMode,
+  display = false,
 ): string {
   if (phase === "sing") return "Sing it";
   if (phases.length > 1) return "Now play it";
   const play = expected.play;
+  if (display && play) {
+    if (play.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
+    if (mode === "away") return "Find it on the keyboard";
+    if (play.kind === "exactPitch") return "Play this note";
+    if (play.kind === "sequence") return "Play these notes";
+  }
   if (play?.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
   return mode === "away" ? "Tap it on the keyboard" : "Play it";
 }
@@ -205,6 +233,9 @@ export class SessionMachine {
   #plan: SessionPlan | undefined;
   #items: { planned: PlannedItem; block: "ear" | "read" }[] = [];
   #pendingIntros = new Set<string>();
+  #introFamilies = new Map<string, KeyFamily>();
+  #notes: string[] = [];
+  #notationShown = false;
   #nodesBefore: Record<string, NodeState> = {};
   #priorAttempts: Record<string, number> = {};
   #sessionAttempts: Record<string, number> = {};
@@ -418,6 +449,7 @@ export class SessionMachine {
   }
 
   #fail(e: unknown): void {
+    this.#hideNotation();
     this.#stopActivity();
     this.#d.input.stop();
     this.#singInput?.stop();
@@ -511,7 +543,13 @@ export class SessionMachine {
       ...plan.blocks.ear.map((planned) => ({ planned, block: "ear" as const })),
       ...plan.blocks.read.map((planned) => ({ planned, block: "read" as const })),
     ];
-    this.#pendingIntros = new Set(plan.introductions);
+    const introductions = introductionsOf(plan);
+    for (const intro of introductions) {
+      if (intro.keyFamily !== undefined) this.#introFamilies.set(intro.nodeId, intro.keyFamily);
+    }
+    this.#pendingIntros = new Set(introductions.map((i) => i.nodeId));
+
+    await this.#prepareNotation();
 
     // Which inputs does this plan need?
     const needsMic = this.#items.some(({ planned }) =>
@@ -556,17 +594,63 @@ export class SessionMachine {
         tzOffsetMin: d.tzOffsetMin,
         contentVersion: d.graph.contentVersion,
       },
-      ...plan.introductions.map((nodeId) => ({
-        ...this.#base(),
-        type: "node.introduced" as const,
-        sessionId: this.#sessionId,
-        nodeId,
-      })),
+      ...[...this.#pendingIntros].map((nodeId) => {
+        const keyFamily = this.#introFamilies.get(nodeId);
+        return {
+          ...this.#base(),
+          type: "node.introduced" as const,
+          sessionId: this.#sessionId,
+          nodeId,
+          ...(keyFamily === undefined ? {} : { keyFamily }),
+        };
+      }),
     ];
     await d.append(events);
 
     if (plan.orient) this.#startOrient();
     else this.#beginItems();
+  }
+
+  /** Does the planned item draw a score (its generator needs notation)? */
+  #needsNotation(planned: PlannedItem): boolean {
+    return (
+      this.#d.graph.generators
+        .find((g) => g.id === planned.generator)
+        ?.requires.includes("notation") === true
+    );
+  }
+
+  /**
+   * Load the notation engine when reading items are planned. If it cannot load (or there is no
+   * port), those items are dropped, with any introduction that only they carried, and the summary
+   * says so. The rest of the session carries on.
+   */
+  async #prepareNotation(): Promise<void> {
+    const reading = this.#items.filter(({ planned }) => this.#needsNotation(planned));
+    if (reading.length === 0) return;
+    const port = this.#d.notation;
+    let ready = false;
+    if (port) {
+      try {
+        await port.preload();
+        ready = true;
+      } catch {
+        ready = false;
+      }
+    }
+    if (ready) return;
+    this.#items = this.#items.filter(({ planned }) => !this.#needsNotation(planned));
+    const remaining = new Set(this.#items.map(({ planned }) => planned.nodeId));
+    for (const nodeId of [...this.#pendingIntros]) {
+      if (!remaining.has(nodeId)) this.#pendingIntros.delete(nodeId);
+    }
+    this.#notes.push("Reading items were skipped because notation could not load.");
+  }
+
+  #hideNotation(): void {
+    if (!this.#notationShown) return;
+    this.#notationShown = false;
+    this.#d.notation?.hide();
   }
 
   #startOrient(): void {
@@ -633,6 +717,7 @@ export class SessionMachine {
       refMs: {},
       phaseStartMs: 0,
       gateMs: 0,
+      tailMs: 0,
       playNotes: [],
       singFrames: [],
     };
@@ -645,6 +730,7 @@ export class SessionMachine {
     if (!cur) return;
     const nodeId = cur.planned.nodeId;
     if (this.#pendingIntros.has(nodeId)) {
+      this.#hideNotation();
       const node = this.#d.graph.nodes.find((n) => n.id === nodeId);
       this.#setState({
         kind: "intro",
@@ -681,6 +767,8 @@ export class SessionMachine {
       generator: cur.instance.generator,
       isNew: cur.planned.isNew,
       block: cur.block,
+      ...(cur.instance.display ? { display: cur.instance.display } : {}),
+      ...(cur.instance.inputRange ? { inputRange: cur.instance.inputRange } : {}),
     };
   }
 
@@ -708,17 +796,68 @@ export class SessionMachine {
     this.#cancelTimers();
     d.input.pause();
     this.#singInput?.pause();
+    const display = cur.instance.display;
+    if (display && d.notation) {
+      this.#presentNotation(cur, display, d.notation);
+      return;
+    }
+    this.#hideNotation();
     const { endAt } = d.player.play(cur.instance.stimulus);
     cur.stimulusEndMs = endAt * 1000;
+    cur.tailMs = this.#tailMs();
     this.#setState({
       kind: "presenting",
       item: this.#itemView(cur),
       prompt: "Listen",
     });
-    const openIn = cur.stimulusEndMs + this.#tailMs() - d.clock.contextNowMs();
+    const openIn = cur.stimulusEndMs + cur.tailMs - d.clock.contextNowMs();
     this.#schedule(openIn, () => {
       this.#beginPhase(0);
     });
+  }
+
+  /**
+   * Reading items (R17): show the score, and once it is painted take the reference time from the
+   * AudioContext clock. A count-in starts then and its end is the reference; with nothing to play
+   * the reference is the paint time and there is no gate tail. Runs in the serialized queue; a
+   * pause or skip while painting makes the continuation stale.
+   */
+  #presentNotation(cur: Current, display: ScoreSpec, port: NotationPort): void {
+    const d = this.#d;
+    const token = this.#token;
+    this.#setState({
+      kind: "presenting",
+      item: this.#itemView(cur),
+      prompt: this.#promptFor(cur, cur.phases[0] ?? "play"),
+    });
+    void this.#enqueue(async () => {
+      this.#notationShown = true;
+      await port.show(display);
+      if (token !== this.#token || this.#cur !== cur) return;
+      const shownAt = d.clock.contextNowMs();
+      if (cur.instance.stimulus.events.length === 0) {
+        cur.stimulusEndMs = shownAt;
+        cur.tailMs = 0;
+        this.#beginPhase(0);
+        return;
+      }
+      const { endAt } = d.player.play(cur.instance.stimulus);
+      cur.stimulusEndMs = endAt * 1000;
+      cur.tailMs = this.#tailMs();
+      this.#schedule(cur.stimulusEndMs + cur.tailMs - d.clock.contextNowMs(), () => {
+        this.#beginPhase(0);
+      });
+    });
+  }
+
+  #promptFor(cur: Current, phase: Phase): string {
+    return promptFor(
+      phase,
+      cur.phases,
+      cur.instance.expected,
+      this.#d.mode,
+      cur.instance.display !== undefined,
+    );
   }
 
   #beginPhase(index: number): void {
@@ -733,7 +872,7 @@ export class SessionMachine {
     cur.refMs[phase] = ref;
     cur.phaseStartMs = ref;
     // Events before this time are the stimulus (or the voice that just stopped), never answers.
-    cur.gateMs = index === 0 ? cur.stimulusEndMs + this.#tailMs() : now + this.#tailMs();
+    cur.gateMs = index === 0 ? cur.stimulusEndMs + cur.tailMs : now + this.#tailMs();
     const adapter = this.#adapterFor(phase);
     this.#unsubs.push(
       adapter.onNote((n) => {
@@ -753,7 +892,7 @@ export class SessionMachine {
       phase,
       phaseIndex: index,
       phaseCount: cur.phases.length,
-      prompt: promptFor(phase, cur.phases, cur.instance.expected, d.mode),
+      prompt: this.#promptFor(cur, phase),
     });
     const deadline = ref + cur.instance.expected.responseWindowMs;
     this.#schedule(deadline - now, () => {
@@ -908,6 +1047,7 @@ export class SessionMachine {
         correct: outcome.correct,
         errors,
         mode: cur.instance.presentation.mode === "minor" ? "minor" : "major",
+        ...(cur.instance.display ? { names: noteNamer(cur.instance.display) } : {}),
       });
 
       await d.append([
@@ -927,6 +1067,9 @@ export class SessionMachine {
       if (outcome.correct) this.#correct++;
 
       if (this.#hasEnded()) return;
+      if (cur.instance.display && this.#notationShown) {
+        this.#d.notation?.highlight(feedbackMarks(cur.instance.display, outcome.correct, errors));
+      }
       const shown: SessionState = {
         kind: "feedback",
         item: this.#itemView(cur),
@@ -958,6 +1101,7 @@ export class SessionMachine {
     if (this.#ended || this.#state.kind === "summary") return;
     this.#ended = true;
     this.#stopActivity();
+    this.#hideNotation();
     const d = this.#d;
     d.input.stop();
     this.#singInput?.stop();
@@ -982,7 +1126,39 @@ export class SessionMachine {
         accuracy: this.#attempts === 0 ? 0 : this.#correct / this.#attempts,
         elapsedSec,
         nodeChanges,
+        ...(this.#notes.length > 0 ? { notes: [...this.#notes] } : {}),
       },
     });
   }
+}
+
+/**
+ * Introductions from the plan. T3.9 makes each carry the key family the node opens in; until then
+ * entries are plain node ids, and either shape is read here.
+ */
+function introductionsOf(plan: SessionPlan): { nodeId: string; keyFamily?: KeyFamily }[] {
+  const entries: readonly (string | { nodeId: string; keyFamily?: KeyFamily })[] =
+    plan.introductions;
+  return entries.map((e) => (typeof e === "string" ? { nodeId: e } : e));
+}
+
+/**
+ * Marks for feedback on a reading item: every written note is shown as the target, a wrong note
+ * in a sequence is marked, and a correct answer marks everything right.
+ */
+export function feedbackMarks(
+  display: ScoreSpec,
+  correct: boolean,
+  errors: readonly AttemptError[],
+): NotationMark[] {
+  const ids = scoreNoteIds(display);
+  if (correct) return ids.map((noteId) => ({ noteId, kind: "right" }));
+  const wrong = new Set<string>();
+  for (const e of errors) {
+    const index = e.detail?.index;
+    const id =
+      e.code === "sequence.wrong-note" && typeof index === "number" ? ids[index] : undefined;
+    if (id !== undefined) wrong.add(id);
+  }
+  return ids.map((noteId) => ({ noteId, kind: wrong.has(noteId) ? "wrong" : "target" }));
 }
