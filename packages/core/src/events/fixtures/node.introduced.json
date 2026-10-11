@@ -1,0 +1,10 @@
+{
+  "id": "01JBX00000000000000000A006",
+  "deviceId": "dev-laptop",
+  "at": 1760000005000,
+  "type": "node.introduced",
+  "v": 1,
+  "sessionId": "01JBX00000000000000000S001",
+  "nodeId": "degree.1-5",
+  "keyFamily": "A"
+}

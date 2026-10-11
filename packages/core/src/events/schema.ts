@@ -1,5 +1,13 @@
 import { z } from "zod";
-import { ULID_REGEX } from "./ulid.js";
+import { envelopeShape } from "./envelope.js";
+import {
+  AttemptCompletedV1,
+  ItemPresentedV1,
+  NodeIntroducedV1,
+  PlacementCompletedV1,
+  SessionEndedV1,
+  SessionStartedV1,
+} from "./learning.js";
 
 /*
  * Event schema rules
@@ -9,14 +17,6 @@ import { ULID_REGEX } from "./ulid.js";
  *   The server binds the user from auth (R7), never from the payload.
  * - The `LearningEvent` union always holds the LATEST version of each type.
  */
-
-const envelopeShape = {
-  id: z.string().regex(ULID_REGEX, "must be a ULID"),
-  deviceId: z.string().min(1),
-  at: z.int(),
-  type: z.string(),
-  v: z.int().min(1),
-};
 
 export const SettingsPatch = z.strictObject({
   budgetSec: z.int().min(60).max(3600).optional(),
@@ -46,6 +46,12 @@ export const SettingsChangedV1 = z.strictObject({
 export const learningEventSchema = z.discriminatedUnion("type", [
   DeviceRegisteredV1,
   SettingsChangedV1,
+  SessionStartedV1,
+  ItemPresentedV1,
+  AttemptCompletedV1,
+  NodeIntroducedV1,
+  PlacementCompletedV1,
+  SessionEndedV1,
 ]);
 export type LearningEvent = z.infer<typeof learningEventSchema>;
 export type LearningEventType = LearningEvent["type"];
@@ -57,11 +63,19 @@ export interface EventRegistryEntry {
   upcast: (event: unknown, fromVersion: number) => unknown;
 }
 
+export type EventRegistry = Readonly<Record<string, EventRegistryEntry>>;
+
 const identity = (event: unknown): unknown => event;
 
 export const eventRegistry: Readonly<Record<LearningEventType, EventRegistryEntry>> = {
   "device.registered": { versions: { 1: DeviceRegisteredV1 }, upcast: identity },
   "settings.changed": { versions: { 1: SettingsChangedV1 }, upcast: identity },
+  "session.started": { versions: { 1: SessionStartedV1 }, upcast: identity },
+  "item.presented": { versions: { 1: ItemPresentedV1 }, upcast: identity },
+  "attempt.completed": { versions: { 1: AttemptCompletedV1 }, upcast: identity },
+  "node.introduced": { versions: { 1: NodeIntroducedV1 }, upcast: identity },
+  "placement.completed": { versions: { 1: PlacementCompletedV1 }, upcast: identity },
+  "session.ended": { versions: { 1: SessionEndedV1 }, upcast: identity },
 };
 
 export type ParseEventError =
@@ -73,10 +87,23 @@ export type ParseEventError =
 export type ParseEventResult =
   { ok: true; event: LearningEvent } | { ok: false; error: ParseEventError };
 
+export type ParseEventWithResult =
+  { ok: true; event: unknown } | { ok: false; error: ParseEventError };
+
 const typeAndVersion = z.looseObject({ type: z.string(), v: z.int().min(1) });
 
-/** Validate unknown input and upcast it to the latest version. Never throws. */
-export function parseEvent(input: unknown): ParseEventResult {
+function invalid(error: z.ZodError): ParseEventWithResult {
+  return {
+    ok: false,
+    error: { code: "invalid", message: z.prettifyError(error), issues: error.issues },
+  };
+}
+
+/**
+ * Validate against any registry and upcast to the entry's highest version.
+ * `parseEvent` uses the module registry; tests can pass their own. Never throws.
+ */
+export function parseEventWith(registry: EventRegistry, input: unknown): ParseEventWithResult {
   const head = typeAndVersion.safeParse(input);
   if (!head.success) {
     return {
@@ -85,10 +112,10 @@ export function parseEvent(input: unknown): ParseEventResult {
     };
   }
   const { type, v } = head.data;
-  if (!Object.hasOwn(eventRegistry, type)) {
+  const entry = Object.hasOwn(registry, type) ? registry[type] : undefined;
+  if (!entry) {
     return { ok: false, error: { code: "unknown_type", message: `unknown event type: ${type}` } };
   }
-  const entry = eventRegistry[type as LearningEventType];
   const schema = Object.hasOwn(entry.versions, v) ? entry.versions[v] : undefined;
   if (!schema) {
     return {
@@ -97,26 +124,19 @@ export function parseEvent(input: unknown): ParseEventResult {
     };
   }
   const parsed = schema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: {
-        code: "invalid",
-        message: z.prettifyError(parsed.error),
-        issues: parsed.error.issues,
-      },
-    };
+  if (!parsed.success) return invalid(parsed.error);
+  const latestVersion = Math.max(...Object.keys(entry.versions).map(Number));
+  const latestSchema = entry.versions[latestVersion];
+  if (!latestSchema) {
+    return { ok: false, error: { code: "unknown_version", message: `no schema for ${type}` } };
   }
-  const latest = learningEventSchema.safeParse(entry.upcast(parsed.data, v));
-  if (!latest.success) {
-    return {
-      ok: false,
-      error: {
-        code: "invalid",
-        message: z.prettifyError(latest.error),
-        issues: latest.error.issues,
-      },
-    };
-  }
+  const latest = latestSchema.safeParse(entry.upcast(parsed.data, v));
+  if (!latest.success) return invalid(latest.error);
   return { ok: true, event: latest.data };
+}
+
+/** Validate unknown input and upcast it to the latest version. Never throws. */
+export function parseEvent(input: unknown): ParseEventResult {
+  // The module registry's latest schemas are exactly the `LearningEvent` union.
+  return parseEventWith(eventRegistry, input) as ParseEventResult;
 }

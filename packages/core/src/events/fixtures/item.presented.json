@@ -1,0 +1,21 @@
+{
+  "id": "01JBX00000000000000000A004",
+  "deviceId": "dev-laptop",
+  "at": 1760000003000,
+  "type": "item.presented",
+  "v": 1,
+  "sessionId": "01JBX00000000000000000S001",
+  "itemId": "item-1",
+  "nodeId": "degree.1-5",
+  "generator": "degreeSing",
+  "block": "ear",
+  "isNew": true,
+  "presentation": {
+    "tonic": "Bb",
+    "register": 4,
+    "notes": [70, 77],
+    "seed": 12345,
+    "flags": { "cadence": true },
+    "tags": ["a", null]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "01JBX00000000000000000A008",
+  "deviceId": "dev-laptop",
+  "at": 1760000007000,
+  "type": "session.ended",
+  "v": 1,
+  "sessionId": "01JBX00000000000000000S001",
+  "reason": "completed"
+}

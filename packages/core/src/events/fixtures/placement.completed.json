@@ -1,0 +1,9 @@
+{
+  "id": "01JBX00000000000000000A007",
+  "deviceId": "dev-laptop",
+  "at": 1760000006000,
+  "type": "placement.completed",
+  "v": 1,
+  "placementId": "01JBX00000000000000000P001",
+  "results": { "degree.1-5": "mastered", "chord.quality": "available", "rhythm.quarter": "fluent" }
+}
