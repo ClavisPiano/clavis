@@ -8,6 +8,7 @@
 
   const devPages: readonly DevPage[] = [
     { href: "/dev/events", label: "Event log" },
+    { href: "/dev/pitch", label: "Mic pitch" },
     { href: "/dev/stimulus", label: "Stimulus player" },
     { href: "/dev/audio", label: "iOS audio spike" },
   ];

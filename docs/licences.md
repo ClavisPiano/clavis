@@ -37,3 +37,10 @@
 
 - Apache-2.0 licence (https://github.com/dexie/Dexie.js). IndexedDB event store in
   `packages/store`.
+
+## pitchy
+
+- Version 4.1.0, MIT licence, Copyright 2018-2021 Ian Johnson
+  (https://github.com/ianprime0509/pitchy). McLeod pitch method (MPM) detector with its own FFT
+  autocorrelation. Used by `packages/audio` (`src/pitch/analyse.ts`) in the mic worker and in the
+  Node fixture runner. No runtime dependencies of its own beyond `fft.js`, which is MIT as well.
