@@ -13,6 +13,11 @@
     "icons": "node scripts/generate-icons.mjs",
     "e2e": "playwright test"
   },
+  "dependencies": {
+    "@clavis/audio": "workspace:*",
+    "@clavis/core": "workspace:*",
+    "@clavis/store": "workspace:*"
+  },
   "devDependencies": {
     "@playwright/test": "1.64.0",
     "@sveltejs/adapter-static": "4.0.0",
@@ -22,9 +27,5 @@
     "svelte": "5.57.2",
     "svelte-check": "4.7.6",
     "vite": "8.3.4"
-  },
-  "dependencies": {
-    "@clavis/audio": "workspace:*",
-    "@clavis/core": "workspace:*"
   }
 }

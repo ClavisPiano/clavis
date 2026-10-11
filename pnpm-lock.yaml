@@ -59,6 +59,9 @@ importers:
       '@clavis/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@clavis/store':
+        specifier: workspace:*
+        version: link:../../packages/store
     devDependencies:
       '@playwright/test':
         specifier: 1.64.0
