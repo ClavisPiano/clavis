@@ -105,6 +105,9 @@ importers:
       '@clavis/core':
         specifier: workspace:*
         version: link:../core
+      pitchy:
+        specifier: 4.1.0
+        version: 4.1.0
       smplr:
         specifier: 1.1.0
         version: 1.1.0
