@@ -77,11 +77,16 @@ export function masteredConditionMet(
 }
 
 /** Demotion: rolling accuracy over the last window (any mode) strictly below minAccuracy - 0.1. */
+/** Fewest attempts (capped at the window) before demotion can trigger. */
+export const MIN_DEMOTION_ATTEMPTS = 5;
+
 export function demotionConditionMet(
   attempts: readonly GradedAttempt[],
   criteria: MasteryCriteria,
 ): boolean {
-  if (attempts.length === 0) return false;
+  // Need a minimum sample before demoting, otherwise a single miss on a node
+  // placed as mastered (R5) would demote it immediately.
+  if (attempts.length < Math.min(criteria.windowAttempts, MIN_DEMOTION_ATTEMPTS)) return false;
   return windowAccuracy(attempts, criteria.windowAttempts) < criteria.minAccuracy - DEMOTION_MARGIN;
 }
 

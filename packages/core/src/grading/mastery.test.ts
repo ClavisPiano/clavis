@@ -171,6 +171,14 @@ describe("evaluateNodeState", () => {
       const xs = [...spread(10), ...spread(3, { mode: "away", correct: false })];
       expect(evaluateNodeState("mastered", xs, crit)).toBe("fluent");
     });
+    it("needs a minimum sample before demoting (placement floor)", () => {
+      const miss = [att({ correct: false })];
+      expect(evaluateNodeState("mastered", miss, crit)).toBe("mastered");
+      const fourMisses = Array.from({ length: 4 }, () => att({ correct: false }));
+      expect(evaluateNodeState("mastered", fourMisses, crit)).toBe("mastered");
+      const fiveMisses = Array.from({ length: 5 }, () => att({ correct: false }));
+      expect(evaluateNodeState("mastered", fiveMisses, crit)).toBe("fluent");
+    });
     it("does not demote below fluent", () => {
       expect(evaluateNodeState("fluent", spread(10, { correct: false }), crit)).toBe("fluent");
     });

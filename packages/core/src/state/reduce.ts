@@ -1,0 +1,360 @@
+import { cloneJson } from "./clone.js";
+import type { LearningEvent } from "../events/schema.js";
+import { compareEvents } from "../events/validate.js";
+import { combineFamilyStates } from "../grading/families.js";
+import { evaluateNodeState, median, type GradedAttempt } from "../grading/mastery.js";
+import { rate } from "../grading/rate.js";
+import type { GeneratorId, NodeState, SkillGraph, SkillNode } from "../graph/schema.js";
+import { isNodeEnabled } from "../graph/validate.js";
+import type { JsonObject } from "../json.js";
+import { learnerDay } from "../learning/day.js";
+import { isValidKey, keyFamily, type KeyFamily } from "../theory/keys.js";
+import type {
+  DailyRecord,
+  FoldContext,
+  LearnerState,
+  PresentationRecord,
+  StoredAttempt,
+} from "./types.js";
+
+/** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
+export const REDUCER_VERSION = 1;
+
+export const DURATION_WINDOW = 20;
+/** Fewer samples than this and the graph seed is used instead of the median. */
+export const MIN_DURATION_SAMPLES = 3;
+
+const RANK: Record<NodeState, number> = {
+  locked: 0,
+  available: 1,
+  learning: 2,
+  fluent: 3,
+  mastered: 4,
+};
+
+const nodeIndexCache = new WeakMap<SkillGraph, Map<string, SkillNode>>();
+function nodeIndex(graph: SkillGraph): Map<string, SkillNode> {
+  let idx = nodeIndexCache.get(graph);
+  if (!idx) {
+    idx = new Map(graph.nodes.map((n) => [n.id, n]));
+    nodeIndexCache.set(graph, idx);
+  }
+  return idx;
+}
+
+/** Empty state with every graph node's availability computed. */
+export function initialState(ctx: FoldContext): LearnerState {
+  const state: LearnerState = {
+    cards: {},
+    nodes: {},
+    attempts: {},
+    sessions: {},
+    presented: {},
+    durations: {},
+    daily: {},
+    keyOfDayHistory: [],
+    settings: {},
+    eventCount: 0,
+    warnings: 0,
+  };
+  for (const n of ctx.graph.nodes) state.nodes[n.id] = { state: "locked" };
+  recomputeAvailability(state, ctx.graph);
+  return state;
+}
+
+/**
+ * Fold events into a state. Input order never matters: events are sorted by
+ * (at, id) and duplicate ids are dropped (first occurrence wins).
+ */
+export function foldEvents(events: readonly LearningEvent[], ctx: FoldContext): LearnerState {
+  return foldOnto(initialState(ctx), events, ctx);
+}
+
+/** Fold `events` onto an existing state (not mutated). Same sorting and dedupe as `foldEvents`. */
+export function foldOnto(
+  base: LearnerState,
+  events: readonly LearningEvent[],
+  ctx: FoldContext,
+): LearnerState {
+  const state = cloneJson(base);
+  const seen = new Set<string>();
+  const sorted: LearningEvent[] = [];
+  for (const e of events) {
+    if (seen.has(e.id)) continue;
+    seen.add(e.id);
+    sorted.push(e);
+  }
+  sorted.sort(compareEvents);
+  for (const e of sorted) reduceInPlace(state, e, ctx);
+  return state;
+}
+
+/** Apply one event, returning a new state. The input state is not mutated. */
+export function applyEvent(
+  state: LearnerState,
+  event: LearningEvent,
+  ctx: FoldContext,
+): LearnerState {
+  const next = cloneJson(state);
+  reduceInPlace(next, event, ctx);
+  return next;
+}
+
+/** Rolling median seconds per presented item for a generator, or the graph seed when data is thin (R13). */
+export function medianDurationSec(
+  state: LearnerState,
+  generator: GeneratorId,
+  seedFromGraph: number,
+): number {
+  const xs = state.durations[generator];
+  if (!xs || xs.length < MIN_DURATION_SAMPLES) return seedFromGraph;
+  return median(xs);
+}
+
+function daily(state: LearnerState, day: string): DailyRecord {
+  let d = state.daily[day];
+  if (!d) {
+    d = {
+      newItems: 0,
+      nodesIntroduced: 0,
+      sessions: 0,
+      practiceSec: 0,
+      mode: { instrument: 0, away: 0 },
+    };
+    state.daily[day] = d;
+  }
+  return d;
+}
+
+function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldContext): void {
+  state.eventCount++;
+  state.lastEvent = { at: event.at, id: event.id };
+  switch (event.type) {
+    case "session.started": {
+      if (state.sessions[event.sessionId]) return;
+      const day = learnerDay(event.at, event.tzOffsetMin);
+      state.sessions[event.sessionId] = {
+        mode: event.mode,
+        tzOffsetMin: event.tzOffsetMin,
+        startedAt: event.at,
+        day,
+        key: { tonic: event.key.tonic, mode: event.key.mode },
+        budgetSec: event.budgetSec,
+        itemsPresented: 0,
+      };
+      const d = daily(state, day);
+      d.sessions++;
+      d.mode[event.mode]++;
+      if (!state.keyOfDayHistory.some((k) => k.day === day)) {
+        state.keyOfDayHistory.push({ day, key: { tonic: event.key.tonic, mode: event.key.mode } });
+      }
+      return;
+    }
+    case "session.ended": {
+      const s = state.sessions[event.sessionId];
+      if (!s) {
+        state.warnings++;
+        return;
+      }
+      if (s.endedAt === undefined) {
+        s.endedAt = event.at;
+        const ms = Math.min(Math.max(0, event.at - s.startedAt), 2 * s.budgetSec * 1000);
+        daily(state, s.day).practiceSec += ms / 1000;
+      }
+      const prefix = `${event.sessionId}:`;
+      state.presented = Object.fromEntries(
+        Object.entries(state.presented).filter(([k]) => !k.startsWith(prefix)),
+      );
+      return;
+    }
+    case "item.presented": {
+      const rec: PresentationRecord = {
+        nodeId: event.nodeId,
+        generator: event.generator,
+        at: event.at,
+        ...keyHints(event.presentation),
+      };
+      state.presented[`${event.sessionId}:${event.itemId}`] = rec;
+      const s = state.sessions[event.sessionId];
+      if (!s) {
+        state.warnings++;
+        return;
+      }
+      s.itemsPresented++;
+      if (event.isNew) daily(state, s.day).newItems++;
+      return;
+    }
+    case "attempt.completed":
+      reduceAttempt(state, event, ctx);
+      return;
+    case "node.introduced": {
+      const node = nodeIndex(ctx.graph).get(event.nodeId);
+      const rec = state.nodes[event.nodeId];
+      if (!node || !rec) {
+        state.warnings++;
+        return;
+      }
+      if (rec.state !== "available") {
+        // Already introduced, or not yet unlocked: ignore, progress is never reset.
+        if (rec.state === "locked") state.warnings++;
+        return;
+      }
+      rec.state = "learning";
+      rec.introducedAt = event.at;
+      if (node.keyDependent && event.keyFamily) {
+        rec.byFamily = { ...rec.byFamily, [event.keyFamily]: "learning" };
+      }
+      const s = state.sessions[event.sessionId];
+      let day: string;
+      if (s) day = s.day;
+      else {
+        state.warnings++;
+        day = learnerDay(event.at, 0);
+      }
+      daily(state, day).nodesIntroduced++;
+      reevaluate(state, node);
+      recomputeAvailability(state, ctx.graph);
+      return;
+    }
+    case "placement.completed": {
+      for (const [nodeId, result] of Object.entries(event.results)) {
+        const node = nodeIndex(ctx.graph).get(nodeId);
+        const rec = state.nodes[nodeId];
+        if (!node || !rec) {
+          state.warnings++;
+          continue;
+        }
+        rec.placementFloor = result;
+        if (result === "available") continue;
+        if (RANK[result] > RANK[rec.state]) rec.state = result;
+        if (node.keyDependent) {
+          const by: Partial<Record<KeyFamily, NodeState>> = { ...rec.byFamily };
+          for (const f of ["A", "B"] as const) {
+            const cur = by[f];
+            if (cur === undefined || RANK[result] > RANK[cur]) by[f] = result;
+          }
+          rec.byFamily = by;
+        }
+        reevaluate(state, node);
+      }
+      recomputeAvailability(state, ctx.graph);
+      return;
+    }
+    case "settings.changed": {
+      for (const [k, v] of Object.entries(event.patch)) {
+        if (v !== undefined) (state.settings as Record<string, unknown>)[k] = v;
+      }
+      return;
+    }
+    case "device.registered":
+      return;
+    default:
+      // Unknown future event type: counted above, otherwise ignored.
+      return;
+  }
+}
+
+function reduceAttempt(
+  state: LearnerState,
+  event: Extract<LearningEvent, { type: "attempt.completed" }>,
+  ctx: FoldContext,
+): void {
+  const node = nodeIndex(ctx.graph).get(event.nodeId);
+  const session = state.sessions[event.sessionId];
+  const pres = state.presented[`${event.sessionId}:${event.itemId}`];
+  if (!node || !session || !pres) {
+    state.warnings++;
+    return;
+  }
+
+  const rating = rate(event.outcome, {
+    mode: session.mode,
+    ...(node.targetLatencyMs !== undefined ? { targetLatencyMs: node.targetLatencyMs } : {}),
+  });
+  const existing = state.cards[event.itemId];
+  const base = existing ? existing.card : ctx.scheduler.newCard(event.at);
+  state.cards[event.itemId] = {
+    nodeId: event.nodeId,
+    card: ctx.scheduler.review(base, rating, event.at),
+    lastAttemptAt: event.at,
+    reps: (existing?.reps ?? 0) + 1,
+  };
+
+  const attempt: StoredAttempt = {
+    at: event.at,
+    sessionId: event.sessionId,
+    day: learnerDay(event.at, session.tzOffsetMin),
+    mode: session.mode,
+    correct: event.outcome.correct,
+    latencyMs: event.outcome.latencyMs,
+    ...(event.outcome.partial !== undefined ? { partial: event.outcome.partial } : {}),
+  };
+  if (node.keyDependent) {
+    const tonic = pres.tonic ?? session.key.tonic;
+    const mode = pres.mode ?? session.key.mode;
+    const key = isValidKey({ tonic, mode }) ? { tonic, mode } : session.key;
+    attempt.keyFamily = keyFamily(key);
+  }
+  (state.attempts[event.nodeId] ??= []).push(attempt);
+
+  const secs = Math.max(0, event.at - pres.at) / 1000;
+  const list = (state.durations[pres.generator] ??= []);
+  list.push(secs);
+  if (list.length > DURATION_WINDOW) list.splice(0, list.length - DURATION_WINDOW);
+
+  reevaluate(state, node);
+  recomputeAvailability(state, ctx.graph);
+}
+
+function keyHints(p: JsonObject): Pick<PresentationRecord, "tonic" | "mode"> {
+  const out: { tonic?: string; mode?: "major" | "minor" } = {};
+  const nested = p.key;
+  const src: JsonObject =
+    typeof nested === "object" && nested !== null && !Array.isArray(nested) ? nested : p;
+  if (typeof src.tonic === "string") out.tonic = src.tonic;
+  if (src.mode === "major" || src.mode === "minor") out.mode = src.mode;
+  return out;
+}
+
+/** Re-evaluate one node from its attempt history. Locked and available nodes do not move. */
+function reevaluate(state: LearnerState, node: SkillNode): void {
+  const rec = state.nodes[node.id];
+  if (!rec || RANK[rec.state] < RANK.learning) return;
+  const attempts = state.attempts[node.id] ?? [];
+  if (!node.keyDependent) {
+    rec.state = evaluateNodeState(rec.state, attempts, node.mastery);
+    return;
+  }
+  const by: Partial<Record<KeyFamily, NodeState>> = { ...rec.byFamily };
+  const families = new Set<KeyFamily>(Object.keys(by) as KeyFamily[]);
+  for (const a of attempts) if (a.keyFamily) families.add(a.keyFamily);
+  for (const f of families) {
+    const own: GradedAttempt[] = attempts.filter((a) => a.keyFamily === f);
+    by[f] = evaluateNodeState(by[f] ?? "learning", own, node.mastery);
+  }
+  rec.byFamily = by;
+  rec.state = combineFamilyStates(by);
+}
+
+/**
+ * Recompute locked/available for nodes that have not been introduced. A node
+ * is available when it has an implemented generator, every hard prerequisite
+ * is mastered and every soft prerequisite is at least learning (a placement
+ * result lifts the prerequisite gate but not the generator requirement).
+ *
+ * Nodes at learning or beyond are never touched: progress is kept when a
+ * prerequisite later demotes, and only new introductions are gated.
+ */
+function recomputeAvailability(state: LearnerState, graph: SkillGraph): void {
+  for (const node of graph.nodes) {
+    const rec = state.nodes[node.id];
+    if (!rec || RANK[rec.state] >= RANK.learning) continue;
+    const enabled = isNodeEnabled(node, graph.generators);
+    const hardOk = node.prerequisites.every((p) => state.nodes[p]?.state === "mastered");
+    const softOk = (node.softPrerequisites ?? []).every(
+      (p) => RANK[state.nodes[p]?.state ?? "locked"] >= RANK.learning,
+    );
+    const placed = rec.placementFloor !== undefined;
+    rec.state = enabled && (placed || (hardOk && softOk)) ? "available" : "locked";
+  }
+}
