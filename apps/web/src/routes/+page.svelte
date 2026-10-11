@@ -13,12 +13,15 @@
     todaySummary,
     weekProgress,
   } from "../lib/home";
+  import { PLACEMENT_SKIPPED_META_KEY, shouldOfferPlacement } from "../lib/placement";
 
   const learner = useLearner();
   let now = $state(Date.now());
 
   const HINT_DISMISSED_KEY = "clavis.install-hint-dismissed";
   let showHint = $state(false);
+  /** Undefined until the skip flag has been read, so the offer never flashes and vanishes. */
+  let placementSkipped = $state<boolean | undefined>();
 
   onMount(() => {
     let dismissed = false;
@@ -28,18 +31,35 @@
       // Storage unavailable: show the hint every time.
     }
     showHint = !dismissed && shouldShowIosInstallHint(readInstallEnv());
-    void learner.init().then(() => {
+    void learner.init().then(async () => {
       now = Date.now();
+      try {
+        placementSkipped = (await learner.ctx.store.getMeta(PLACEMENT_SKIPPED_META_KEY)) === true;
+      } catch {
+        placementSkipped = false;
+      }
     });
   });
 
   const snap = $derived(learner.state);
   const settings = $derived(effectiveSettings(snap?.settings ?? {}));
   const firstRun = $derived(snap ? isFirstRun(snap) : false);
+  const offerPlacement = $derived(
+    snap && placementSkipped !== undefined ? shouldOfferPlacement(snap, placementSkipped) : false,
+  );
   const today = $derived(snap ? todaySummary(snap, now, deviceTzOffsetMin()) : undefined);
   const canPractise = $derived(snap ? hasStartedItems(snap) && today?.completed === true : false);
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
   const week = $derived(weekProgress(cells, settings.weeklyTargetDays));
+
+  async function skipPlacement() {
+    placementSkipped = true;
+    try {
+      await learner.ctx.store.setMeta(PLACEMENT_SKIPPED_META_KEY, true);
+    } catch {
+      // Best effort: the offer comes back next time.
+    }
+  }
 
   function dismiss() {
     showHint = false;
@@ -74,6 +94,29 @@
       Before you start, check your comfortable singing range in
       <a href={resolve("/settings")}>Settings</a>.
     </p>
+  </section>
+{/if}
+
+{#if offerPlacement}
+  <section class="card" data-testid="placement-offer" aria-labelledby="placement-h">
+    <h2 id="placement-h">Find your starting point</h2>
+    <p>
+      A placement of about five minutes at your piano sets where you start, so you skip what you
+      already know. You can run it later from Settings.
+    </p>
+    <div class="offer-actions">
+      <a class="button primary" href={resolve("/placement")} data-testid="placement-begin">
+        <strong>Start placement</strong>
+      </a>
+      <button
+        type="button"
+        class="skip-offer"
+        data-testid="placement-skip"
+        onclick={() => void skipPlacement()}
+      >
+        Skip for now
+      </button>
+    </div>
   </section>
 {/if}
 
@@ -181,6 +224,23 @@
 
   .button.primary {
     font-size: 1.125rem;
+  }
+
+  .offer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+
+  .skip-offer {
+    min-height: var(--touch-target);
+    padding: 0 var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
   }
 
   .card {

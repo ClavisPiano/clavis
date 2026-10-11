@@ -4,9 +4,11 @@ import {
   LearnerStateService,
   MemoryEventStore,
   composeSession,
+  createRng,
   createScheduler,
   createUlidGenerator,
   getGenerator,
+  placementPlan,
   stimulusDurationSec,
   type ExpectedResponse,
   type LearningEvent,
@@ -16,6 +18,7 @@ import {
   type StimulusSpec,
 } from "@clavis/core";
 import { scoreAttempt } from "@clavis/scoring";
+import type { NotationPort } from "../notation/port";
 import { SessionMachine, type SessionDeps, type SessionState } from "./machine";
 
 /* Test-only helpers for the session machine: a manual clock, fake player and a real core stack. */
@@ -115,6 +118,10 @@ export interface HarnessOptions {
   withSingInput?: boolean;
   seed?: number;
   saveHeadphones?: (v: boolean) => Promise<void>;
+  /** Placement mode (T3.16): present the placement plan instead of a composed session. */
+  placement?: boolean;
+  /** Draws reading items. Without it, reading items are unavailable. */
+  notation?: NotationPort;
   /** Makes ids differ from another harness that used the same clock. */
   idSalt?: number;
 }
@@ -150,6 +157,10 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     mode,
     ...(opts.practice ? { practice: true } : {}),
     graph,
+    ...(opts.placement
+      ? { placement: { plan: placementPlan(graph, createRng(opts.seed ?? 1234)) } }
+      : {}),
+    ...(opts.notation ? { notation: opts.notation } : {}),
     compose: composeSession,
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);

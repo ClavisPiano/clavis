@@ -6,7 +6,7 @@ import { expect, type Page } from "@playwright/test";
  */
 
 /** Answer whatever the current listening phase expects, correctly. */
-async function answerCurrentPhase(page: Page): Promise<void> {
+export async function answerCurrentPhase(page: Page): Promise<void> {
   await page.evaluate(() => {
     const session = window.__clavisSession;
     const fake = window.__clavisFakeInput;
