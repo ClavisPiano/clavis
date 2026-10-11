@@ -17,7 +17,7 @@ import {
   writtenAccidental,
   type StaffPosition,
 } from "../theory/staff.js";
-import { keyToJson, latencyField } from "./build.js";
+import { degreeLabels, keyToJson, latencyField } from "./build.js";
 import { keyForFamily } from "./family.js";
 import { itemId } from "./ids.js";
 import type { GenerateContext, Generator, ItemInstance, ItemParams } from "./types.js";
@@ -44,10 +44,14 @@ import type { GenerateContext, Generator, ItemInstance, ItemParams } from "./typ
 
 /** Default bass reading range, C2..E4. */
 export const BASS_READ_RANGE: VoiceRange = { low: 36, high: 64 };
+/** Landmark notes the interval variant starts from (the same four as read.bass.landmarks). */
+export const BASS_LANDMARKS: readonly string[] = ["C2", "F3", "C4", "G2"];
 const DEFAULT_LOW = "C2";
 const DEFAULT_HIGH = "E4";
 
 export const BASS_NOTE_WINDOW_MS = 6000;
+export const BASS_INTERVAL_WINDOW_MS = 10000;
+const DIRECTIONS = ["up", "down"] as const;
 const FAMILIES: readonly KeyFamily[] = ["A", "B", "C"];
 
 const PosText = z.string().regex(/^[A-G]-?[0-9]+$/);
@@ -242,6 +246,90 @@ function generateNote(
   };
 }
 
+const IntervalItemParams = z.object({
+  fam: z.enum(["A", "B", "C"]),
+  /** Generic interval number: 2 is a second (one staff step) up to 5 (four steps). */
+  interval: z.int().min(2).max(7),
+  dir: z.enum(DIRECTIONS),
+});
+
+/** Families x intervals (2nd up to maxSteps + 1) x directions: 3 x 4 x 2 = 24 by default. */
+function listIntervalItems(maxSteps: number): ItemParams[] {
+  const out: ItemParams[] = [];
+  for (const fam of FAMILIES)
+    for (let interval = 2; interval <= maxSteps + 1; interval++)
+      for (const dir of DIRECTIONS) out.push({ fam, interval, dir });
+  return out;
+}
+
+/**
+ * Interval item (R18). The first note is a landmark chosen by seed among those whose second note,
+ * placed by staff steps, stays inside C2..E4 on the staff. Display is one measure with two half
+ * notes n1, n2 and no meter, like the interval fixture. The expected response is an exact-octave
+ * sequence; both notes are written with the key signature applied.
+ */
+function generateInterval(
+  node: SkillNode,
+  maxSteps: number,
+  params: ItemParams,
+  ctx: GenerateContext,
+): ItemInstance {
+  const { rng } = ctx;
+  const ip = IntervalItemParams.parse(params);
+  if (ip.interval < 2 || ip.interval > maxSteps + 1)
+    throw new RangeError(`interval ${String(ip.interval)} is not in node ${node.id}`);
+  const key = pickKey(ip.fam, "major", ctx);
+  const range = defaultRange();
+  const lo = staffPosition(range.low);
+  const hi = staffPosition(range.high);
+  const delta = (ip.interval - 1) * (ip.dir === "up" ? 1 : -1);
+  const firsts = BASS_LANDMARKS.map(parseStaffPosition).filter((p) => {
+    const i = staffPosition(p) + delta;
+    return i >= lo && i <= hi;
+  });
+  const first = rng.pick(firsts);
+  const second = stepOffset(first, delta);
+  const a = positionInKey(first, key);
+  const b = positionInKey(second, key);
+  const seed = rng.int(0, 0x7fffffff);
+  const idParams: ItemParams = { fam: ip.fam, interval: ip.interval, dir: ip.dir };
+  const positions = [formatStaffPosition(first), formatStaffPosition(second)];
+  const half = (id: string, pitch: SpelledPitch): ScoreNote => ({
+    ...whole(id, pitch, key),
+    duration: { value: 2, dots: 0 },
+  });
+
+  return {
+    itemId: itemId(node.id, idParams),
+    nodeId: node.id,
+    generator: "bassNoteRead",
+    params: idParams,
+    presentation: {
+      key: keyToJson(key),
+      pos: positions,
+      midi: [a.midi, b.midi],
+      clef: "bass",
+      fam: ip.fam,
+      interval: ip.interval,
+      dir: ip.dir,
+      seed,
+    },
+    stimulus: { events: [] },
+    display: bassScore(key, [[half("n1", a.pitch), half("n2", b.pitch)]]),
+    expected: {
+      play: {
+        kind: "sequence",
+        midi: [a.midi, b.midi],
+        octaveAgnostic: false,
+        degreeLabels: degreeLabels(key),
+      },
+      responseWindowMs: BASS_INTERVAL_WINDOW_MS,
+    },
+    inputRange: inputRangeFor(BASS_READ_RANGE, a.midi, b.midi),
+    ...latencyField(node),
+  };
+}
+
 /**
  * Read a note (or, for read.bass.intervals, two notes) on the bass staff and play it. No audio
  * preview (R17). Exported but registered by T3.15.
@@ -250,12 +338,12 @@ export const bassNoteRead: Generator = {
   id: "bassNoteRead",
   listItems(node: SkillNode): ItemParams[] {
     const v = variantOf(node);
-    if (v.kind === "interval") return [];
-    return listNoteItems(v);
+    return v.kind === "interval" ? listIntervalItems(v.maxIntervalSteps) : listNoteItems(v);
   },
   generate(node: SkillNode, params: ItemParams, ctx: GenerateContext): ItemInstance {
     const v = variantOf(node);
-    if (v.kind === "interval") throw new TypeError("interval variant is not implemented");
-    return generateNote(node, v, params, ctx);
+    return v.kind === "interval"
+      ? generateInterval(node, v.maxIntervalSteps, params, ctx)
+      : generateNote(node, v, params, ctx);
   },
 };

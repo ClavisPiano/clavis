@@ -6,6 +6,7 @@ import { createRng } from "../random.js";
 import { ScoreSpecSchema, scoreNoteIds } from "../score/schema.js";
 import { StimulusSpecSchema } from "../stimulus/types.js";
 import { keyFamily, keysInFamilies, type Key, type KeyFamily } from "../theory/keys.js";
+import { parseStaffPosition, staffPosition } from "../theory/staff.js";
 import { ExpectedResponseSchema } from "./expected.js";
 import { bassNoteRead } from "./bass-note-read.js";
 import type { GenerateContext, ItemParams } from "./types.js";
@@ -215,3 +216,89 @@ function at<T>(xs: readonly T[], i: number): T {
   if (x === undefined) throw new RangeError(`index ${String(i)}`);
   return x;
 }
+
+const intervals: SkillNode = {
+  ...base,
+  id: "read.bass.intervals",
+  params: { clef: "bass", mode: "interval", maxIntervalSteps: 4 },
+};
+
+const posList = (i: { presentation: Record<string, unknown> }): string[] =>
+  z.array(z.string()).parse(i.presentation.pos);
+
+describe("bassNoteRead interval variant", () => {
+  it("has 3 x 4 x 2 = 24 items with R18 ids", () => {
+    const items = bassNoteRead.listItems(intervals);
+    expect(items).toHaveLength(24);
+    expect(items[0]).toEqual({ fam: "A", interval: 2, dir: "up" });
+    const inst = bassNoteRead.generate(intervals, { fam: "A", interval: 3, dir: "up" }, ctx(1));
+    expect(inst.itemId).toBe("read.bass.intervals|dir=up|fam=A|interval=3");
+  });
+
+  it("two half notes, exact-octave sequence target", () => {
+    const inst = bassNoteRead.generate(
+      intervals,
+      { fam: "A", interval: 5, dir: "up" },
+      ctx(4, { tonic: "C", mode: "major" }),
+    );
+    expect(ScoreSpecSchema.safeParse(inst.display).success).toBe(true);
+    expect(inst.display ? scoreNoteIds(inst.display) : []).toEqual(["n1", "n2"]);
+    expect(inst.display?.staves[0]?.measures).toHaveLength(1);
+    expect(inst.stimulus).toEqual({ events: [] });
+    const play = inst.expected.play;
+    if (play?.kind !== "sequence") throw new Error("expected sequence");
+    expect(play.octaveAgnostic).toBe(false);
+    expect(play.midi).toHaveLength(2);
+    expect(inst.expected.responseWindowMs).toBe(10000);
+    expect(ExpectedResponseSchema.safeParse(inst.expected).success).toBe(true);
+  });
+
+  it("every item in every key: first is a landmark, step distance matches, both in range", () => {
+    const low = staffPosition(parseStaffPosition("C2"));
+    const high = staffPosition(parseStaffPosition("E4"));
+    for (const p of bassNoteRead.listItems(intervals)) {
+      const fam = famOf(p);
+      const interval = z.number().parse(p.interval);
+      const dir = z.enum(["up", "down"]).parse(p.dir);
+      for (const k of keysInFamilies([fam]).filter((x) => x.mode === "major")) {
+        for (let seed = 0; seed < 6; seed++) {
+          const inst = bassNoteRead.generate(intervals, p, ctx(seed, k));
+          expect(keyOf(inst)).toEqual(k);
+          const pos = posList(inst);
+          expect(ANCHORS).toContain(pos[0]);
+          const a = staffPosition(parseStaffPosition(pos[0] ?? ""));
+          const b = staffPosition(parseStaffPosition(pos[1] ?? ""));
+          expect(b - a).toBe((interval - 1) * (dir === "up" ? 1 : -1));
+          for (const i of [a, b]) {
+            expect(i).toBeGreaterThanOrEqual(low);
+            expect(i).toBeLessThanOrEqual(high);
+          }
+          const midis = z.array(z.number()).parse(inst.presentation.midi);
+          for (const m of midis) {
+            expect(m).toBeGreaterThanOrEqual(inst.inputRange?.low ?? 999);
+            expect(m).toBeLessThanOrEqual(inst.inputRange?.high ?? -1);
+          }
+          expect(inst.expected.play).toMatchObject({ kind: "sequence", midi: midis });
+          expect(inst.itemId).toBe(bassNoteRead.generate(intervals, p, ctx(99)).itemId);
+        }
+      }
+    }
+  });
+
+  it("is deterministic per seed and the landmark varies with the seed", () => {
+    const p = { fam: "A", interval: 2, dir: "up" };
+    expect(bassNoteRead.generate(intervals, p, ctx(7))).toEqual(
+      bassNoteRead.generate(intervals, p, ctx(7)),
+    );
+    const firsts = new Set<string | undefined>();
+    for (let s = 0; s < 40; s++)
+      firsts.add(posList(bassNoteRead.generate(intervals, p, ctx(s)))[0]);
+    expect(firsts.size).toBeGreaterThan(1);
+  });
+
+  it("rejects intervals the node does not allow", () => {
+    expect(() =>
+      bassNoteRead.generate(intervals, { fam: "A", interval: 6, dir: "up" }, ctx(1)),
+    ).toThrow();
+  });
+});
