@@ -10,8 +10,10 @@ import {
 } from "@clavis/audio";
 import {
   composeSession,
+  createRng,
   createUlidGenerator,
   getGenerator,
+  placementPlan,
   type LearningEvent,
   type StimulusSpec,
 } from "@clavis/core";
@@ -53,7 +55,11 @@ export type RuntimeResult = { ok: true; runtime: SessionRuntime } | { ok: false;
  * Wire the machine to the browser: learner state and store, piano (or a silent fake), input
  * adapters and the clock. All the logic lives in `SessionMachine`; this only builds its deps.
  */
-export async function createSessionRuntime(params: SessionParams): Promise<RuntimeResult> {
+export async function createSessionRuntime(
+  params: SessionParams,
+  opts: { placement?: boolean } = {},
+): Promise<RuntimeResult> {
+  const placement = opts.placement === true;
   const learner = await getLearnerState();
   if (!learner.ok) return { ok: false, message: "Local storage is unavailable on this device." };
   const { store, deviceId, graph, service } = learner;
@@ -118,11 +124,14 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
   const notation = createNotationViewPort(getNotationClient());
 
   const seedBytes = crypto.getRandomValues(new Uint32Array(1));
+  const seed = seedBytes[0] ?? Date.now() % 0x7fffffff;
   const deps: SessionDeps = {
     deviceId,
-    mode: params.mode,
+    mode: placement ? "instrument" : params.mode,
     ...(params.practice ? { practice: true } : {}),
     graph,
+    // Placement (R19): the plan replaces the composer and nothing but its result is stored.
+    ...(placement ? { placement: { plan: placementPlan(graph, createRng(seed)) } } : {}),
     compose: composeSession,
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
@@ -146,13 +155,14 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
     getState: () => service.state,
     clock: { contextNowMs, wallNow: () => Date.now(), schedule },
     newId,
-    seed: seedBytes[0] ?? Date.now() % 0x7fffffff,
+    seed,
     // R6: minutes east of UTC, the opposite sign of getTimezoneOffset (`|| 0` turns -0 into 0).
     tzOffsetMin: -new Date().getTimezoneOffset() || 0,
     ...(params.budgetSec === undefined ? {} : { budgetSec: params.budgetSec }),
     latency,
     headphones,
-    askHeadphones: !fake || params.headphones === "ask",
+    // The answer is saved as an event, and placement writes only `placement.completed`.
+    askHeadphones: !placement && (!fake || params.headphones === "ask"),
     saveHeadphones: async (value) => {
       await store.setMeta(HEADPHONES_META_KEY, value);
       await service.append([
@@ -166,7 +176,9 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
         },
       ]);
     },
-    openSessions: async () => findOpenSessions(await store.list(), deviceId),
+    ...(placement
+      ? {}
+      : { openSessions: async () => findOpenSessions(await store.list(), deviceId) }),
   };
   const machine = new SessionMachine(deps);
 

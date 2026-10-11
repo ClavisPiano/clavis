@@ -292,6 +292,10 @@
 <h2>Tools</h2>
 <ul>
   <li><a href={resolve("/settings/latency")}>Latency calibration</a></li>
+  <li>
+    <a href={resolve("/placement")} data-testid="rerun-placement">Run placement again</a>
+    (only ever raises what you have already reached)
+  </li>
   <li><a href={resolve("/dev/state")}>Backup and restore (export or import your data)</a></li>
 </ul>
 

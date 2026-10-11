@@ -1,6 +1,8 @@
 import {
   DEFAULT_KEYBOARD_RANGE,
   createRng,
+  nextPlacementStep,
+  placementResults,
   scoreNoteIds,
   type AttemptError,
   type AttemptOutcome,
@@ -15,6 +17,10 @@ import {
   type NodeState,
   type NoteEvent,
   type PitchFrame,
+  type PlacementAttempt,
+  type PlacementItem,
+  type PlacementPlan,
+  type PlacementState,
   type PlannedItem,
   type ScoreSpec,
   type SessionMode,
@@ -41,6 +47,15 @@ import { noteNamer } from "./spelling";
  *
  * Reading items (`instance.display`) show notation while presenting. Their reference time is the
  * moment the score is painted, or the end of a count-in that starts then (R17).
+ *
+ * Placement mode (T3.16, R19) reuses the same item presentation and scoring, driven by
+ * `nextPlacementStep` instead of the composer:
+ *
+ *   idle -> preparing -> ( presenting -> listening -> feedback (brief tick) )* -> summary
+ *
+ * It writes nothing until the last item is answered, then exactly one `placement.completed`. No
+ * session, intro, item or attempt events, no warm-up, no headphones question (that answer is an
+ * event). Abandoning (`finish`, or leaving the page) writes nothing.
  *
  * `paused` can interrupt any step and `error` ends the session. Time is the AudioContext clock
  * in ms (`clock.contextNowMs()`), the same clock as `player.play().endAt` and the input adapters.
@@ -77,6 +92,8 @@ export interface SessionDeps {
   /** Extra practice (T2.15): compose with `practice` and write `session.started` with it. */
   practice?: boolean;
   graph: SkillGraph;
+  /** Placement mode (T3.16): present this plan instead of composing a session. */
+  placement?: { plan: PlacementPlan };
   compose(input: ComposeInput): SessionPlan;
   generate(item: PlannedItem, ctx: GenerateContext): ItemInstance;
   player: SessionPlayer;
@@ -146,7 +163,18 @@ export interface SessionSummary {
   nodeChanges: NodeChange[];
   /** Things the learner should know about, such as items skipped because notation did not load. */
   notes?: string[];
+  /** Placement only: the node states written by `placement.completed`, in plan order. */
+  placed?: PlacedNode[];
 }
+
+export interface PlacedNode {
+  nodeId: string;
+  title: string;
+  state: PlacementState;
+}
+
+/** How long the correct/incorrect tick shows in placement before the next item. */
+export const PLACEMENT_TICK_MS = 500;
 
 export type SessionState =
   | { kind: "idle" }
@@ -247,6 +275,9 @@ export class SessionMachine {
   #headphones: boolean | undefined;
   #headphonesAnswer: ((v: boolean) => void) | undefined;
   #latency: LatencyOffsets;
+  /** Placement mode: answers so far, in presentation order. */
+  #placementAttempts: PlacementAttempt[] = [];
+  #placementSkippedReading = false;
 
   #startedWall = 0;
   #pausedMs = 0;
@@ -431,7 +462,8 @@ export class SessionMachine {
     const kind = this.#state.kind;
     if (kind === "idle" || kind === "preparing" || kind === "headphones") return;
     if (kind === "summary" || kind === "error") return;
-    const reason = this.#attempts > 0 ? "completed" : "abandoned";
+    // Placement finishes only by running out of items; stopping early writes nothing.
+    const reason = this.#attempts > 0 && !this.#d.placement ? "completed" : "abandoned";
     void this.#enqueue(() => this.#end(reason));
   }
 
@@ -510,6 +542,7 @@ export class SessionMachine {
   }
 
   async #prepare(): Promise<void> {
+    if (this.#d.placement) return this.#preparePlacement(this.#d.placement.plan);
     const d = this.#d;
     this.#setState({ kind: "preparing" });
     const before = d.getState();
@@ -619,8 +652,103 @@ export class SessionMachine {
     else this.#beginItems();
   }
 
+  /** Placement start: preload notation, open the input, then present the first item. Writes nothing. */
+  async #preparePlacement(plan: PlacementPlan): Promise<void> {
+    const d = this.#d;
+    this.#setState({ kind: "preparing" });
+    this.#nodesBefore = this.#nodeStates(d.getState());
+    this.#items = [];
+    const reading = plan.stages.some((s) =>
+      s.items.some((i) => this.#needsNotation({ generator: i.generator })),
+    );
+    if (reading) {
+      let ready = false;
+      if (d.notation) {
+        try {
+          await d.notation.preload();
+          ready = true;
+        } catch {
+          ready = false;
+        }
+      }
+      if (!ready) {
+        this.#placementSkippedReading = true;
+        this.#notes.push("Reading was skipped because notation could not load.");
+      }
+    }
+    try {
+      await d.player.load?.();
+      await d.input.start();
+    } catch (e) {
+      const what = e instanceof Error ? e.message : String(e);
+      throw new Error(`Could not start audio or the microphone: ${what}`, { cause: e });
+    }
+    d.input.pause();
+    this.#startedWall = d.clock.wallNow();
+    this.#placementAdvance();
+  }
+
+  /** The next placement item, or the end when the plan (with its early stops) is done. */
+  #placementAdvance(): void {
+    const plan = this.#d.placement?.plan;
+    if (!plan) return;
+    let step = nextPlacementStep(plan, this.#placementAttempts);
+    if (step.kind === "item" && step.item.section === "READ" && this.#placementSkippedReading) {
+      step = { kind: "done", completed: step.completed, skippedStageIds: [] };
+    }
+    if (step.kind === "done") {
+      void this.#enqueue(() => this.#end("completed"));
+      return;
+    }
+    this.#loadPlacementItem(step.item);
+  }
+
+  #loadPlacementItem(item: PlacementItem): void {
+    const d = this.#d;
+    const index = this.#placementAttempts.length;
+    const settings = d.getState().settings;
+    const planned: PlannedItem = {
+      itemId: item.itemId,
+      nodeId: item.nodeId,
+      generator: item.generator,
+      params: item.params,
+      isNew: false,
+      estimatedSec: 0,
+    };
+    const rng = createRng((d.seed + Math.imul(index + 1, 0x9e3779b1)) >>> 0);
+    // C major throughout (R19). Family A bass reading takes the preferred key as is.
+    const instance = d.generate(planned, {
+      rng,
+      preferredKey: { tonic: "C", mode: "major" },
+      voiceRange: {
+        low: settings.voiceRangeLow ?? DEFAULT_VOICE_RANGE.low,
+        high: settings.voiceRangeHigh ?? DEFAULT_VOICE_RANGE.high,
+      },
+      keyboardRange: DEFAULT_KEYBOARD_RANGE,
+      mode: "instrument",
+    });
+    this.#cur = {
+      index,
+      planned,
+      instance,
+      block: item.section === "EAR" ? "ear" : "read",
+      phases: phasesFor(instance.expected, "instrument"),
+      phaseIdx: 0,
+      stimulusEndMs: 0,
+      refMs: {},
+      phaseStartMs: 0,
+      gateMs: 0,
+      tailMs: 0,
+      playNotes: [],
+      singFrames: [],
+    };
+    // Nothing is logged for a placement item.
+    this.#presentedLogged = true;
+    this.#presentCurrent();
+  }
+
   /** Does the planned item draw a score (its generator needs notation)? */
-  #needsNotation(planned: PlannedItem): boolean {
+  #needsNotation(planned: Pick<PlannedItem, "generator">): boolean {
     return (
       this.#d.graph.generators
         .find((g) => g.id === planned.generator)
@@ -684,6 +812,10 @@ export class SessionMachine {
 
   /** Move to the next planned item, or end the session when none is left or time is up. */
   #advance(): void {
+    if (this.#d.placement) {
+      this.#placementAdvance();
+      return;
+    }
     this.#index++;
     const next = this.#items[this.#index];
     if (!next) {
@@ -769,7 +901,8 @@ export class SessionMachine {
   #itemView(cur: Current): ItemView {
     return {
       position: cur.index + 1,
-      total: this.#items.length,
+      // Placement stops early, so it has no fixed total.
+      total: this.#d.placement ? 0 : this.#items.length,
       nodeId: cur.planned.nodeId,
       nodeTitle: this.#nodeTitle(cur.planned.nodeId),
       generator: cur.instance.generator,
@@ -1045,6 +1178,11 @@ export class SessionMachine {
         source = scored.source;
       }
 
+      if (d.placement) {
+        this.#finishPlacementItem(cur, outcome);
+        return;
+      }
+
       const nodeState = d.getState().nodes[nodeId]?.state ?? "locked";
       const attemptIndex =
         (this.#priorAttempts[nodeId] ?? 0) + (this.#sessionAttempts[nodeId] ?? 0);
@@ -1100,6 +1238,34 @@ export class SessionMachine {
     }
   }
 
+  /** Placement: remember the answer (nothing is stored yet), show a brief tick, then move on. */
+  #finishPlacementItem(cur: Current, outcome: AttemptOutcome): void {
+    this.#placementAttempts.push({
+      itemId: cur.instance.itemId,
+      nodeId: cur.planned.nodeId,
+      correct: outcome.correct,
+      latencyMs: Math.max(0, outcome.latencyMs),
+      targetLatencyMs: cur.instance.targetLatencyMs ?? cur.instance.expected.responseWindowMs,
+    });
+    this.#attempts++;
+    if (outcome.correct) this.#correct++;
+    if (this.#hasEnded()) return;
+    const shown: SessionState = {
+      kind: "feedback",
+      item: this.#itemView(cur),
+      feedback: { correct: outcome.correct, lines: [], detailed: false, autoAdvance: true },
+      canReplay: false,
+    };
+    if (this.#state.kind === "paused") {
+      this.#beforePause = shown;
+      return;
+    }
+    this.#setState(shown);
+    this.#schedule(PLACEMENT_TICK_MS, () => {
+      this.next();
+    });
+  }
+
   /** Read through a method: the flag can change while `#completeItem` awaits. */
   #hasEnded(): boolean {
     return this.#ended;
@@ -1114,6 +1280,26 @@ export class SessionMachine {
     d.input.stop();
     this.#singInput?.stop();
     const elapsedSec = Math.round(this.elapsedSec());
+    let placed: PlacedNode[] | undefined;
+    const placement = d.placement;
+    if (placement && reason === "completed") {
+      // The one and only write of a placement (R19).
+      const results = placementResults(this.#placementAttempts, d.graph);
+      await d.append([
+        {
+          ...this.#base(),
+          type: "placement.completed" as const,
+          placementId: d.newId(),
+          results,
+        },
+      ]);
+      placed = placement.plan.stages.flatMap((stage) => {
+        const state = results[stage.nodeId];
+        return state === undefined
+          ? []
+          : [{ nodeId: stage.nodeId, title: this.#nodeTitle(stage.nodeId), state }];
+      });
+    }
     if (this.#sessionId !== "") {
       await d.append([
         { ...this.#base(), type: "session.ended" as const, sessionId: this.#sessionId, reason },
@@ -1135,6 +1321,7 @@ export class SessionMachine {
         elapsedSec,
         nodeChanges,
         ...(this.#notes.length > 0 ? { notes: [...this.#notes] } : {}),
+        ...(placed ? { placed } : {}),
       },
     });
   }
