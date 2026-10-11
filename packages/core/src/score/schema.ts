@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Midi } from "../theory/keys.js";
 
 /*
- * Notation-free score contract (R16, R17). Core decides what is written (spelling, written
+ * Notation-free score contract for visual items (R17, R18). Core decides what is written (spelling, written
  * accidentals, ties); the notation package only draws it. Plain JSON, so an ItemInstance
  * carrying a ScoreSpec stays serializable.
  */
