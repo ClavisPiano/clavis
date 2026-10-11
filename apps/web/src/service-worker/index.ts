@@ -21,8 +21,13 @@ const SHELL = "/";
 
 // Manifest paths are relative to the worker's own URL (no leading slash, no base), so resolve
 // them to absolute URLs. This also makes the requests below comparable by href.
+// The Verovio worker chunk (about 8 MB, WASM inlined) stays out of the precache: it would make
+// every install and update download it. T3.4 serves it cache-first from ASSET_CACHE instead.
+const NOTATION_ASSET = /verovio/i;
 const PRECACHE_URLS: string[] = [
-  ...[...immutable, ...assets, ...prerendered].map((entry) => entry.path),
+  ...[...immutable, ...assets, ...prerendered]
+    .map((entry) => entry.path)
+    .filter((path) => !NOTATION_ASSET.test(path)),
   SHELL,
 ].map((path) => new URL(path, sw.location.href).href);
 const PRECACHED = new Set(PRECACHE_URLS);

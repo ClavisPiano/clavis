@@ -43,6 +43,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @clavis/web exec playwright install --with-deps chromium webkit
       - run: pnpm --filter @clavis/web e2e
+      # The e2e web server builds the app; check the notation (Verovio) chunk against its baseline.
+      - run: pnpm --filter @clavis/web notation-size
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

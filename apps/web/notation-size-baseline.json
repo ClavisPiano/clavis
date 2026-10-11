@@ -1,0 +1,14 @@
+{
+  "files": {
+    "_app/immutable/workers/verovio.worker.js": {
+      "raw": 8216710,
+      "gzip": 2396565,
+      "brotli": 1846346
+    }
+  },
+  "total": {
+    "raw": 8216710,
+    "gzip": 2396565,
+    "brotli": 1846346
+  }
+}

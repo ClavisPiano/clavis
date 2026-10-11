@@ -14,6 +14,7 @@
     { href: "/dev/stimulus", label: "Stimulus player" },
     { href: "/dev/audio", label: "iOS audio spike" },
     { href: "/dev/record", label: "Record fixture" },
+    { href: "/dev/notation", label: "Notation spike (Verovio)" },
   ];
 </script>
 
