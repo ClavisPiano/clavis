@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
 import { defineConfig } from "eslint/config";
+import svelte from "eslint-plugin-svelte";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
@@ -10,6 +11,7 @@ export default defineConfig(
       ".claude/**",
       "**/node_modules/**",
       "**/dist/**",
+      "apps/web/build/**",
       "**/.svelte-kit/**",
       "**/.wrangler/**",
       "**/coverage/**",
@@ -41,6 +43,24 @@ export default defineConfig(
     },
   },
   {
+    // Svelte components: type-aware via the TS parser inside <script lang="ts">.
+    files: ["apps/**/*.svelte"],
+    extends: [
+      tseslint.configs.strictTypeChecked,
+      tseslint.configs.stylisticTypeChecked,
+      svelte.configs.recommended,
+    ],
+    languageOptions: {
+      globals: globals.browser,
+      parserOptions: {
+        projectService: true,
+        extraFileExtensions: [".svelte"],
+        parser: tseslint.parser,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
     // Boundary enforcement that dependency-cruiser cannot express: runtime
     // imports of @clavis/core from audio and notation are forbidden, type-only
     // imports are allowed. (dependency-cruiser enforces the same rule too.)
@@ -62,7 +82,7 @@ export default defineConfig(
   },
   {
     // Plain JS/CJS config files at the repo root: not type-checked.
-    files: ["*.js", "*.cjs", "*.mjs"],
+    files: ["*.js", "*.cjs", "*.mjs", "apps/*/*.js"],
     languageOptions: { globals: globals.node },
   },
   {
