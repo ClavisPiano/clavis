@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@clavis/audio": "workspace:*",
+    "@clavis/content": "workspace:*",
     "@clavis/core": "workspace:*",
     "@clavis/store": "workspace:*",
     "pitchy": "4.1.0"
