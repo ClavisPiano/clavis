@@ -129,6 +129,13 @@ Goal: daily ear-training sessions (Orient + Ear, plus Away mode) on iPhone.
 
 Exit (dogfood gate): one week of daily sessions on iPhone with no data loss; median session within ±20% of budget; fix list triaged into M2.x.
 
+#### M2.x tail (dogfood fixes)
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T2.12 | **Concept cards and intro delivery** (moved forward from M3 after dogfooding: sessions never explained the key, degrees or what to do). `ConceptCardSchema` in core with degree-based audio examples; hand-written cards for the warm-up and every enabled node, each with a "What you'll do" section; card at node intro, warm-up card in full once then behind "What's this?", "About this skill" on item screens (pauses the session). See `docs/content/cards.md` | T2.10 | Schema and content tests (coverage of enabled nodes, length budget); Playwright for the three delivery points |
+| T2.13 | **Inline concept lines in feedback.** Templated one-liners per error pattern (spec 13 delivery point 2) with a link to the card, faded per spec 8 | T2.12 | Table tests from error lists to lines; Playwright: a wrong answer shows the line and the link opens the card |
+
 Suggested parallel lanes for agent sessions:
 
 - Lane A (pure TS, no device needed): T1.3, T2.1, T2.2, T2.3, T2.4, T2.5, T2.6, T2.7, T2.8
@@ -146,7 +153,7 @@ Lane A can start as soon as T0.1 merges, in parallel with the rest of M0.
 - Verovio WASM in a worker, lazy-loaded and precached; MEI generation for single notes, chords and short lines; note ids in SVG for post-attempt highlighting.
 - Generators: `bassNoteRead` (octave-exact, register-constrained pitch search per arch risk table), `read.rhythm.basic` (rhythm reading on one pitch; reuse T2.7 rhythm scorer).
 - Key-dependent items and family unlocking (R11); key of the day across Ear and Read.
-- Concept cards: schema, renderer with `smplr` audio examples, intro delivery (one per session), inline links from feedback templates. `tools/card-drafter` (build-time LLM drafting, committed output, review step).
+- Concept cards for READ nodes (schema, renderer and delivery came forward in T2.12/T2.13). `tools/card-drafter` (build-time LLM drafting, committed output, review step) if hand-writing stops scaling.
 - Placement (EAR + READ sections, R9).
 - Away-mode READ via on-screen keyboard.
 - Risk: Verovio bundle size and first-render latency on older iPads. Mitigation: measure in the first PR; fall back to a hand-rolled SVG renderer for single notes if needed.

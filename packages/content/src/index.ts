@@ -1,4 +1,10 @@
-import { SkillGraphSchema, type SkillGraph } from "@clavis/core";
+import {
+  ConceptCardSchema,
+  SkillGraphSchema,
+  type ConceptCard,
+  type SkillGraph,
+} from "@clavis/core";
+import { CARDS_V1, ORIENT_CARD_ID } from "./cards/v1.js";
 import v1 from "./graph/v1.json";
 
 export const PACKAGE_NAME = "@clavis/content";
@@ -31,4 +37,37 @@ export function parseGraph(raw: unknown): SkillGraph {
  */
 export function loadGraph(): SkillGraph {
   return parseGraph(v1);
+}
+
+export { ORIENT_CARD_ID };
+
+/** Parse raw card documents. Throws with the card index and path on schema failure. */
+export function parseCards(raw: readonly unknown[]): ConceptCard[] {
+  return raw.map((doc, i) => {
+    const result = ConceptCardSchema.safeParse(doc);
+    if (!result.success) {
+      const lines = result.error.issues.map(
+        (x) => `  ${x.path.join(".") || "(root)"}: ${x.message}`,
+      );
+      throw new Error(`Invalid concept card at index ${String(i)}:\n${lines.join("\n")}`);
+    }
+    return result.data;
+  });
+}
+
+let cards: ConceptCard[] | undefined;
+
+/** All v1 concept cards (spec 13). */
+export function loadCards(): readonly ConceptCard[] {
+  cards ??= parseCards(CARDS_V1);
+  return cards;
+}
+
+export function cardById(id: string): ConceptCard | undefined {
+  return loadCards().find((c) => c.id === id);
+}
+
+/** The card that explains `nodeId`, if one is written. */
+export function cardForNode(nodeId: string): ConceptCard | undefined {
+  return loadCards().find((c) => c.nodeIds.includes(nodeId));
 }

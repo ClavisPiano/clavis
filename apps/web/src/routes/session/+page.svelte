@@ -3,7 +3,9 @@
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import Keyboard from "../../lib/components/Keyboard.svelte";
-  import type { ExpectedResponse } from "@clavis/core";
+  import ConceptCardView from "../../lib/components/ConceptCard.svelte";
+  import { cardById, cardForNode, ORIENT_CARD_ID } from "@clavis/content";
+  import type { ConceptCard, ExpectedResponse, StimulusSpec } from "@clavis/core";
   import { INPUT_STORAGE_KEY } from "../../lib/input";
   import { updateState } from "../../lib/pwa/update-state.svelte";
   import type { SessionState } from "../../lib/session/machine";
@@ -33,6 +35,41 @@
     params?.mode === "away" && view.kind === "listening" && view.phase === "play",
   );
   const showPad = $derived(showKeyboard && expected?.play?.kind === "rhythm");
+
+  const orientCard = cardById(ORIENT_CARD_ID);
+  /** Show the warm-up card in full the first time; read once so it stays up until Continue. */
+  let firstOrient = $state(false);
+  /** A card opened with "What's this?". The session is paused underneath while it is open. */
+  let openCard = $state.raw<ConceptCard | undefined>();
+  let pausedForCard = false;
+  const introCard = $derived(view.kind === "intro" ? cardForNode(view.nodeId) : undefined);
+  const itemCard = $derived("item" in view ? cardForNode(view.item.nodeId) : undefined);
+
+  function playExample(spec: StimulusSpec): void {
+    runtime?.playExample(spec);
+  }
+
+  function showCard(card: ConceptCard | undefined): void {
+    if (!card || !machine) return;
+    if (view.kind !== "paused") {
+      machine.pause();
+      pausedForCard = true;
+    }
+    openCard = card;
+  }
+
+  function closeCard(): void {
+    openCard = undefined;
+    if (pausedForCard) {
+      pausedForCard = false;
+      resume();
+    }
+  }
+
+  function continueFromOrient(): void {
+    runtime?.markOrientCardSeen();
+    machine?.next();
+  }
 
   function clock(seconds: number): string {
     const m = Math.floor(seconds / 60);
@@ -74,6 +111,7 @@
       }
       current = result.runtime;
       runtime = result.runtime;
+      firstOrient = !result.runtime.orientCardSeen;
       const m = result.runtime.machine;
       off = m.subscribe((s) => {
         view = s;
@@ -164,11 +202,23 @@
       </div>
     {:else if view.kind === "preparing"}
       <p class="status" aria-live="polite">Getting ready...</p>
+    {:else if openCard && plan}
+      <section class="card" data-testid="card-overlay">
+        <p class="eyebrow">About this skill</p>
+        <ConceptCardView card={openCard} keyOfDay={plan.key} onplay={playExample} />
+        <button type="button" class="primary" data-testid="card-close" onclick={closeCard}>
+          Back to the session
+        </button>
+      </section>
     {:else if view.kind === "intro"}
       <section class="card" data-testid="intro">
         <p class="eyebrow">New skill</p>
-        <h1>{view.title}</h1>
-        {#if view.description}<p class="lead">{view.description}</p>{/if}
+        {#if introCard && plan}
+          <ConceptCardView card={introCard} keyOfDay={plan.key} onplay={playExample} />
+        {:else}
+          <h1>{view.title}</h1>
+          {#if view.description}<p class="lead">{view.description}</p>{/if}
+        {/if}
         <button
           type="button"
           class="primary"
@@ -185,12 +235,21 @@
         <p class="lead">
           {view.playing ? "Hear the key of the day. Settle in." : "Ready when you are."}
         </p>
-        <button
-          type="button"
-          class="primary"
-          data-testid="continue"
-          onclick={() => machine?.next()}
-        >
+        {#if firstOrient && orientCard && plan}
+          <ConceptCardView card={orientCard} keyOfDay={plan.key} onplay={playExample} />
+        {:else if orientCard}
+          <button
+            type="button"
+            class="link left"
+            data-testid="whats-this"
+            onclick={() => {
+              showCard(orientCard);
+            }}
+          >
+            What's this?
+          </button>
+        {/if}
+        <button type="button" class="primary" data-testid="continue" onclick={continueFromOrient}>
           Continue
         </button>
       </section>
@@ -200,6 +259,18 @@
         <button type="button" class="secondary" data-testid="skip" onclick={() => machine?.skip()}>
           Skip
         </button>
+        {#if itemCard}
+          <button
+            type="button"
+            class="link left"
+            data-testid="whats-this"
+            onclick={() => {
+              showCard(itemCard);
+            }}
+          >
+            About this skill
+          </button>
+        {/if}
       </section>
     {:else if view.kind === "listening"}
       <section class="card" data-testid="listening">
@@ -239,6 +310,18 @@
             Skip
           </button>
         </div>
+        {#if itemCard}
+          <button
+            type="button"
+            class="link left"
+            data-testid="whats-this"
+            onclick={() => {
+              showCard(itemCard);
+            }}
+          >
+            About this skill
+          </button>
+        {/if}
       </section>
     {:else if view.kind === "feedback"}
       <section class="card" data-testid="feedback" data-correct={view.feedback.correct}>
@@ -271,6 +354,18 @@
               Next
             </button>
           </div>
+          {#if itemCard}
+            <button
+              type="button"
+              class="link left"
+              data-testid="whats-this"
+              onclick={() => {
+                showCard(itemCard);
+              }}
+            >
+              About this skill
+            </button>
+          {/if}
         {/if}
       </section>
     {:else if view.kind === "paused"}
@@ -449,6 +544,11 @@
     background: transparent;
     color: var(--color-text-muted);
     text-decoration: underline;
+  }
+
+  button.link.left {
+    align-self: flex-start;
+    padding: 0;
   }
 
   .pad {

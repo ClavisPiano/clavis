@@ -1,0 +1,148 @@
+import { z } from "zod";
+import { cadenceStimulus } from "../items/build.js";
+import { COUNT_IN_PITCH, COUNT_IN_VELOCITY, RHYTHM_PITCH } from "../items/rhythm.js";
+import type { StimulusEvent, StimulusSpec } from "../stimulus/types.js";
+import { degreeToMidi } from "../theory/degrees.js";
+import { ALL_KEYS, tonicChroma, type Key, type MinorVariant } from "../theory/keys.js";
+
+/**
+ * Tonal examples sound in the learner's key of the day. `mode` switches to the parallel key (same
+ * tonic) when it differs, so a minor card still plays minor on a major day.
+ */
+const tonal = {
+  label: z.string().min(1),
+  mode: z.enum(["major", "minor"]).optional(),
+  minorVariant: z.enum(["natural", "harmonic", "melodic"]).optional(),
+};
+
+/** A playable example on a concept card. Pitches are scale degrees. */
+export const CardExampleSchema = z.discriminatedUnion("kind", [
+  /** The I-IV-V-I cadence the session plays before ear items. */
+  z.strictObject({ kind: z.literal("cadence"), ...tonal }),
+  /** The scale up an octave, degrees 1 to 8. */
+  z.strictObject({ kind: z.literal("scale"), ...tonal }),
+  /** Single notes one after another, optionally after the cadence. Degree 8 is the octave. */
+  z.strictObject({
+    kind: z.literal("degrees"),
+    ...tonal,
+    degrees: z.array(z.int().min(1).max(15)).min(1).max(8),
+    afterCadence: z.boolean(),
+  }),
+  /** A rhythm on one pitch, after four count-in clicks. Onsets in beats from the downbeat. */
+  z.strictObject({
+    kind: z.literal("rhythm"),
+    label: z.string().min(1),
+    onsetsBeats: z.array(z.number().min(0).max(8)).min(1),
+  }),
+]);
+export type CardExample = z.infer<typeof CardExampleSchema>;
+
+export const CardLinkSchema = z.strictObject({
+  label: z.string().min(1),
+  url: z.url({ protocol: /^https$/ }),
+});
+
+/**
+ * Theory for one skill (spec 13). `body` explains the idea; `howTo` says exactly what the learner
+ * does in each item and how it is judged.
+ */
+export const ConceptCardSchema = z.strictObject({
+  id: z.string().regex(/^concept\.[a-z0-9.-]+$/),
+  /** Nodes this card explains. Empty for cards not tied to a node, such as the warm-up. */
+  nodeIds: z.array(z.string().min(1)),
+  title: z.string().min(1),
+  /** Paragraphs. */
+  body: z.array(z.string().min(1)).min(1).max(4),
+  /** "What you'll do": one step per entry. */
+  howTo: z.array(z.string().min(1)).min(1).max(6),
+  examples: z.array(CardExampleSchema).max(4),
+  links: z.array(CardLinkSchema).max(3),
+});
+export type ConceptCard = z.infer<typeof ConceptCardSchema>;
+
+export const CARD_EXAMPLE_TEMPO_BPM = 90;
+
+/** `keyOfDay`, or its parallel key in `mode` (same tonic pitch, respelled if needed). */
+export function parallelKey(keyOfDay: Key, mode: Key["mode"]): Key {
+  if (keyOfDay.mode === mode) return keyOfDay;
+  const chroma = tonicChroma(keyOfDay);
+  const found = ALL_KEYS.find((k) => k.mode === mode && tonicChroma(k) === chroma);
+  if (!found) throw new RangeError(`no ${mode} key on ${keyOfDay.tonic}`);
+  return found;
+}
+
+/**
+ * The notes of `example` around the key of the day, with degree 1 in the octave from middle C up.
+ * Plain data for the stimulus player, like an item's stimulus.
+ */
+export function cardExampleStimulus(example: CardExample, keyOfDay: Key): StimulusSpec {
+  const key =
+    example.kind === "rhythm" ? keyOfDay : parallelKey(keyOfDay, example.mode ?? keyOfDay.mode);
+  const tonicMidi = 60 + tonicChroma(key);
+  const variant: { minorVariant: MinorVariant } | undefined =
+    example.kind !== "rhythm" && example.minorVariant !== undefined && key.mode === "minor"
+      ? { minorVariant: example.minorVariant }
+      : undefined;
+  const beat = 60 / CARD_EXAMPLE_TEMPO_BPM;
+  const note = (atSec: number, midi: number, durationSec = beat): StimulusEvent => ({
+    atSec,
+    midi: [midi],
+    durationSec,
+    velocity: 0.8,
+  });
+  switch (example.kind) {
+    case "cadence":
+      return {
+        events: cadenceStimulus(key, { tempoBpm: CARD_EXAMPLE_TEMPO_BPM }).events,
+        tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
+      };
+    case "scale":
+      return {
+        events: [1, 2, 3, 4, 5, 6, 7, 8].map((d, i) =>
+          note(i * beat * 0.75, degreeToMidi(key, d, tonicMidi, variant), beat * 0.75),
+        ),
+        tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
+      };
+    case "degrees": {
+      const cad = example.afterCadence
+        ? cadenceStimulus(key, { tempoBpm: CARD_EXAMPLE_TEMPO_BPM })
+        : undefined;
+      const start = cad?.targetStartSec ?? 0;
+      return {
+        events: [
+          ...(cad?.events ?? []),
+          ...example.degrees.map((d, i) =>
+            note(start + i * beat, degreeToMidi(key, d, tonicMidi, variant), beat * 0.9),
+          ),
+        ],
+        tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
+      };
+    }
+    case "rhythm": {
+      const clicks = [0, 1, 2, 3].map((i): StimulusEvent => ({
+        atSec: i * beat,
+        midi: [COUNT_IN_PITCH],
+        durationSec: 0.1,
+        velocity: COUNT_IN_VELOCITY,
+        role: "count-in",
+      }));
+      return {
+        events: [
+          ...clicks,
+          ...example.onsetsBeats.map((b) => note((4 + b) * beat, RHYTHM_PITCH, beat * 0.5)),
+        ],
+        tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
+      };
+    }
+  }
+}
+
+/** Words in a card's body and how-to, for the length budget in content tests. */
+export function cardWordCount(card: Pick<ConceptCard, "body" | "howTo">): {
+  body: number;
+  howTo: number;
+} {
+  const words = (xs: readonly string[]): number =>
+    xs.reduce((n, s) => n + s.split(/\s+/).filter(Boolean).length, 0);
+  return { body: words(card.body), howTo: words(card.howTo) };
+}

@@ -390,6 +390,12 @@ export class SessionMachine {
         break;
       case "feedback":
         this.#setState(before);
+        // Pausing cancelled the auto-advance timer, and auto-advancing feedback has no Next button.
+        if (before.feedback.autoAdvance) {
+          this.#schedule(AUTO_ADVANCE_MS, () => {
+            this.next();
+          });
+        }
         break;
       default:
         this.#setState(before);
