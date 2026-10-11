@@ -26,7 +26,8 @@ export function parseGraph(raw: unknown): SkillGraph {
  * snapshots are keyed by it (R8), so a stale version would silently reuse
  * snapshots computed against a different graph.
  *
- * All generators ship with `implemented: false`; T2.6 flips the first four.
+ * The four ear generators (degreeSing, degreeId, cellEcho, rhythmEcho) are implemented in
+ * core/items (T2.6); the rest ship with `implemented: false`.
  */
 export function loadGraph(): SkillGraph {
   return parseGraph(v1);
