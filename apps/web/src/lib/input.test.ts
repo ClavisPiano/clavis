@@ -33,6 +33,20 @@ describe("createInput", () => {
     target.__clavisFakeInput?.emitNote(62);
     expect(notes).toEqual([62]);
   });
+
+  it("reads tap times on the session clock when one is given", () => {
+    let now = 5000;
+    const handle = createInput("tap", { tapClockMs: () => now });
+    const tap = handle.tap;
+    if (!tap) throw new Error("no tap adapter");
+    void tap.start();
+    const onsets: number[] = [];
+    tap.onNote((n) => onsets.push(n.onsetMs));
+    now = 5200;
+    tap.press(60, performance.now());
+    expect(onsets[0]).toBeGreaterThanOrEqual(5100);
+    expect(onsets[0]).toBeLessThanOrEqual(5200);
+  });
 });
 
 describe("keyboard helpers", () => {

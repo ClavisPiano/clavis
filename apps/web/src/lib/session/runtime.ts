@@ -79,8 +79,10 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
   const audio = getAudioContextManager();
 
   // Fake input has no audio context: use performance.now for everything so nothing depends on the
-  // browser starting an AudioContext (headless WebKit may not). Other inputs share the context.
-  const contextNowMs = fake
+  // browser starting an AudioContext (headless WebKit may not). Silent audio with tap input has
+  // nothing that needs the context clock either. The mic and audible stimuli share the context.
+  const performanceClock = fake || (params.silent && params.inputKind === "tap");
+  const contextNowMs = performanceClock
     ? (): number => performance.now()
     : (): number => audio.getContext().currentTime * 1000;
   const schedule: FakeClock["schedule"] = (delayMs, fn) => {
@@ -108,6 +110,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
 
   const handle = createInput(params.inputKind, {
     clock: { now: contextNowMs, schedule },
+    ...(performanceClock ? { tapClockMs: contextNowMs } : {}),
   });
   const tap = handle.tap;
 
