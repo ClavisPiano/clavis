@@ -5,3 +5,4 @@ export * from "./memory-store.js";
 export * from "./device.js";
 export { validateBatch, compareEvents } from "./validate.js";
 export type { Clock, RandomBytes } from "../random.js";
+export * from "./learning.js";

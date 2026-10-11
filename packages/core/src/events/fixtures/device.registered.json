@@ -1,0 +1,9 @@
+{
+  "id": "01JBX00000000000000000A001",
+  "deviceId": "dev-laptop",
+  "at": 1760000000000,
+  "type": "device.registered",
+  "v": 1,
+  "platform": "web",
+  "userAgent": "Mozilla/5.0"
+}
