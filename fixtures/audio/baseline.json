@@ -12,6 +12,8 @@
       "pitchExact": 1,
       "pitchClass": 1,
       "octaveErrorRate": 0,
+      "bassMatched": 1,
+      "bassOctaveErrorRate": 0,
       "onsetMedianMs": 6.9841,
       "onsetP90Ms": 15.6463
     },
@@ -26,6 +28,8 @@
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
+        "bassMatched": 0,
+        "bassOctaveErrorRate": null,
         "onsetMedianMs": 9.2971,
         "onsetP90Ms": 15.6463
       },
@@ -39,6 +43,8 @@
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
+        "bassMatched": 1,
+        "bassOctaveErrorRate": 0,
         "onsetMedianMs": 8.2086,
         "onsetP90Ms": 10.3855
       },
@@ -52,6 +58,8 @@
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
+        "bassMatched": 0,
+        "bassOctaveErrorRate": null,
         "onsetMedianMs": 4.8073,
         "onsetP90Ms": 12.2449
       }
@@ -67,6 +75,8 @@
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
+        "bassMatched": 0,
+        "bassOctaveErrorRate": null,
         "onsetMedianMs": 9.2971,
         "onsetP90Ms": 15.6463
       },
@@ -80,6 +90,8 @@
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
+        "bassMatched": 0,
+        "bassOctaveErrorRate": null,
         "onsetMedianMs": 9.2971,
         "onsetP90Ms": 15.6463
       },
@@ -93,6 +105,8 @@
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
+        "bassMatched": 1,
+        "bassOctaveErrorRate": 0,
         "onsetMedianMs": 8.2086,
         "onsetP90Ms": 10.3855
       },
@@ -106,6 +120,8 @@
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
+        "bassMatched": 0,
+        "bassOctaveErrorRate": null,
         "onsetMedianMs": 4.8073,
         "onsetP90Ms": 12.2449
       }

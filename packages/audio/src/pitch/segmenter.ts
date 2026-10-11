@@ -106,7 +106,7 @@ interface ActiveNote {
  */
 export class NoteSegmenter {
   readonly #o: Required<Omit<NoteSegmenterOptions, "expectedRange">>;
-  readonly #range: MidiRange | undefined;
+  #range: MidiRange | undefined;
   #floor = 0;
   #lastOnsetMs = -Infinity;
   #lastEnergyEndMs = -Infinity;
@@ -121,6 +121,11 @@ export class NoteSegmenter {
     const merged: Record<string, number> = { ...DEFAULT_SEGMENTER_OPTIONS };
     for (const [k, v] of Object.entries(rest)) merged[k] = v;
     this.#o = merged as unknown as Required<Omit<NoteSegmenterOptions, "expectedRange">>;
+  }
+
+  /** Change the register hint live (for example per item). `undefined` removes it. */
+  setExpectedRange(range: MidiRange | undefined): void {
+    this.#range = range;
   }
 
   /** Drop any note in progress without emitting it. The noise floor estimate is kept. */

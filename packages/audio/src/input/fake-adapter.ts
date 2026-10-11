@@ -1,4 +1,4 @@
-import type { InputSource, NoteEvent, PitchFrame } from "@clavis/core";
+import type { InputSource, NoteEvent, PitchFrame, VoiceRange } from "@clavis/core";
 import { Emitter, type InputAdapter } from "./types.js";
 
 export interface FakeScriptStep {
@@ -48,6 +48,10 @@ export class FakeInputAdapter implements InputAdapter {
   readonly #anchorMs: number | undefined;
   #cancels: (() => void)[] = [];
   #paused = false;
+  /** The last range passed to `setExpectedRange` (null when cleared or never set). */
+  expectedRange: VoiceRange | null = null;
+  /** Every `setExpectedRange` argument in call order, for tests. */
+  readonly expectedRangeCalls: (VoiceRange | null)[] = [];
 
   constructor(options: FakeInputAdapterOptions = {}) {
     this.source = options.source ?? "mic";
@@ -90,6 +94,11 @@ export class FakeInputAdapter implements InputAdapter {
 
   resume(): void {
     this.#paused = false;
+  }
+
+  setExpectedRange(range: VoiceRange | null): void {
+    this.expectedRange = range;
+    this.expectedRangeCalls.push(range);
   }
 
   onNote(cb: (e: NoteEvent) => void): () => void {

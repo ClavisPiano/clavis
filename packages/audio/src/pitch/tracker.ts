@@ -1,6 +1,7 @@
 import type { PitchFrame } from "@clavis/core";
-import { acRms, analyseFrame, type AnalyseOptions } from "./analyse.js";
-import { centsFromNearest } from "./midi.js";
+import { DEFAULT_ANALYSE_OPTIONS, acRms, analyseFrame, type AnalyseOptions } from "./analyse.js";
+import { centsFromNearest, type MidiRange } from "./midi.js";
+import { chooseOctave } from "./octave.js";
 
 export interface PitchTrackerOptions extends AnalyseOptions {
   sampleRate: number;
@@ -10,6 +11,13 @@ export interface PitchTrackerOptions extends AnalyseOptions {
   hop?: number;
   /** A chunk starting more than this far from where the previous one ended restarts tracking. */
   gapToleranceMs?: number;
+  /**
+   * Register of the expected answer. Enables the octave check (`chooseOctave`) on every frame;
+   * without it the check runs only for estimates below 130 Hz.
+   */
+  expectedRange?: MidiRange;
+  /** Turn the octave check off entirely. Default false. */
+  disableOctaveCheck?: boolean;
 }
 
 /** Energy of the newest hop of a window, with its own (finer) time span. */
@@ -40,6 +48,8 @@ export class PitchTracker {
   readonly hop: number;
   readonly #analyse: AnalyseOptions;
   readonly #gapToleranceMs: number;
+  readonly #octaveCheck: boolean;
+  #range: MidiRange | undefined;
   #buf = new Float32Array(0);
   /** Absolute sample index (0 = first real sample) of #buf[0]. */
   #bufStart = 0;
@@ -56,6 +66,8 @@ export class PitchTracker {
       throw new RangeError("hop must be in 1..windowSize");
     }
     this.#gapToleranceMs = options.gapToleranceMs ?? 5;
+    this.#octaveCheck = options.disableOctaveCheck !== true;
+    this.#range = options.expectedRange;
     this.#analyse = {
       ...(options.minClarity !== undefined && { minClarity: options.minClarity }),
       ...(options.minHz !== undefined && { minHz: options.minHz }),
@@ -63,6 +75,11 @@ export class PitchTracker {
       ...(options.minRms !== undefined && { minRms: options.minRms }),
     };
     this.reset();
+  }
+
+  /** Change the register used by the octave check. `undefined` removes it. */
+  setExpectedRange(range: MidiRange | undefined): void {
+    this.#range = range;
   }
 
   /** Forget all buffered audio. The next chunk re-anchors the clock. */
@@ -98,12 +115,20 @@ export class PitchTracker {
       const winStartAbs = this.#bufStart + pos;
       const winEndAbs = winStartAbs + this.windowSize;
       const r = analyseFrame(window, this.sampleRate, this.#analyse);
+      const hz =
+        r.hz !== null && this.#octaveCheck
+          ? chooseOctave(window, this.sampleRate, r.hz, {
+              range: this.#range,
+              minHz: this.#analyse.minHz ?? DEFAULT_ANALYSE_OPTIONS.minHz,
+              maxHz: this.#analyse.maxHz ?? DEFAULT_ANALYSE_OPTIONS.maxHz,
+            })
+          : r.hz;
       const frame: PitchFrame = {
-        hz: r.hz,
+        hz,
         confidence: r.clarity,
         atMs: this.#timeOf(winStartAbs + this.windowSize / 2),
       };
-      if (r.hz !== null) frame.cents = centsFromNearest(r.hz);
+      if (hz !== null) frame.cents = centsFromNearest(hz);
       out.push({
         frame,
         energy: {

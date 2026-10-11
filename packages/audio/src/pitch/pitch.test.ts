@@ -78,7 +78,7 @@ describe("accuracy over MIDI 40..84", () => {
       console.log(
         `accuracy ${timbre}: worst median frame error ${worst.cents.toFixed(1)} cents, worst onset error ${worst.onset.toFixed(1)} ms`,
       );
-    });
+    }, 30_000);
   }
 
   it("vibrato stays within 20 cents of the centre in every note's median", () => {

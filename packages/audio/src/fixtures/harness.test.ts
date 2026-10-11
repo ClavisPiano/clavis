@@ -196,3 +196,54 @@ describe("runAccuracy and manifest", () => {
     expect(() => parseManifest([{ ...base, kind: "sung-degree", notes: [] }])).toThrow();
   });
 });
+
+describe("bass register octave metric", () => {
+  const piano = (id: string, midis: number[]): FixtureEntry => ({
+    ...entry(id, "piano-single", midis),
+    instrument: "acoustic-piano",
+  });
+
+  it("is n/a (null) when no piano entry has bass notes, and the report says so", () => {
+    const manifest = [piano("hi", [60, 72]), entry("v", "sung-degree", [40])];
+    const r = scoreDetections(
+      manifest,
+      new Map([
+        ["hi", [det(60, 0), det(72, 500)]],
+        ["v", [det(52, 0)]],
+      ]),
+    );
+    expect(r.overall.bassMatched).toBe(0);
+    expect(r.overall.bassOctaveErrorRate).toBeNull();
+    expect(formatReport(manifest, r)).toContain("n/a");
+    expect(compareToBaseline(r, r)).toEqual([]);
+  });
+
+  it("counts octave errors among matched C2..B2 notes on piano entries only", () => {
+    const manifest = [piano("lo", [36, 40, 47, 48])];
+    const r = scoreDetections(
+      manifest,
+      new Map([["lo", [det(48, 0), det(40, 500), det(59, 1000), det(60, 1500)]]]),
+    );
+    // C2 read an octave high, E2 exact, B2 an octave high; C3 is outside the bass register.
+    expect(r.overall.bassMatched).toBe(3);
+    expect(r.overall.bassOctaveErrorRate).toBeCloseTo(2 / 3);
+  });
+
+  it("flags a rise over the baseline, and treats an old baseline without the field as n/a", () => {
+    const manifest = [piano("lo", [36, 40])];
+    const exact = scoreDetections(manifest, new Map([["lo", [det(36, 0), det(40, 500)]]]));
+    const off = scoreDetections(manifest, new Map([["lo", [det(48, 0), det(40, 500)]]]));
+    expect(compareToBaseline(off, exact).some((p) => p.includes("bass octave error"))).toBe(true);
+    expect(compareToBaseline(exact, off)).toEqual([]);
+    const legacy = JSON.parse(JSON.stringify(off)) as typeof off;
+    for (const m of [
+      legacy.overall,
+      ...Object.values(legacy.byKind),
+      ...Object.values(legacy.entries),
+    ]) {
+      Reflect.deleteProperty(m, "bassOctaveErrorRate");
+      Reflect.deleteProperty(m, "bassMatched");
+    }
+    expect(compareToBaseline(off, legacy)).toEqual([]);
+  });
+});

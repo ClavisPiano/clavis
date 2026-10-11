@@ -36,6 +36,9 @@ scope.addEventListener("message", (event) => {
     case "resume":
       core.resume();
       break;
+    case "range":
+      core.setExpectedRange(message.range);
+      break;
     case "stop":
       core.stop();
       audioPort?.close();

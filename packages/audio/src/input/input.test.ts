@@ -224,6 +224,7 @@ describe("MicInputAdapter", () => {
       },
       pause: () => calls.push("pause"),
       resume: () => calls.push("resume"),
+      setExpectedRange: (range) => calls.push(`range:${JSON.stringify(range)}`),
       onNote: (cb) => {
         noteListeners.add(cb);
         return () => {
@@ -277,5 +278,39 @@ describe("MicInputAdapter", () => {
     mic.note(base, "start");
     expect(notes).toHaveLength(1);
     expect(mic.calls).toEqual(["start", "pause", "resume", "stop"]);
+  });
+
+  it("forwards the expected range to the mic source, before and after start", async () => {
+    const mic = fakeMic();
+    const adapter = new MicInputAdapter({ source: mic.source, getContext: () => context });
+    adapter.setExpectedRange({ low: 36, high: 64 });
+    await adapter.start();
+    adapter.setExpectedRange(null);
+    expect(mic.calls).toEqual(['range:{"low":36,"high":64}', "start", "range:null"]);
+  });
+
+  it("tolerates a source without setExpectedRange", () => {
+    const mic = fakeMic();
+    const bare: MicSourceLike = { ...mic.source };
+    delete bare.setExpectedRange;
+    const adapter = new MicInputAdapter({ source: bare, getContext: () => context });
+    expect(() => {
+      adapter.setExpectedRange({ low: 36, high: 64 });
+    }).not.toThrow();
+  });
+});
+
+describe("setExpectedRange on the other adapters", () => {
+  it("the fake records every call, and tap ignores it", () => {
+    const fake = new FakeInputAdapter();
+    expect(fake.expectedRange).toBeNull();
+    fake.setExpectedRange({ low: 36, high: 64 });
+    fake.setExpectedRange(null);
+    expect(fake.expectedRangeCalls).toEqual([{ low: 36, high: 64 }, null]);
+    expect(fake.expectedRange).toBeNull();
+    const tap = new TapInputAdapter({ getContext: () => undefined });
+    expect(() => {
+      tap.setExpectedRange();
+    }).not.toThrow();
   });
 });

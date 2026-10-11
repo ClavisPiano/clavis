@@ -53,6 +53,10 @@ export class TapInputAdapter implements InputAdapter {
     this.#paused = false;
   }
 
+  setExpectedRange(): void {
+    // Keys are exact, so there is no octave to resolve.
+  }
+
   onNote(cb: (e: NoteEvent) => void): () => void {
     return this.#notes.add(cb);
   }

@@ -1,4 +1,5 @@
 import type { NoteEvent, PitchFrame } from "@clavis/core";
+import type { MidiRange } from "./midi.js";
 import { NoteSegmenter, type NoteSegmenterOptions, type SegmenterEvent } from "./segmenter.js";
 import { PitchTracker, type PitchTrackerOptions } from "./tracker.js";
 
@@ -23,7 +24,12 @@ export class PitchPipeline {
   readonly segmenter: NoteSegmenter;
 
   constructor(sampleRate: number, options: Pick<PipelineOptions, "tracker" | "segmenter"> = {}) {
-    this.tracker = new PitchTracker({ ...options.tracker, sampleRate });
+    const range = options.segmenter?.expectedRange;
+    this.tracker = new PitchTracker({
+      ...(range && { expectedRange: range }),
+      ...options.tracker,
+      sampleRate,
+    });
     this.segmenter = new NoteSegmenter(options.segmenter);
   }
 
@@ -35,6 +41,12 @@ export class PitchPipeline {
       events.push(...this.segmenter.push(frame, energy));
     }
     return { frames, events };
+  }
+
+  /** Set the register hint for both the octave check and the segmenter's fold. */
+  setExpectedRange(range: MidiRange | undefined): void {
+    this.tracker.setExpectedRange(range);
+    this.segmenter.setExpectedRange(range);
   }
 
   /** Discard buffered audio and any note in progress. The noise floor estimate is kept. */
