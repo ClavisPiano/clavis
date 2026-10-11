@@ -21,7 +21,7 @@ import {
   type VoiceRange,
 } from "@clavis/core";
 import type { InputAdapter } from "@clavis/audio";
-import type { ScoreInput, ScoreResult } from "@clavis/scoring";
+import { combineParts, type ScoreInput, type ScoreResult } from "@clavis/scoring";
 import { checkPlayDone, checkSingDone, type DoneCheck } from "./completion";
 import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
 import { orientSpec } from "./orient";
@@ -176,7 +176,8 @@ type Listener = (state: SessionState) => void;
 export function phasesFor(expected: ExpectedResponse, mode: SessionMode): Phase[] {
   const sing = expected.sing !== undefined;
   const play = expected.play !== undefined;
-  // R12: at the instrument, sing then play. In Away mode the sung part stands alone.
+  // R12: at the instrument, sing then play, and both must be right. In Away mode the sung part
+  // stands alone.
   if (mode === "away") return sing ? ["sing"] : ["play"];
   if (sing && play) return ["sing", "play"];
   return play ? ["play"] : ["sing"];
@@ -194,16 +195,6 @@ export function promptFor(
   if (play?.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
   return mode === "away" ? "Tap it on the keyboard" : "Play it";
 }
-
-const dedupe = (errors: AttemptError[]): AttemptError[] => {
-  const seen = new Set<string>();
-  return errors.filter((e) => {
-    const key = JSON.stringify(e);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
 
 export class SessionMachine {
   readonly #d: SessionDeps;
@@ -838,7 +829,6 @@ export class SessionMachine {
   } {
     const d = this.#d;
     const expected = cur.instance.expected;
-    const parts: ScoreResult[] = [];
     let sing: ScoreResult | undefined;
     let play: ScoreResult | undefined;
     if (cur.phases.includes("sing") && expected.sing) {
@@ -850,7 +840,6 @@ export class SessionMachine {
         source: this.#adapterFor("sing").source,
         part: "sing",
       });
-      parts.push(sing);
     }
     if (cur.phases.includes("play") && expected.play) {
       play = d.score({
@@ -861,17 +850,17 @@ export class SessionMachine {
         source: d.input.source,
         part: "play",
       });
-      parts.push(play);
     }
-    const main = play ?? sing;
-    if (!main) throw new Error("item has nothing to score");
+    if (!play && !sing) throw new Error("item has nothing to score");
     const subScores: ScoreResult["subScores"] = {};
     if (sing?.subScores.sing !== undefined) subScores.sing = sing.subScores.sing;
     if (play?.subScores.play !== undefined) subScores.play = play.subScores.play;
+    // R12: correct only when every part is; errors tagged with their part.
+    const combined = combineParts({ sing, play });
     return {
-      outcome: main.outcome,
+      outcome: combined.outcome,
       subScores,
-      errors: dedupe(parts.flatMap((p) => p.errors)),
+      errors: combined.errors,
       source: play ? d.input.source : this.#adapterFor("sing").source,
     };
   }

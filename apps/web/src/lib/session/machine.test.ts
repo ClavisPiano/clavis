@@ -230,7 +230,7 @@ describe("sing then play (R12)", () => {
     expect(attempt?.errors).toBeUndefined();
   });
 
-  it("a wrong sung pitch with a right played note is correct (play rates) but logs the sing score", async () => {
+  it("a wrong sung pitch with a right played note is incorrect, and the issue says you sang it", async () => {
     const h = await makeHarness({ budgetSec: 90 });
     await h.machine.start();
     h.machine.next();
@@ -244,10 +244,15 @@ describe("sing then play (R12)", () => {
     await answer(h);
     await until(h, isKind("feedback"));
     const attempt = byType(await h.log(), "attempt.completed")[0];
-    expect(attempt?.outcome.correct).toBe(true);
+    expect(attempt?.outcome.correct).toBe(false);
     expect(attempt?.subScores?.sing).toBe(0);
     expect(attempt?.subScores?.play).toBe(1);
     expect(attempt?.errors?.[0]?.code).toMatch(/^degree\.confusion\./);
+    expect(attempt?.errors?.[0]?.detail?.part).toBe("sing");
+    const fb = h.machine.state;
+    if (fb.kind !== "feedback") throw new Error("expected feedback");
+    expect(fb.feedback.correct).toBe(false);
+    expect(fb.feedback.lines[0]).toMatch(/^You sang /);
   });
 
   it("the Done button ends a phase early", async () => {

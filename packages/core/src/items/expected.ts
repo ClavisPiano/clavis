@@ -7,7 +7,8 @@ import { z } from "zod";
  * example degree labels, so scoring never calls theory functions.
  *
  * R12: an attempt can have a sung part and a played part. At the instrument
- * the rating uses `play`; in Away mode it uses `sing` (or `play` via taps).
+ * both must be right for the attempt to be correct; in Away mode the single
+ * part (`sing`, or `play` via taps) decides.
  */
 
 const midi = z.int().min(0).max(127);

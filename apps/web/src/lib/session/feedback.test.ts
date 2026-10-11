@@ -4,9 +4,17 @@ import { buildFeedback, describeError, issueLines, showDetail } from "./feedback
 
 describe("describeError", () => {
   const table: [AttemptError, string][] = [
-    [{ code: "degree.confusion.6-5" }, "You found 5; the target was 6"],
-    [{ code: "degree.confusion.b3-3" }, "You found 3; the target was b3"],
+    [{ code: "degree.confusion.6-5" }, "You played 5; the target was 6"],
+    [
+      { code: "degree.confusion.b3-3", detail: { part: "play" } },
+      "You played 3; the target was b3",
+    ],
+    [{ code: "degree.confusion.1-5", detail: { part: "sing" } }, "You sang 5; the target was 1"],
     [{ code: "degree.confusion." }, "That was a different note from the target"],
+    [
+      { code: "degree.confusion.", detail: { part: "sing" } },
+      "You sang a different note from the target",
+    ],
     [{ code: "pitch.wrong" }, "That was not the target note"],
     [{ code: "pitch.octave" }, "Right note, wrong octave"],
     [{ code: "response.timeout" }, "No answer was heard in time"],
@@ -28,7 +36,14 @@ describe("describeError", () => {
         code: "sequence.wrong-note",
         detail: { index: 0, expectedDegree: "5", playedDegree: "4" },
       },
-      "Note 1: you found 4; the target was 5",
+      "Note 1: you played 4; the target was 5",
+    ],
+    [
+      {
+        code: "sequence.wrong-note",
+        detail: { index: 2, expectedDegree: "3", playedDegree: "2", part: "sing" },
+      },
+      "Note 3: you sang 2; the target was 3",
     ],
     [{ code: "sequence.wrong-note", detail: { index: 1 } }, "Note 2 was not the target"],
     [{ code: "something.new" }, "Something was off"],
