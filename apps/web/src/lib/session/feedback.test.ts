@@ -91,3 +91,36 @@ describe("fading by node state", () => {
     ).toEqual({ correct: false, detailed: false, lines: [], autoAdvance: false });
   });
 });
+
+describe("concept tips in feedback", () => {
+  const confusion: AttemptError[] = [{ code: "degree.confusion.3-5" }];
+  const tip =
+    "3 is the bright middle of the home chord, while 5 is the strong, open top of the home chord.";
+
+  it.each([
+    ["learning, wrong", "learning", 0, false, tip],
+    ["fluent, wrong, detail shown", "fluent", 2, false, tip],
+    ["fluent, wrong, detail faded", "fluent", 1, false, undefined],
+    ["mastered, wrong", "mastered", 5, false, undefined],
+    ["learning, right overall with a wrong sung part", "learning", 0, true, tip],
+  ] as const)("%s", (_name, nodeState, attemptIndex, correct, expected) => {
+    const fb = buildFeedback({ nodeState, attemptIndex, correct, errors: confusion });
+    expect(fb.tip).toBe(expected);
+  });
+
+  it("has no tip without errors", () => {
+    const fb = buildFeedback({ nodeState: "learning", attemptIndex: 0, correct: true, errors: [] });
+    expect(fb.tip).toBeUndefined();
+  });
+
+  it("reads degree labels in the item's mode", () => {
+    const fb = buildFeedback({
+      nodeState: "learning",
+      attemptIndex: 0,
+      correct: false,
+      errors: confusion,
+      mode: "minor",
+    });
+    expect(fb.tip).toMatch(/^3 is the dark middle of the minor home chord/);
+  });
+});

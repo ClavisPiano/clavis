@@ -1,3 +1,4 @@
+import { conceptTip, type TipMode } from "@clavis/content";
 import type { AttemptError, NodeState } from "@clavis/core";
 
 /*
@@ -109,6 +110,12 @@ export interface FeedbackView {
   detailed: boolean;
   /** Correct and faded out: show a brief tick and move on by itself. */
   autoAdvance: boolean;
+  /**
+   * One-line concept explanation for a listed issue (spec 13), shown with a link to the node's
+   * card. Only on detailed attempts before the node is mastered. An attempt can be correct
+   * overall and still carry an issue (a wrong sung note before a right played one).
+   */
+  tip?: string;
 }
 
 export function buildFeedback(opts: {
@@ -116,13 +123,20 @@ export function buildFeedback(opts: {
   attemptIndex: number;
   correct: boolean;
   errors: readonly AttemptError[];
+  /** The item's mode: degree labels mean different notes in major and minor. */
+  mode?: TipMode;
 }): FeedbackView {
   const detailed = showDetail(opts.nodeState, opts.attemptIndex, opts.correct);
+  const tip =
+    detailed && opts.nodeState !== "mastered"
+      ? conceptTip(opts.errors, opts.mode ?? "major")
+      : undefined;
   return {
     correct: opts.correct,
     detailed,
     lines: detailed ? issueLines(opts.errors) : [],
     autoAdvance: !detailed && opts.correct,
+    ...(tip ? { tip: tip.text } : {}),
   };
 }
 

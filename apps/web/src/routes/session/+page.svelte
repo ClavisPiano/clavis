@@ -333,6 +333,23 @@
             {#each view.feedback.lines as line (line)}<li>{line}</li>{/each}
           </ul>
         {/if}
+        {#if view.feedback.tip}
+          <div class="tip" data-testid="tip">
+            <p>{view.feedback.tip}</p>
+            {#if itemCard}
+              <button
+                type="button"
+                class="link left"
+                data-testid="tip-more"
+                onclick={() => {
+                  showCard(itemCard);
+                }}
+              >
+                More about this
+              </button>
+            {/if}
+          </div>
+        {/if}
         {#if !view.feedback.autoAdvance}
           <div class="row">
             {#if view.canReplay}
@@ -354,7 +371,7 @@
               Next
             </button>
           </div>
-          {#if itemCard}
+          {#if itemCard && !view.feedback.tip}
             <button
               type="button"
               class="link left"
@@ -549,6 +566,21 @@
   button.link.left {
     align-self: flex-start;
     padding: 0;
+  }
+
+  .tip {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-left: 3px solid var(--color-accent);
+    background: var(--color-bg);
+    border-radius: var(--radius-md);
+  }
+
+  .tip p {
+    margin: 0;
+    line-height: 1.5;
   }
 
   .pad {

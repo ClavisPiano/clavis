@@ -80,3 +80,47 @@ test.describe("concept cards", () => {
     await expect(page.getByTestId("session")).toHaveAttribute("data-state", "orient");
   });
 });
+
+test.describe("concept tips in feedback", () => {
+  test.setTimeout(90_000);
+
+  test("a wrong sung degree shows a tip whose link opens the card", async ({ page }) => {
+    await page.goto("/session?input=fake&budget=90");
+    await page.getByTestId("start").click();
+    await page.getByTestId("continue").click(); // warm-up
+    await page.getByTestId("continue").click(); // intro card
+
+    // Sing a fourth below the target: always another diatonic degree (1->5, 3->7, 5->2).
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-sing");
+    await page.evaluate(() => {
+      const session = window.__clavisSession;
+      const fake = window.__clavisFakeInput;
+      const sing = session?.expected?.sing;
+      if (!fake || sing?.kind !== "sungPitch") throw new Error("expected a sung degree");
+      const hz = 440 * 2 ** ((sing.targetMidi - 5 - 69) / 12);
+      const base = fake.nowMs() + 300;
+      for (let t = 0; t <= 400; t += 20) fake.emitFrame({ hz, confidence: 1, atMs: base + t });
+    });
+    // Then play the right note so the attempt completes.
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-play");
+    await page.evaluate(() => {
+      const play = window.__clavisSession?.expected?.play;
+      const fake = window.__clavisFakeInput;
+      if (!fake || play?.kind !== "pitchClass") throw new Error("expected a played degree");
+      fake.emitNote(play.targetMidi, { onsetMs: fake.nowMs() + 300 });
+    });
+
+    // The played answer decides the result; the wrong sung note is listed as an issue.
+    const feedback = page.getByTestId("feedback");
+    await expect(feedback.getByTestId("issues")).toContainText("the target was");
+    const tip = feedback.getByTestId("tip");
+    await expect(tip).toContainText(/ while /);
+    await tip.getByTestId("tip-more").click();
+    await expect(page.getByTestId("card-overlay").getByTestId("concept-card")).toHaveAttribute(
+      "data-card-id",
+      "concept.degrees.major.135",
+    );
+    await page.getByTestId("card-close").click();
+    await expect(page.getByTestId("session")).toHaveAttribute("data-state", "feedback");
+  });
+});

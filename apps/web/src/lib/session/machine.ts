@@ -908,7 +908,13 @@ export class SessionMachine {
       const attemptIndex =
         (this.#priorAttempts[nodeId] ?? 0) + (this.#sessionAttempts[nodeId] ?? 0);
       this.#sessionAttempts[nodeId] = (this.#sessionAttempts[nodeId] ?? 0) + 1;
-      const feedback = buildFeedback({ nodeState, attemptIndex, correct: outcome.correct, errors });
+      const feedback = buildFeedback({
+        nodeState,
+        attemptIndex,
+        correct: outcome.correct,
+        errors,
+        mode: cur.instance.presentation.mode === "minor" ? "minor" : "major",
+      });
 
       await d.append([
         {
