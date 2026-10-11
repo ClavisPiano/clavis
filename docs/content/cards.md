@@ -16,4 +16,4 @@ Concept cards carry the theory (spec 13). They live in `packages/content/src/car
 - Intro: the card replaces the intro screen when a node is first introduced (one per session).
 - Warm-up: the `concept.orient` card is shown in full on the first warm-up on a device, then behind "What's this?".
 - Mid-session: "About this skill" on item and feedback screens opens the card and pauses the session until it is closed.
-- Inline feedback lines that link to cards are T2.13.
+- Feedback tips (T2.13): `packages/content/src/tips.ts` maps scoring error codes to one-line explanations (degree confusions in the item's mode, rhythm timing, no sung note). The first error with a tip wins. Tips show on detailed feedback before a node is mastered, with "More about this" opening the node's card. Practical issues (slightly flat or sharp, timeouts) get no tip: the issue line already says it.
