@@ -13,6 +13,7 @@
     { href: "/dev/state", label: "Learner state" },
     { href: "/dev/stimulus", label: "Stimulus player" },
     { href: "/dev/audio", label: "iOS audio spike" },
+    { href: "/dev/record", label: "Record fixture" },
   ];
 </script>
 

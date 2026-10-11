@@ -8,11 +8,14 @@
     "./web": "./src/web.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "accuracy:update": "ACCURACY_UPDATE=1 vitest run src/fixtures/accuracy.test.ts",
+    "fixtures:synthetic": "node scripts/make-synthetic-fixtures.mjs"
   },
   "dependencies": {
     "@clavis/core": "workspace:*",
     "pitchy": "4.1.0",
-    "smplr": "1.1.0"
+    "smplr": "1.1.0",
+    "zod": "4.6.5"
   }
 }

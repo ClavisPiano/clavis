@@ -10,3 +10,6 @@ docs
 .claude
 build
 apps/web/static/samples
+fixtures/audio/baseline.json
+fixtures/audio/manifest.json
+fixtures/audio/REPORT.md

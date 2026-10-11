@@ -1,0 +1,173 @@
+[
+  {
+    "id": "synthetic-sung-g-low",
+    "file": "synthetic/sung-g-low.wav",
+    "kind": "sung-degree",
+    "instrument": "voice",
+    "device": "synthetic",
+    "sampleRate": 22050,
+    "notes": [
+      {
+        "midi": 43,
+        "onsetMs": 300,
+        "offsetMs": 850
+      },
+      {
+        "midi": 47,
+        "onsetMs": 1100,
+        "offsetMs": 1650
+      },
+      {
+        "midi": 50,
+        "onsetMs": 1900,
+        "offsetMs": 2450
+      },
+      {
+        "midi": 54,
+        "onsetMs": 2700,
+        "offsetMs": 3250
+      }
+    ],
+    "expectedRange": {
+      "low": 41,
+      "high": 56
+    },
+    "tags": [
+      "synthetic",
+      "vibrato"
+    ]
+  },
+  {
+    "id": "synthetic-sung-c-high",
+    "file": "synthetic/sung-c-high.wav",
+    "kind": "sung-degree",
+    "instrument": "voice",
+    "device": "synthetic",
+    "sampleRate": 22050,
+    "notes": [
+      {
+        "midi": 60,
+        "onsetMs": 300,
+        "offsetMs": 850
+      },
+      {
+        "midi": 64,
+        "onsetMs": 1100,
+        "offsetMs": 1650
+      },
+      {
+        "midi": 67,
+        "onsetMs": 1900,
+        "offsetMs": 2450
+      },
+      {
+        "midi": 71,
+        "onsetMs": 2700,
+        "offsetMs": 3250
+      }
+    ],
+    "expectedRange": {
+      "low": 58,
+      "high": 73
+    },
+    "tags": [
+      "synthetic",
+      "vibrato"
+    ]
+  },
+  {
+    "id": "synthetic-piano-singles",
+    "file": "synthetic/piano-singles.wav",
+    "kind": "piano-single",
+    "instrument": "acoustic-piano",
+    "device": "synthetic",
+    "sampleRate": 22050,
+    "notes": [
+      {
+        "midi": 33,
+        "onsetMs": 200,
+        "offsetMs": 700
+      },
+      {
+        "midi": 45,
+        "onsetMs": 900,
+        "offsetMs": 1400
+      },
+      {
+        "midi": 57,
+        "onsetMs": 1600,
+        "offsetMs": 2100
+      },
+      {
+        "midi": 69,
+        "onsetMs": 2300,
+        "offsetMs": 2800
+      },
+      {
+        "midi": 81,
+        "onsetMs": 3000,
+        "offsetMs": 3500
+      },
+      {
+        "midi": 93,
+        "onsetMs": 3700,
+        "offsetMs": 4200
+      }
+    ],
+    "tags": [
+      "synthetic"
+    ]
+  },
+  {
+    "id": "synthetic-piano-melody",
+    "file": "synthetic/piano-melody.wav",
+    "kind": "piano-sequence",
+    "instrument": "acoustic-piano",
+    "device": "synthetic",
+    "sampleRate": 22050,
+    "notes": [
+      {
+        "midi": 60,
+        "onsetMs": 200,
+        "offsetMs": 600
+      },
+      {
+        "midi": 60,
+        "onsetMs": 800,
+        "offsetMs": 1200
+      },
+      {
+        "midi": 67,
+        "onsetMs": 1400,
+        "offsetMs": 1800
+      },
+      {
+        "midi": 67,
+        "onsetMs": 2000,
+        "offsetMs": 2400
+      },
+      {
+        "midi": 69,
+        "onsetMs": 2600,
+        "offsetMs": 3000
+      },
+      {
+        "midi": 69,
+        "onsetMs": 3200,
+        "offsetMs": 3600
+      },
+      {
+        "midi": 67,
+        "onsetMs": 3800,
+        "offsetMs": 4500
+      }
+    ],
+    "expectedRange": {
+      "low": 55,
+      "high": 76
+    },
+    "tags": [
+      "synthetic"
+    ]
+  }
+]
