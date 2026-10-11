@@ -2,6 +2,19 @@
   import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import { readInstallEnv, shouldShowIosInstallHint } from "../lib/pwa/ios";
+  import { useLearner } from "../lib/learner.svelte";
+  import {
+    deviceTzOffsetMin,
+    effectiveSettings,
+    isFirstRun,
+    lastDays,
+    minutesLabel,
+    todaySummary,
+    weekProgress,
+  } from "../lib/home";
+
+  const learner = useLearner();
+  let now = $state(Date.now());
 
   const HINT_DISMISSED_KEY = "clavis.install-hint-dismissed";
   let showHint = $state(false);
@@ -14,7 +27,17 @@
       // Storage unavailable: show the hint every time.
     }
     showHint = !dismissed && shouldShowIosInstallHint(readInstallEnv());
+    void learner.init().then(() => {
+      now = Date.now();
+    });
   });
+
+  const snap = $derived(learner.state);
+  const settings = $derived(effectiveSettings(snap?.settings ?? {}));
+  const firstRun = $derived(snap ? isFirstRun(snap) : false);
+  const today = $derived(snap ? todaySummary(snap, now, deviceTzOffsetMin()) : undefined);
+  const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
+  const week = $derived(weekProgress(cells, settings.weeklyTargetDays));
 
   function dismiss() {
     showHint = false;
@@ -37,11 +60,72 @@
 {/if}
 
 <h1>Clavis</h1>
-<p>Piano and ear training, a few focused minutes a day.</p>
+
+{#if firstRun}
+  <section class="card" data-testid="welcome" aria-labelledby="welcome-h">
+    <h2 id="welcome-h">Welcome</h2>
+    <p>
+      A session is a short, focused run of ear and piano exercises. You sing or play, Clavis
+      listens, and it picks what to practise next. A few minutes a day is enough.
+    </p>
+    <p>
+      Before you start, check your comfortable singing range in
+      <a href={resolve("/settings")}>Settings</a>.
+    </p>
+  </section>
+{/if}
+
 <div class="actions">
-  <a class="button" href={resolve("/session")}>Start session</a>
-  <a class="button secondary" href={resolve("/session?mode=away")}>Away session</a>
+  <a class="button primary" href={resolve("/session")} data-testid="start-session">
+    <strong>Start session</strong>
+    <span>{minutesLabel(settings.budgetSec)}</span>
+  </a>
+  <a class="button secondary" href={resolve("/session?mode=away")} data-testid="start-away">
+    <strong>Away session</strong>
+    <span>{minutesLabel(settings.awayBudgetSec)}, no piano needed</span>
+  </a>
 </div>
+
+{#if snap && today && !firstRun}
+  <section class="card" aria-labelledby="today-h">
+    <h2 id="today-h">Today</h2>
+    <p data-testid="today-status">
+      {#if today.completed}
+        Session done today.
+      {:else}
+        No session finished yet today.
+      {/if}
+      {today.minutes} min practised.
+    </p>
+    {#if today.hasOpenSession}
+      <p data-testid="resume-note">
+        A session was started but not finished.
+        <a href={resolve("/session")}>Resume or start fresh</a>
+      </p>
+    {/if}
+  </section>
+
+  <section class="card" aria-labelledby="week-h">
+    <h2 id="week-h">Last 7 days</h2>
+    <ol class="days" data-testid="days">
+      {#each cells as cell (cell.day)}
+        <li
+          class="day level-{cell.level}"
+          class:today={cell.isToday}
+          data-testid="day-cell"
+          data-level={cell.level}
+          aria-label="{cell.weekday} {cell.day}: {cell.minutes} min{cell.isToday ? ', today' : ''}"
+        >
+          <span class="wd">{cell.weekday}</span>
+          <span class="min">{cell.minutes > 0 ? cell.minutes : ""}</span>
+        </li>
+      {/each}
+    </ol>
+    <p class="muted" data-testid="week-progress">
+      This week: {week.daysPractised} of {week.target} days
+    </p>
+  </section>
+{/if}
 
 <style>
   .hint {
@@ -72,7 +156,86 @@
 
   .actions {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: var(--space-3);
+    margin-bottom: var(--space-5);
+  }
+
+  .button {
+    flex-direction: column;
+    padding: var(--space-3) var(--space-4);
+    font-weight: 400;
+  }
+
+  .button strong {
+    font-weight: 700;
+  }
+
+  .button.primary {
+    font-size: 1.125rem;
+  }
+
+  .card {
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .card h2 {
+    font-size: 1.125rem;
+  }
+
+  .card p:last-child {
+    margin-bottom: 0;
+  }
+
+  .muted {
+    color: var(--color-text-muted);
+  }
+
+  .days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: var(--space-1);
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--space-3);
+  }
+
+  .day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 3.5rem;
+    padding: var(--space-1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .day.today {
+    border-color: var(--color-text);
+  }
+
+  .day.level-1 {
+    background: color-mix(in srgb, var(--color-accent) 25%, var(--color-surface));
+  }
+
+  .day.level-2 {
+    background: color-mix(in srgb, var(--color-accent) 55%, var(--color-surface));
+  }
+
+  .day.level-3 {
+    background: var(--color-accent);
+    color: var(--color-accent-contrast);
+  }
+
+  .day .min {
+    font-weight: 700;
+    min-height: 1em;
   }
 </style>

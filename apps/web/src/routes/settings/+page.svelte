@@ -1,9 +1,347 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { resolve } from "$app/paths";
+  import { createUlidGenerator } from "@clavis/core";
+  import { useLearner } from "../../lib/learner.svelte";
+  import {
+    AWAY_BUDGET_OPTIONS_MIN,
+    BUDGET_OPTIONS_MIN,
+    PICKER_MIDI_MAX,
+    PICKER_MIDI_MIN,
+    RANGE_PRESETS,
+    WEEKLY_TARGET_OPTIONS,
+    effectiveSettings,
+    noteName,
+    presetFor,
+    rangeError,
+    settingsDiff,
+    type EffectiveSettings,
+  } from "../../lib/home";
+  import { INPUT_STORAGE_KEY } from "../../lib/input";
+  import pkg from "../../../package.json";
+
+  type InputChoice = "auto" | "mic" | "tap";
+  const HEADPHONES_META_KEY = "headphones";
+
+  const learner = useLearner();
+  let draft = $state<EffectiveSettings | undefined>();
+  let inputChoice = $state<InputChoice>("auto");
+  let saved = $state(false);
+  let saveError = $state("");
+
+  const notes = Array.from(
+    { length: PICKER_MIDI_MAX - PICKER_MIDI_MIN + 1 },
+    (_, i) => PICKER_MIDI_MIN + i,
+  );
+
+  onMount(async () => {
+    try {
+      const stored = localStorage.getItem(INPUT_STORAGE_KEY);
+      if (stored === "mic" || stored === "tap") inputChoice = stored;
+    } catch {
+      // Storage unavailable: leave on Auto.
+    }
+    await learner.init();
+    if (learner.state) draft = effectiveSettings(learner.state.settings);
+  });
+
+  const current = $derived(learner.state ? effectiveSettings(learner.state.settings) : undefined);
+  const error = $derived(draft ? rangeError(draft.voiceRangeLow, draft.voiceRangeHigh) : undefined);
+  const preset = $derived(draft ? presetFor(draft.voiceRangeLow, draft.voiceRangeHigh) : undefined);
+
+  function touch(): void {
+    saved = false;
+    saveError = "";
+  }
+
+  function applyPreset(id: string): void {
+    const p = RANGE_PRESETS.find((r) => r.id === id);
+    if (!p || !draft) return;
+    draft.voiceRangeLow = p.low;
+    draft.voiceRangeHigh = p.high;
+    touch();
+  }
+
+  async function save(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!draft || !current || error) return;
+    saveError = "";
+    try {
+      const patch = settingsDiff(current, draft);
+      if (patch) {
+        const { deviceId, store } = learner.ctx;
+        const newId = createUlidGenerator({
+          now: () => Date.now(),
+          randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
+        });
+        await learner.append([
+          { id: newId(), deviceId, at: Date.now(), type: "settings.changed", v: 1, patch },
+        ]);
+        // The session runner reads headphones from device meta first.
+        if (patch.headphones !== undefined) {
+          await store.setMeta(HEADPHONES_META_KEY, patch.headphones);
+        }
+      }
+      try {
+        if (inputChoice === "auto") localStorage.removeItem(INPUT_STORAGE_KEY);
+        else localStorage.setItem(INPUT_STORAGE_KEY, inputChoice);
+      } catch {
+        // Best effort.
+      }
+      saved = true;
+    } catch (e) {
+      saveError = `Could not save: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  const contentVersion = $derived(
+    learner.status === "ready" ? learner.ctx.graph.contentVersion : "",
+  );
 </script>
 
 <h1>Settings</h1>
+
+{#if learner.status === "failed"}
+  <p role="alert">Local storage is unavailable, so settings cannot be saved on this device.</p>
+{/if}
+
+{#if draft}
+  <form onsubmit={save} data-testid="settings-form">
+    <fieldset>
+      <legend>Sessions</legend>
+      <label>
+        Daily session length
+        <select
+          data-testid="budget"
+          value={String(draft.budgetSec / 60)}
+          onchange={(e) => {
+            if (draft) draft.budgetSec = Number(e.currentTarget.value) * 60;
+            touch();
+          }}
+        >
+          {#each BUDGET_OPTIONS_MIN as m (m)}
+            <option value={String(m)}>{m} min</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        Away session length
+        <select
+          data-testid="away-budget"
+          value={String(draft.awayBudgetSec / 60)}
+          onchange={(e) => {
+            if (draft) draft.awayBudgetSec = Number(e.currentTarget.value) * 60;
+            touch();
+          }}
+        >
+          {#each AWAY_BUDGET_OPTIONS_MIN as m (m)}
+            <option value={String(m)}>{m} min</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        Weekly target
+        <select
+          data-testid="weekly-target"
+          value={String(draft.weeklyTargetDays)}
+          onchange={(e) => {
+            if (draft) draft.weeklyTargetDays = Number(e.currentTarget.value);
+            touch();
+          }}
+        >
+          {#each WEEKLY_TARGET_OPTIONS as d (d)}
+            <option value={String(d)}>{d} days a week</option>
+          {/each}
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Voice range</legend>
+      <label>
+        Preset
+        <select
+          data-testid="range-preset"
+          value={preset?.id ?? "custom"}
+          onchange={(e) => {
+            applyPreset(e.currentTarget.value);
+          }}
+        >
+          {#each RANGE_PRESETS as p (p.id)}
+            <option value={p.id}>{p.label}</option>
+          {/each}
+          {#if !preset}<option value="custom">Custom</option>{/if}
+        </select>
+      </label>
+      <label>
+        Lowest note
+        <select
+          data-testid="range-low"
+          value={String(draft.voiceRangeLow)}
+          onchange={(e) => {
+            if (draft) draft.voiceRangeLow = Number(e.currentTarget.value);
+            touch();
+          }}
+        >
+          {#each notes as n (n)}
+            <option value={String(n)}>{noteName(n)}</option>
+          {/each}
+        </select>
+      </label>
+      <label>
+        Highest note
+        <select
+          data-testid="range-high"
+          value={String(draft.voiceRangeHigh)}
+          onchange={(e) => {
+            if (draft) draft.voiceRangeHigh = Number(e.currentTarget.value);
+            touch();
+          }}
+        >
+          {#each notes as n (n)}
+            <option value={String(n)}>{noteName(n)}</option>
+          {/each}
+        </select>
+      </label>
+      {#if error}
+        <p role="alert" class="error" data-testid="range-error">{error}</p>
+      {/if}
+    </fieldset>
+
+    <fieldset>
+      <legend>Audio and input</legend>
+      <div class="choice" role="radiogroup" aria-label="Headphones">
+        <span>Headphones</span>
+        <label class="inline">
+          <input
+            type="radio"
+            name="headphones"
+            data-testid="headphones-yes"
+            checked={draft.headphones === true}
+            onchange={() => {
+              if (draft) draft.headphones = true;
+              touch();
+            }}
+          />
+          Yes
+        </label>
+        <label class="inline">
+          <input
+            type="radio"
+            name="headphones"
+            data-testid="headphones-no"
+            checked={draft.headphones === false}
+            onchange={() => {
+              if (draft) draft.headphones = false;
+              touch();
+            }}
+          />
+          No
+        </label>
+      </div>
+      <label>
+        Input
+        <select data-testid="input-mode" bind:value={inputChoice} onchange={touch}>
+          <option value="auto">Auto</option>
+          <option value="mic">Microphone</option>
+          <option value="tap">On-screen keyboard</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <div class="save-row">
+      <button type="submit" class="button" data-testid="save" disabled={error !== undefined}>
+        Save
+      </button>
+      {#if saved}
+        <span role="status" data-testid="saved">Saved</span>
+      {/if}
+      {#if saveError}
+        <span role="alert" class="error">{saveError}</span>
+      {/if}
+    </div>
+  </form>
+{:else if learner.status === "loading"}
+  <p>Loading...</p>
+{/if}
+
+<h2>Tools</h2>
 <ul>
   <li><a href={resolve("/settings/latency")}>Latency calibration</a></li>
+  <li><a href={resolve("/dev/state")}>Backup and restore (export or import your data)</a></li>
 </ul>
-<p>More settings arrive in a later task.</p>
+
+<h2>About</h2>
+<p class="muted">
+  Clavis version <span data-testid="app-version">{pkg.version}</span>
+  {#if contentVersion}
+    <br />Content version <span data-testid="content-version">{contentVersion}</span>
+  {/if}
+</p>
+
+<style>
+  fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin: 0 0 var(--space-4);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  legend {
+    padding: 0 var(--space-2);
+    font-weight: 700;
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  label.inline {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--touch-target);
+  }
+
+  .choice {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  select {
+    min-height: var(--touch-target);
+    padding: 0 var(--space-3);
+    font: inherit;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+  }
+
+  .save-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+  }
+
+  button.button:disabled {
+    opacity: 0.5;
+  }
+
+  .error {
+    color: var(--color-danger);
+    margin: 0;
+  }
+
+  .muted {
+    color: var(--color-text-muted);
+  }
+</style>
