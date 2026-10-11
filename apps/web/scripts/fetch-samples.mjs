@@ -7,7 +7,6 @@
 // Behind a proxy: run with NODE_USE_ENV_PROXY=1 so Node's fetch honours HTTPS_PROXY.
 //
 // KEEP IN SYNC with packages/audio/src/smplr-piano.ts (PIANO_SAMPLE_NOTES, PIANO_VELOCITY_RANGE).
-/* global fetch */
 import { Buffer } from "node:buffer";
 import console from "node:console";
 import { mkdir, stat, writeFile } from "node:fs/promises";
