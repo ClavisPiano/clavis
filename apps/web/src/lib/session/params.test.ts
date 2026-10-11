@@ -11,7 +11,19 @@ describe("parseSessionParams", () => {
       inputKind: "mic",
       silent: false,
       headphones: undefined,
+      practice: false,
     });
+  });
+
+  it("?practice=1 sets practice, nothing else does", () => {
+    expect(parseSessionParams(q("practice=1")).practice).toBe(true);
+    expect(parseSessionParams(q("practice=1&mode=away"))).toMatchObject({
+      practice: true,
+      mode: "away",
+    });
+    for (const raw of ["practice=0", "practice=true", "practice=", ""]) {
+      expect(parseSessionParams(q(raw)).practice).toBe(false);
+    }
   });
 
   it("away mode taps by default", () => {

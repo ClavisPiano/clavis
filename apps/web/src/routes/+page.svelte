@@ -6,6 +6,7 @@
   import {
     deviceTzOffsetMin,
     effectiveSettings,
+    hasStartedItems,
     isFirstRun,
     lastDays,
     minutesLabel,
@@ -36,6 +37,7 @@
   const settings = $derived(effectiveSettings(snap?.settings ?? {}));
   const firstRun = $derived(snap ? isFirstRun(snap) : false);
   const today = $derived(snap ? todaySummary(snap, now, deviceTzOffsetMin()) : undefined);
+  const canPractise = $derived(snap ? hasStartedItems(snap) && today?.completed === true : false);
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
   const week = $derived(weekProgress(cells, settings.weeklyTargetDays));
 
@@ -84,6 +86,12 @@
     <strong>Away session</strong>
     <span>{minutesLabel(settings.awayBudgetSec)}, no piano needed</span>
   </a>
+  {#if canPractise}
+    <a class="button secondary" href={resolve("/session?practice=1")} data-testid="start-practice">
+      <strong>Practise more</strong>
+      <span>Extra practice, your review schedule stays as it is</span>
+    </a>
+  {/if}
 </div>
 
 {#if snap && today && !firstRun}

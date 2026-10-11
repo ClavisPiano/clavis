@@ -178,11 +178,17 @@
     {/if}
 
     {#if view.kind === "idle"}
-      <h1>{params?.mode === "away" ? "Away session" : "Session"}</h1>
-      <p>
-        {params?.mode === "away"
-          ? "A short ear session with no piano. Headphones are best."
-          : "A short daily session: warm up, then a few ear exercises."}
+      <h1>
+        {params?.practice ? "Practise more" : params?.mode === "away" ? "Away session" : "Session"}
+      </h1>
+      <p data-testid="session-intro">
+        {#if params?.practice}
+          Extra practice on skills you have started. This does not change your review schedule.
+        {:else if params?.mode === "away"}
+          A short ear session with no piano. Headphones are best.
+        {:else}
+          A short daily session: warm up, then a few ear exercises.
+        {/if}
       </p>
       <button type="button" class="primary" data-testid="start" onclick={start}>
         Start session

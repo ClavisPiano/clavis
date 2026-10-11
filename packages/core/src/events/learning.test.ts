@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { eventFixtures } from "./fixtures/index.js";
+import { eventFixtures, legacyEventFixtures } from "./fixtures/index.js";
 import {
   eventRegistry,
   parseEvent,
@@ -30,6 +30,17 @@ describe("fixtures", () => {
     expect(first.event).toEqual(eventFixtures[type]);
     const second = parseEvent(JSON.parse(JSON.stringify(first.event)));
     expect(second).toEqual(first);
+  });
+
+  it("old v1 fixtures still parse and upcast to v2", () => {
+    expect(legacyEventFixtures).toHaveLength(2);
+    for (const old of legacyEventFixtures) {
+      expect((old as Obj).v).toBe(1);
+      const r = parseEvent(old);
+      expect(r.ok).toBe(true);
+      if (!r.ok) continue;
+      expect(r.event).toEqual({ ...(old as Obj), v: 2 });
+    }
   });
 
   it("are all accepted by a store", async () => {

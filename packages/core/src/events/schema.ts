@@ -7,6 +7,7 @@ import {
   PlacementCompletedV1,
   SessionEndedV1,
   SessionStartedV1,
+  SessionStartedV2,
 } from "./learning.js";
 
 /*
@@ -24,15 +25,21 @@ import {
  * The only cost is that a client built before this change would reject a new event that carries
  * the key. That is acceptable here: Clavis ships one client version at a time (a single-user PWA
  * that updates itself), and a v2 would force every concurrent writer of `v: 1` settings events
- * to change in lockstep. Any further change to this patch must be a real v2 with an upcaster.
+ * to change in lockstep. Any further change to this patch must be a real new version with an
+ * upcaster, and T2.15 did exactly that (v2 adds `newItemsPerDay`).
  */
-export const SettingsPatch = z.strictObject({
+export const SettingsPatchV1 = z.strictObject({
   budgetSec: z.int().min(60).max(3600).optional(),
   awayBudgetSec: z.int().min(60).max(1800).optional(),
   voiceRangeLow: z.int().min(21).max(108).optional(),
   voiceRangeHigh: z.int().min(21).max(108).optional(),
   headphones: z.boolean().optional(),
   weeklyTargetDays: z.int().min(1).max(7).optional(),
+});
+
+/** Patch as of `settings.changed` v2 (T2.15): adds the daily new-item cap. */
+export const SettingsPatch = SettingsPatchV1.extend({
+  newItemsPerDay: z.int().min(3).max(15).optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;
 
@@ -48,14 +55,21 @@ export const SettingsChangedV1 = z.strictObject({
   ...envelopeShape,
   type: z.literal("settings.changed"),
   v: z.literal(1),
+  patch: SettingsPatchV1,
+});
+
+export const SettingsChangedV2 = z.strictObject({
+  ...envelopeShape,
+  type: z.literal("settings.changed"),
+  v: z.literal(2),
   patch: SettingsPatch,
 });
 
 /** Latest version of every event type. Extend this list when adding types. */
 export const learningEventSchema = z.discriminatedUnion("type", [
   DeviceRegisteredV1,
-  SettingsChangedV1,
-  SessionStartedV1,
+  SettingsChangedV2,
+  SessionStartedV2,
   ItemPresentedV1,
   AttemptCompletedV1,
   NodeIntroducedV1,
@@ -76,10 +90,20 @@ export type EventRegistry = Readonly<Record<string, EventRegistryEntry>>;
 
 const identity = (event: unknown): unknown => event;
 
+/** v1 payloads are valid v2 payloads (v2 only adds optional fields), so lifting just bumps `v`. */
+const liftToV2 = (event: unknown): unknown =>
+  typeof event === "object" && event !== null ? { ...event, v: 2 } : event;
+
 export const eventRegistry: Readonly<Record<LearningEventType, EventRegistryEntry>> = {
   "device.registered": { versions: { 1: DeviceRegisteredV1 }, upcast: identity },
-  "settings.changed": { versions: { 1: SettingsChangedV1 }, upcast: identity },
-  "session.started": { versions: { 1: SessionStartedV1 }, upcast: identity },
+  "settings.changed": {
+    versions: { 1: SettingsChangedV1, 2: SettingsChangedV2 },
+    upcast: (event, from) => (from === 1 ? liftToV2(event) : event),
+  },
+  "session.started": {
+    versions: { 1: SessionStartedV1, 2: SessionStartedV2 },
+    upcast: (event, from) => (from === 1 ? liftToV2(event) : event),
+  },
   "item.presented": { versions: { 1: ItemPresentedV1 }, upcast: identity },
   "attempt.completed": { versions: { 1: AttemptCompletedV1 }, upcast: identity },
   "node.introduced": { versions: { 1: NodeIntroducedV1 }, upcast: identity },

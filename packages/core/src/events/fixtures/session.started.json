@@ -3,11 +3,15 @@
   "deviceId": "dev-laptop",
   "at": 1760000002000,
   "type": "session.started",
-  "v": 1,
+  "v": 2,
   "sessionId": "01JBX00000000000000000S001",
   "mode": "instrument",
   "budgetSec": 900,
-  "key": { "tonic": "Bb", "mode": "major" },
+  "key": {
+    "tonic": "Bb",
+    "mode": "major"
+  },
   "tzOffsetMin": 600,
-  "contentVersion": "c1"
+  "contentVersion": "c1",
+  "practice": true
 }

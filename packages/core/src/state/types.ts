@@ -43,6 +43,8 @@ export interface SessionRecord {
   key: Key;
   budgetSec: number;
   itemsPresented: number;
+  /** Extra practice (T2.15): attempts are evidence only, FSRS cards are untouched. */
+  practice?: boolean;
 }
 
 export interface DailyRecord {

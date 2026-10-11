@@ -3,6 +3,10 @@
   "deviceId": "dev-laptop",
   "at": 1760000001000,
   "type": "settings.changed",
-  "v": 1,
-  "patch": { "budgetSec": 900, "headphones": true }
+  "v": 2,
+  "patch": {
+    "budgetSec": 900,
+    "headphones": true,
+    "newItemsPerDay": 8
+  }
 }

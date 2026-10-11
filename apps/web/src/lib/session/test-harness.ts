@@ -104,6 +104,7 @@ export interface Harness {
 export interface HarnessOptions {
   mode?: "instrument" | "away";
   budgetSec?: number;
+  practice?: boolean;
   inputSource?: "mic" | "tap";
   headphones?: boolean | undefined;
   askHeadphones?: boolean;
@@ -147,6 +148,7 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
   const deps: SessionDeps = {
     deviceId: "device-1",
     mode,
+    ...(opts.practice ? { practice: true } : {}),
     graph,
     compose: composeSession,
     generate: (item, ctx) => {

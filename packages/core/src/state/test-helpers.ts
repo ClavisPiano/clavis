@@ -96,12 +96,19 @@ export class Builder {
   start(
     at: number,
     sessionId: string,
-    o: { mode?: "instrument" | "away"; key?: Key; tz?: number; budgetSec?: number } = {},
+    o: {
+      mode?: "instrument" | "away";
+      key?: Key;
+      tz?: number;
+      budgetSec?: number;
+      practice?: boolean;
+    } = {},
   ): LearningEvent {
     return {
       ...this.base(at),
       type: "session.started",
-      v: 1,
+      v: 2,
+      ...(o.practice !== undefined ? { practice: o.practice } : {}),
       sessionId,
       mode: o.mode ?? "instrument",
       budgetSec: o.budgetSec ?? 600,
@@ -142,7 +149,7 @@ export class Builder {
   }
 
   settings(at: number, patch: Record<string, number | boolean>): LearningEvent {
-    return { ...this.base(at), type: "settings.changed", v: 1, patch };
+    return { ...this.base(at), type: "settings.changed", v: 2, patch };
   }
 
   register(at: number): LearningEvent {
@@ -209,6 +216,7 @@ export class Builder {
       tz?: number;
       correct?: boolean;
       introduce?: boolean;
+      practice?: boolean;
       presentation?: Record<string, string>;
     } = {},
   ): LearningEvent[] {

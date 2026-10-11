@@ -19,7 +19,7 @@ describe("parseEvent", () => {
   it("accepts valid events", () => {
     expect(parseEvent(device)).toEqual({ ok: true, event: device });
     expect(parseEvent({ ...device, userAgent: "UA" }).ok).toBe(true);
-    expect(parseEvent(settings)).toEqual({ ok: true, event: settings });
+    expect(parseEvent(settings)).toEqual({ ok: true, event: { ...settings, v: 2 } });
     expect(parseEvent({ ...settings, patch: {} }).ok).toBe(true);
     expect(parseEvent({ ...settings, patch: { weeklyTargetDays: 5 } }).ok).toBe(true);
     expect(parseEvent({ ...settings, patch: { weeklyTargetDays: 8 } }).ok).toBe(false);
@@ -53,6 +53,7 @@ describe("parseEvent", () => {
     expect(code({ ...device, type: "nope" })).toBe("unknown_type");
     expect(code({ ...device, type: "__proto__" })).toBe("unknown_type");
     expect(code({ ...device, v: 2 })).toBe("unknown_version");
+    expect(code({ ...settings, v: 3 })).toBe("unknown_version");
     expect(code({ ...device, v: 0 })).toBe("malformed");
   });
 
@@ -67,6 +68,48 @@ describe("parseEvent", () => {
     expect(code({ ...settings, patch: { voiceRangeHigh: 109 } })).toBe("invalid");
     expect(code({ ...settings, patch: { headphones: "yes" } })).toBe("invalid");
     expect(code({ ...settings, patch: undefined })).toBe("invalid");
+  });
+
+  it("settings.changed v2 adds newItemsPerDay (3 to 15) and v1 upcasts to v2", () => {
+    const v2 = { ...settings, v: 2 };
+    expect(parseEvent({ ...v2, patch: { newItemsPerDay: 8 } }).ok).toBe(true);
+    expect(parseEvent({ ...v2, patch: { newItemsPerDay: 3 } }).ok).toBe(true);
+    expect(parseEvent({ ...v2, patch: { newItemsPerDay: 15 } }).ok).toBe(true);
+    for (const n of [2, 16, 5.5, "5"]) {
+      expect(code({ ...v2, patch: { newItemsPerDay: n } })).toBe("invalid");
+    }
+    // A v1 event cannot carry the v2 key; shipped v1 patches are unchanged.
+    expect(code({ ...settings, patch: { newItemsPerDay: 8 } })).toBe("invalid");
+    const lifted = parseEvent({
+      ...base,
+      type: "settings.changed",
+      v: 1,
+      patch: { budgetSec: 600 },
+    });
+    expect(lifted).toEqual({
+      ok: true,
+      event: { ...base, type: "settings.changed", v: 2, patch: { budgetSec: 600 } },
+    });
+  });
+
+  it("session.started v2 adds optional practice and v1 upcasts to v2", () => {
+    const started = {
+      ...base,
+      type: "session.started",
+      v: 1,
+      sessionId: "01ARYZ6S410000000000000001",
+      mode: "instrument",
+      budgetSec: 600,
+      key: { tonic: "C", mode: "major" },
+      tzOffsetMin: 0,
+      contentVersion: "c1",
+    };
+    const up = parseEvent(started);
+    expect(up).toEqual({ ok: true, event: { ...started, v: 2 } });
+    expect(parseEvent({ ...started, v: 2 }).ok).toBe(true);
+    expect(parseEvent({ ...started, v: 2, practice: true }).ok).toBe(true);
+    expect(code({ ...started, v: 2, practice: "yes" })).toBe("invalid");
+    expect(code({ ...started, practice: true })).toBe("invalid");
   });
 
   it("rejects extra keys in the settings patch", () => {

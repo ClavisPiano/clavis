@@ -10,7 +10,7 @@ function ev(seq: number, at: number, patch: { budgetSec?: number } = {}): Learni
     deviceId: "dev1",
     at,
     type: "settings.changed",
-    v: 1,
+    v: 2,
     patch: { budgetSec: 600, ...patch },
   };
 }
