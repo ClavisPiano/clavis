@@ -27,7 +27,7 @@ module.exports = {
       comment:
         "Every import must resolve. A package that is not declared as a dependency shows up here.",
       from: {},
-      to: { couldNotResolve: true },
+      to: { couldNotResolve: true, pathNot: "^\\$(app|env)/" },
     },
     {
       name: "core-imports-no-workspace",
@@ -90,7 +90,7 @@ module.exports = {
     tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.base.json" },
     doNotFollow: { path: "node_modules" },
-    exclude: { path: "(^|/)(dist|coverage|\\.svelte-kit|\\.wrangler)/" },
+    exclude: { path: "(^|/)(dist|coverage|\\.svelte-kit|build|\\.wrangler)/" },
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["import", "require", "node", "default", "types"],
