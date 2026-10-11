@@ -44,3 +44,15 @@
   (https://github.com/ianprime0509/pitchy). McLeod pitch method (MPM) detector with its own FFT
   autocorrelation. Used by `packages/audio` (`src/pitch/analyse.ts`) in the mic worker and in the
   Node fixture runner. No runtime dependencies of its own beyond `fft.js`, which is MIT as well.
+
+## Verovio
+
+- Version 6.3.0, LGPL-3.0-or-later (https://github.com/rism-digital/verovio, npm `verovio`). Music
+  notation engraver compiled to WASM. Used by the T3.2 notation spike in `apps/web`
+  (`src/lib/notation/verovio.worker.ts`); the keep-or-fallback decision is in
+  `docs/spikes/notation.md`.
+- Obligations: the LGPL applies to Verovio itself, not to Clavis. We ship the unmodified npm build
+  as a separate, replaceable worker chunk (`verovio.worker-*.js`), which is loaded only on the
+  notation pages, and the source stays available upstream. Before release, show the licence and
+  a link to the Verovio source in the app's About or licences screen. If Verovio is dropped for
+  the fallback renderer, this entry can go with it (or stay if M7 imports keep it).

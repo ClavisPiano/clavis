@@ -28,6 +28,9 @@ export default defineConfig({
       },
     }),
   ],
+  // Module workers (notation, T3.2) need ES output: the default iife format cannot hold the Verovio
+  // module, which uses import.meta.url and top-level await.
+  worker: { format: "es" },
   // Component tests (Svelte + happy-dom, chosen per file with `// @vitest-environment happy-dom`)
   // need Svelte's client build, not the server one.
   resolve: process.env.VITEST ? { conditions: ["browser"] } : {},
