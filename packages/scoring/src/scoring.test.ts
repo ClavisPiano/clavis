@@ -480,6 +480,21 @@ describe("scoreAttempt", () => {
     expect(r.subScores).toEqual({ sing: 1 });
   });
 
+  it("names a sung confusion from the sing target's own labels (Away, sing only)", () => {
+    const r = scoreAttempt({
+      expected: {
+        sing: { kind: "sungPitch", targetMidi: 69, toleranceCents: 50, degreeLabels: LABELS },
+        responseWindowMs: WINDOW,
+      },
+      notes: [],
+      frames: frames(67, END + 400, END + 900),
+      stimulusEndMs: END,
+      source: "mic",
+    });
+    expect(r.outcome.correct).toBe(false);
+    expect(r.errors[0]?.code).toBe("degree.confusion.6-5");
+  });
+
   it("honours part to score only singing", () => {
     const r = scoreAttempt({
       expected: degreeSing,

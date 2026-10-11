@@ -116,7 +116,7 @@ export interface SungPitchInput {
   frames: readonly PitchFrame[];
   stimulusEndMs: number;
   responseWindowMs: number;
-  /** Optional: names degree confusions. SungPitchTarget carries no labels itself. */
+  /** Optional: names degree confusions. */
   degreeLabels?: DegreeLabels | undefined;
   options?: Partial<SungOptions>;
 }
