@@ -151,9 +151,11 @@ jobs:
       - name: Check whether this PR changes the review workflow
         id: workflow-check
         run: |
+          # A missing file on the default branch (this workflow's introducing PR) counts as changed.
+          : > "$RUNNER_TEMP/default-workflow.yml"
           gh api "repos/$REPO/contents/$WORKFLOW_PATH?ref=$DEFAULT_BRANCH" \
-            -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/default-workflow.yml"
-          if cmp -s "$WORKFLOW_PATH" "$RUNNER_TEMP/default-workflow.yml"; then
+            -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/default-workflow.yml" || true
+          if [ -s "$RUNNER_TEMP/default-workflow.yml" ] && cmp -s "$WORKFLOW_PATH" "$RUNNER_TEMP/default-workflow.yml"; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
