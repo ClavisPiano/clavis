@@ -1,0 +1,289 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+# The review prompt and tool allow-list are identical between the primary
+# (Sonnet) and fallback (Haiku) invocations, so they live here as shared
+# job-level env vars rather than being duplicated across both steps.
+env:
+  REVIEW_PROMPT: |
+    REPO: ${{ github.repository }}
+    PR NUMBER: ${{ github.event.pull_request.number }}
+
+    You are performing a structured code review. Follow these exact steps in order.
+
+    ## Tool rules (read first)
+    Every Bash command must be ONE plain command from the allow-list below. Do not use
+    pipes (`|`), `&&`, `||`, `;`, redirections, heredocs, or `$(...)`: any compound
+    command is denied without being run. For large output, use the Read, Grep and
+    Glob tools on the checked-out files instead of piping through `head`/`grep`.
+
+    You do NOT post the PR comment or edit PR labels. The workflow does both
+    after you finish: it posts the summary file you write in Step 6, and sets or
+    clears `review:changes-required` from the open `pr-${{ github.event.pull_request.number }}` issues.
+
+    ## Step 1: Understand the changes
+    Run:
+    - `gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }}`
+    - `gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --name-only`
+    - `gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }}`
+
+    If the full diff is too large to read in one result, work from the file list:
+    the PR's merge result is checked out in the working directory, so Read the
+    changed files directly.
+
+    Also read `CLAUDE.md` at the root of the repository for project conventions.
+
+    ## Step 2: Classify all findings
+    Review for: code quality, potential bugs, performance, security, test coverage,
+    and adherence to CLAUDE.md conventions. Pay particular attention to: package
+    boundary violations (core purity, type-only imports from audio/notation/scoring),
+    `Date.now()` or `Math.random()` in `core`, edits to shipped event schema versions
+    (a new version plus upcaster is required), unpinned dependency versions, missing
+    zod validation at boundaries, and whether the PR adds tests that prove the
+    acceptance criteria of its plan task.
+
+    Assign each finding exactly one severity:
+    - **REQUIRED** — must be resolved before this PR can merge
+    - **SUGGESTION** — worthwhile improvement but not a blocker
+    - **PRAISE** — positive observation (no issue needed, omit if nothing genuine to note)
+
+    ## Step 3: For each REQUIRED finding only, create a tracking issue (dedup first)
+    SUGGESTION findings are NOT filed as tracking issues — they are surfaced inline
+    in the Step 6 summary for the author to address or explicitly dismiss
+    during the review cycle (enforced by branch protection's "require conversation
+    resolution before merging"). This keeps the issue tracker a curated list of
+    blocking work rather than an ever-growing pile of advisory notes. Only REQUIRED
+    findings get a tracked issue. The `pr-${{ github.event.pull_request.number }}` label already exists.
+    Repeat for every REQUIRED finding:
+
+    a) List all open issues already carrying this PR's label to detect duplicates:
+       gh issue list --repo ${{ github.repository }} --label "pr-${{ github.event.pull_request.number }}" --state open --json number,title --limit 100
+
+    b) If an issue with the same or substantially similar title already exists,
+       do not create a duplicate — record the existing issue number instead.
+
+    c) Otherwise create a new issue and record the returned number:
+       gh issue create --repo ${{ github.repository }} --title "[Review] <concise title>" --body "<body with PR number, severity, file location, description>" --label "review-finding" --label "pr-${{ github.event.pull_request.number }}"
+
+       The body must contain: "**PR:** #${{ github.event.pull_request.number }}", "**Severity:** REQUIRED", the file/line if applicable, and a clear description.
+       A double-quoted --body must not contain backticks or `$` (they are shell
+       substitutions and the command is denied). For a body that quotes code, Write
+       it to `review-issues/<n>.md` and pass `--body-file review-issues/<n>.md` instead.
+
+    ## Step 4: Auto-close issues whose findings are now resolved
+    For each open issue labeled pr-${{ github.event.pull_request.number }}, read it with `gh issue view` and, if its
+    finding is no longer present in the current head, close it:
+    gh issue close <number> --repo ${{ github.repository }} --comment "Finding resolved in the latest commit on PR #${{ github.event.pull_request.number }}."
+
+    If the author replied on the issue explaining why the finding does not apply,
+    weigh that reply and close the issue if it is correct.
+
+    ## Step 5: Do not edit labels
+    The workflow reconciles `review:changes-required` from the open issues after you finish.
+
+    ## Step 6: Write the summary file
+    Use the Write tool to create `claude-review-summary.md` in the working directory
+    (it does not exist yet). Its full content is posted verbatim as the PR comment.
+    Write it last, after every issue is created or closed.
+
+    The summary must include:
+    - Verdict at the top: CHANGES REQUIRED or APPROVED
+    - REQUIRED findings with issue links, e.g.: "- REQUIRED: <title> — #<n>"
+    - SUGGESTION findings described INLINE with no issue link (they are advisory
+      and meant to be resolved in-review), e.g.:
+      "- SUGGESTION: <title> (<file>:<line>) — <one-line description of the fix>"
+    - PRAISE items (no issue links needed)
+    - Any previously open issues that were closed this run
+
+  REVIEW_TOOLS: "Read,Grep,Glob,Write,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue close:*),Bash(gh search:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(cat:*)"
+
+  # The reviewer writes its PR comment here; the workflow posts it.
+  SUMMARY_FILE: claude-review-summary.md
+
+jobs:
+  claude-review:
+    # Skip draft PRs — review only fires once the author marks the PR
+    # ready for review (or pushes to an already-ready PR).
+    if: github.actor != 'dependabot[bot]' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+
+      # Create well-known labels up front so Claude never races against missing
+      # labels, and remove any summary file the PR itself carries so only the
+      # reviewer's output is ever posted.
+      - name: Ensure review labels exist
+        run: |
+          rm -f "$SUMMARY_FILE"
+          gh label create "review-finding" \
+            --color "e4e669" \
+            --description "Issue created from automated code review" \
+            --repo "$REPO" 2>/dev/null || true
+          gh label create "review:changes-required" \
+            --color "d93f0b" \
+            --description "Code review requires changes before this PR can merge" \
+            --repo "$REPO" 2>/dev/null || true
+          gh label create "pr-$PR_NUMBER" \
+            --color "0075ca" \
+            --description "Review findings for PR #$PR_NUMBER" \
+            --repo "$REPO" 2>/dev/null || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+
+      # claude-code-action refuses to run when this workflow file differs from
+      # the default branch's copy (it exits "successfully" without reviewing),
+      # so a PR that edits this file cannot be reviewed by it. Detect that
+      # here instead of reporting it as a failed review.
+      - name: Check whether this PR changes the review workflow
+        id: workflow-check
+        run: |
+          gh api "repos/$REPO/contents/$WORKFLOW_PATH?ref=$DEFAULT_BRANCH" \
+            -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/default-workflow.yml"
+          if cmp -s "$WORKFLOW_PATH" "$RUNNER_TEMP/default-workflow.yml"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::This PR changes $WORKFLOW_PATH; claude-code-action only runs once the change is on $DEFAULT_BRANCH."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          WORKFLOW_PATH: .github/workflows/claude-code-review.yml
+
+      # Primary attempt — Sonnet. `continue-on-error: true` lets the workflow
+      # proceed to the Haiku fallback step when Sonnet errors out (most
+      # commonly: "You've hit your Sonnet limit · resets …").
+      - name: Run Claude Code Review (Sonnet)
+        id: claude-review
+        if: steps.workflow-check.outputs.changed != 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1.0.247
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: ${{ env.REVIEW_PROMPT }}
+          claude_args: --model sonnet --allowed-tools "${{ env.REVIEW_TOOLS }}"
+
+      # Fallback — Haiku. Runs if the Sonnet attempt errored, or if it finished
+      # without writing a summary (a run that ends "successfully" after its
+      # tool calls were denied). Haiku draws from a separate allowance, so this
+      # keeps the review running when Sonnet is rate-limited. The prompt and
+      # tool allow-list are identical; only the model differs.
+      - name: Run Claude Code Review (Haiku fallback)
+        id: claude-review-haiku
+        if: >-
+          steps.workflow-check.outputs.changed != 'true' &&
+          (steps.claude-review.outcome == 'failure' || hashFiles(env.SUMMARY_FILE) == '')
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1.0.247
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: ${{ env.REVIEW_PROMPT }}
+          claude_args: --model haiku --allowed-tools "${{ env.REVIEW_TOOLS }}"
+
+      # The action hides the transcript, so a run whose tool calls were refused
+      # only reports a count. List what was refused (tool name and a truncated
+      # input) so an allow-list or prompt gap is diagnosable from the log.
+      - name: Report denied tool calls
+        if: always()
+        run: |
+          for f in "$SONNET_EXEC" "$HAIKU_EXEC"; do
+            [ -n "$f" ] && [ -f "$f" ] || continue
+            echo "== $f"
+            jq -r '.[] | select(.type == "result") | .permission_denials // [] | .[]
+              | "- \(.tool_name): \(.tool_input | tostring | .[0:300])"' "$f" || true
+          done
+        env:
+          SONNET_EXEC: ${{ steps.claude-review.outputs.execution_file }}
+          HAIKU_EXEC: ${{ steps.claude-review-haiku.outputs.execution_file }}
+
+      # Post the reviewer's summary. If neither attempt produced one, say so on
+      # the PR rather than leaving the previous round's verdict as the last word.
+      - name: Post review summary
+        id: post-summary
+        if: always()
+        run: |
+          if [ "$WORKFLOW_CHANGED" = "true" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "**Automated review skipped.** This PR changes \`.github/workflows/claude-code-review.yml\`, and claude-code-action only runs a review workflow whose content matches the default branch. The new workflow takes effect for other PRs once this merges. \`review:changes-required\` still reflects the open \`pr-$PR_NUMBER\` issues. Run log: $RUN_URL"
+            echo "posted=skipped" >> "$GITHUB_OUTPUT"
+          elif [ -s "$SUMMARY_FILE" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$SUMMARY_FILE"
+            echo "posted=true" >> "$GITHUB_OUTPUT"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "**Automated review did not complete.** No summary was produced for $HEAD_SHA (Sonnet: $SONNET_OUTCOME, Haiku fallback: $HAIKU_OUTCOME). Open \`pr-$PR_NUMBER\` issues were not re-evaluated this run, and \`review:changes-required\` reflects them as they stand. Run log: $RUN_URL"
+            echo "posted=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_CHANGED: ${{ steps.workflow-check.outputs.changed }}
+          SONNET_OUTCOME: ${{ steps.claude-review.outcome }}
+          HAIKU_OUTCOME: ${{ steps.claude-review-haiku.outcome || 'skipped' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      # Set or clear the blocking label from the open REQUIRED findings, rather
+      # than relying on the reviewer to run `gh pr edit` as its last action.
+      - name: Reconcile review:changes-required label
+        if: always()
+        run: |
+          OPEN_REQUIRED=$(gh issue list --repo "$REPO" --label "pr-$PR_NUMBER" \
+            --state open --limit 200 --json number,body \
+            --jq '[.[] | select(.body | contains("**Severity:** REQUIRED")) | .number] | length')
+          echo "Open REQUIRED findings for PR #$PR_NUMBER: $OPEN_REQUIRED"
+          HAS_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
+            --jq '[.labels[].name] | any(. == "review:changes-required")')
+          if [ "$OPEN_REQUIRED" -gt 0 ]; then
+            [ "$HAS_LABEL" = "true" ] || gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "review:changes-required"
+          elif [ "$HAS_LABEL" = "true" ]; then
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "review:changes-required"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+
+      # Fail when no review ran, so the check never reports a pass for a review
+      # that did not happen.
+      - name: Fail if the review did not complete
+        if: >-
+          always() && steps.post-summary.outputs.posted != 'true' &&
+          steps.post-summary.outputs.posted != 'skipped'
+        run: |
+          echo "::error::Neither the Sonnet nor the Haiku review produced a summary. See 'Report denied tool calls' above and both review steps' logs."
+          exit 1
+
+      # Read the PR label state and fail the job if changes are required.
+      # This makes "Claude Code Review / claude-review" a blockable required status check.
+      - name: Fail if changes are required
+        if: always()
+        run: |
+          LABELS=$(gh pr view "$PR_NUMBER" \
+            --repo "$REPO" \
+            --json labels \
+            --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
+          echo "PR labels: $LABELS"
+          if echo "$LABELS" | grep -q "review:changes-required"; then
+            echo "::error::Code review requires changes before merge. Resolve the linked GitHub issues, push a new commit, and the review will re-run automatically."
+            exit 1
+          fi
+          echo "Code review passed — no required changes."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
