@@ -6,7 +6,10 @@
     readonly label: string;
   }
 
-  const devPages: readonly DevPage[] = [{ href: "/dev/stimulus", label: "Stimulus player" }];
+  const devPages: readonly DevPage[] = [
+    { href: "/dev/events", label: "Event log" },
+    { href: "/dev/stimulus", label: "Stimulus player" },
+  ];
 </script>
 
 <h1>Dev pages</h1>

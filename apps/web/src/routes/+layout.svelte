@@ -8,10 +8,15 @@
   import UpdateBanner from "../lib/pwa/UpdateBanner.svelte";
   import { requestPersistentStorage } from "../lib/pwa/persist";
   import { watchServiceWorker } from "../lib/pwa/update-state.svelte";
+  import { initAppStore } from "../lib/app-store";
 
   let { children }: { children: Snippet } = $props();
+  let storageFailed = $state(false);
 
   onMount(() => {
+    void initAppStore().then((result) => {
+      storageFailed = !result.ok;
+    });
     void watchServiceWorker();
     let local: Storage | undefined;
     try {
@@ -25,6 +30,11 @@
 
 <div class="shell">
   <UpdateBanner />
+  {#if storageFailed}
+    <div class="notice" role="status">
+      Local storage is unavailable, so progress will not be saved on this device.
+    </div>
+  {/if}
   <main>
     {@render children()}
   </main>
@@ -48,6 +58,12 @@
     padding-top: env(safe-area-inset-top);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+  }
+
+  .notice {
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
   }
 
   main {
