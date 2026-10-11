@@ -1,0 +1,192 @@
+import { asset } from "$app/paths";
+import {
+  FakeInstrument,
+  SmplrPianoInstrument,
+  StimulusPlayer,
+  getAudioContextManager,
+  type FakeClock,
+  type Instrument,
+  type TapInputAdapter,
+} from "@clavis/audio";
+import {
+  composeSession,
+  createUlidGenerator,
+  getGenerator,
+  type LearningEvent,
+} from "@clavis/core";
+import { scoreAttempt } from "@clavis/scoring";
+import { getLearnerState } from "../learner";
+import { createInput, detachFakeInput } from "../input";
+import { SessionMachine, type SessionDeps } from "./machine";
+import { findOpenSessions } from "./open";
+import { parseLatency, type SessionParams } from "./params";
+
+export const HEADPHONES_META_KEY = "headphones";
+export const LATENCY_META_KEY = "latency";
+
+export interface SessionRuntime {
+  machine: SessionMachine;
+  /** The on-screen keyboard feeds this in Away mode. */
+  tap: TapInputAdapter | undefined;
+  /** Short piano note for key presses. No-op when silent. */
+  tone(midi: number): void;
+  /** Call from a user gesture before `machine.start()` or `resume()`. */
+  unlock(): Promise<void>;
+  teardown(): void;
+}
+
+export type RuntimeResult = { ok: true; runtime: SessionRuntime } | { ok: false; message: string };
+
+/**
+ * Wire the machine to the browser: learner state and store, piano (or a silent fake), input
+ * adapters and the clock. All the logic lives in `SessionMachine`; this only builds its deps.
+ */
+export async function createSessionRuntime(params: SessionParams): Promise<RuntimeResult> {
+  const learner = await getLearnerState();
+  if (!learner.ok) return { ok: false, message: "Local storage is unavailable on this device." };
+  const { service, store, deviceId, graph } = learner;
+
+  const fake = params.inputKind === "fake";
+  const audio = getAudioContextManager();
+
+  // Fake input has no audio context: use performance.now for everything so nothing depends on the
+  // browser starting an AudioContext (headless WebKit may not). Other inputs share the context.
+  const contextNowMs = fake
+    ? (): number => performance.now()
+    : (): number => audio.getContext().currentTime * 1000;
+  const schedule: FakeClock["schedule"] = (delayMs, fn) => {
+    const id = setTimeout(fn, Math.max(0, delayMs));
+    return () => {
+      clearTimeout(id);
+    };
+  };
+  const clockSource = {
+    get currentTime(): number {
+      return contextNowMs() / 1000;
+    },
+  };
+
+  let instrument: Instrument;
+  if (params.silent) {
+    instrument = new FakeInstrument();
+  } else {
+    instrument = new SmplrPianoInstrument({
+      getContext: () => audio.getContext() as unknown as BaseAudioContext,
+      baseUrl: asset("samples/piano/manifest.json").replace(/\/manifest\.json$/, ""),
+    });
+  }
+  const stimulusPlayer = new StimulusPlayer(clockSource, instrument);
+
+  const handle = createInput(params.inputKind, {
+    clock: { now: contextNowMs, schedule },
+  });
+  const tap = handle.tap;
+
+  const newId = createUlidGenerator({
+    now: () => Date.now(),
+    randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
+  });
+
+  const storedHeadphones = await store.getMeta(HEADPHONES_META_KEY);
+  const known =
+    typeof storedHeadphones === "boolean"
+      ? storedHeadphones
+      : typeof service.state.settings.headphones === "boolean"
+        ? service.state.settings.headphones
+        : undefined;
+  const headphones = params.headphones === "ask" ? undefined : (params.headphones ?? known);
+  const latency = parseLatency(await store.getMeta(LATENCY_META_KEY));
+
+  const seedBytes = crypto.getRandomValues(new Uint32Array(1));
+  const deps: SessionDeps = {
+    deviceId,
+    mode: params.mode,
+    graph,
+    compose: composeSession,
+    generate: (item, ctx) => {
+      const node = graph.nodes.find((n) => n.id === item.nodeId);
+      if (!node) throw new Error(`Unknown skill node ${item.nodeId}`);
+      return getGenerator(item.generator).generate(node, item.params, ctx);
+    },
+    player: {
+      play: (spec) => stimulusPlayer.play(spec),
+      stop: () => {
+        stimulusPlayer.stop();
+      },
+      load: () => stimulusPlayer.load(),
+    },
+    input: handle.adapter,
+    createSingInput: () => createInput("mic").adapter,
+    score: scoreAttempt,
+    append: async (events: LearningEvent[]) => {
+      await service.append(events);
+    },
+    getState: () => service.state,
+    clock: { contextNowMs, wallNow: () => Date.now(), schedule },
+    newId,
+    seed: seedBytes[0] ?? Date.now() % 0x7fffffff,
+    // R6: minutes east of UTC, the opposite sign of getTimezoneOffset (`|| 0` turns -0 into 0).
+    tzOffsetMin: -new Date().getTimezoneOffset() || 0,
+    ...(params.budgetSec === undefined ? {} : { budgetSec: params.budgetSec }),
+    latency,
+    headphones,
+    askHeadphones: !fake || params.headphones === "ask",
+    saveHeadphones: async (value) => {
+      await store.setMeta(HEADPHONES_META_KEY, value);
+      await service.append([
+        {
+          id: newId(),
+          deviceId,
+          at: Date.now(),
+          type: "settings.changed",
+          v: 1,
+          patch: { headphones: value },
+        },
+      ]);
+    },
+    openSessions: async () => findOpenSessions(await store.list(), deviceId),
+  };
+  const machine = new SessionMachine(deps);
+
+  if (fake) {
+    // Test hook: lets Playwright see what the current item expects. Never exposed otherwise.
+    Object.defineProperty(window, "__clavisSession", {
+      configurable: true,
+      get: () => machine.debug(),
+    });
+  }
+
+  return {
+    ok: true,
+    runtime: {
+      machine,
+      tap,
+      tone(midi) {
+        if (params.silent) return;
+        void stimulusPlayer
+          .load()
+          .then(() => {
+            instrument.start({
+              midi,
+              time: audio.getContext().currentTime,
+              duration: 0.8,
+              velocity: 0.8,
+            });
+          })
+          .catch(() => undefined);
+      },
+      async unlock() {
+        if (!fake) await audio.unlock();
+      },
+      teardown() {
+        // Leaving mid-session closes it now; a killed tab is cleaned up by the next start.
+        machine.finish();
+        handle.adapter.stop();
+        if (fake) {
+          detachFakeInput();
+          Reflect.deleteProperty(window, "__clavisSession");
+        }
+      },
+    },
+  };
+}

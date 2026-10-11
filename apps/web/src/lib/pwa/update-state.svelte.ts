@@ -6,8 +6,7 @@ class UpdateState {
 
   /**
    * Whether it is safe to swap the app version right now. Never update mid-session.
-   * TODO: the session runner sets this to false while a session is active and back to true when
-   * it ends. Until that exists it is always true.
+   * The session page sets this to false while a session is open and back to true when it ends.
    */
   canUpdateNow = $state(true);
 
