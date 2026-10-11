@@ -1,0 +1,30 @@
+{
+  "source": "https://smpldsnds.github.io/sfzinstruments-splendid-grand-piano/samples",
+  "licence": "Public domain (Akai Splendid Grand Piano)",
+  "format": "m4a",
+  "layers": [
+    "PP",
+    "MP",
+    "MF"
+  ],
+  "notes": [
+    35,
+    41,
+    45,
+    48,
+    55,
+    59,
+    62,
+    65,
+    69,
+    72,
+    76,
+    79,
+    83,
+    86,
+    89,
+    96
+  ],
+  "files": 48,
+  "totalBytes": 5123299
+}

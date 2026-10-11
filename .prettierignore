@@ -9,3 +9,4 @@ pnpm-lock.yaml
 docs
 .claude
 build
+apps/web/static/samples
