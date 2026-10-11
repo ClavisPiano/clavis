@@ -23,10 +23,62 @@ export interface Attempt {
   frames: readonly PitchFrame[];
 }
 
+const TARGET_VELOCITY = 0.8;
+const TARGET_NOTE_SEC = 0.8;
+const TARGET_GAP_SEC = 0.6;
+const RHYTHM_NOTE_SEC = 0.25;
+
+/**
+ * Reading items show their target and play no audio before the answer (R17), so the stimulus
+ * holds no target. The reference is built from the expected response: the note, the notes one
+ * after another, or the rhythm after its count-in.
+ */
+function displayTargetEvents(instance: ItemInstance): StimulusEvent[] {
+  const play = instance.expected.play;
+  const countIn = instance.stimulus.events.filter((e) => e.role === "count-in");
+  switch (play?.kind) {
+    case "exactPitch":
+    case "pitchClass":
+      return [
+        {
+          atSec: 0,
+          midi: [play.targetMidi],
+          durationSec: TARGET_NOTE_SEC,
+          velocity: TARGET_VELOCITY,
+          role: "target",
+        },
+      ];
+    case "sequence":
+      return play.midi.map((m, i) => ({
+        atSec: i * TARGET_GAP_SEC,
+        midi: [m],
+        durationSec: TARGET_NOTE_SEC,
+        velocity: TARGET_VELOCITY,
+        role: "target" as const,
+      }));
+    case "rhythm": {
+      const beatSec = 60 / play.tempoBpm;
+      const countInEnd = countIn.reduce((end, e) => Math.max(end, e.atSec + beatSec), 0);
+      return [
+        ...countIn,
+        ...play.onsetsBeats.map((b) => ({
+          atSec: countInEnd + b * beatSec,
+          midi: [play.pitch ?? 60],
+          durationSec: RHYTHM_NOTE_SEC,
+          velocity: TARGET_VELOCITY,
+          role: "target" as const,
+        })),
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
 function referenceEvents(instance: ItemInstance): StimulusEvent[] {
-  const events = instance.stimulus.events.filter(
-    (e) => e.role === "target" || e.role === "count-in",
-  );
+  const events = instance.display
+    ? displayTargetEvents(instance)
+    : instance.stimulus.events.filter((e) => e.role === "target" || e.role === "count-in");
   const start = events.reduce((min, e) => Math.min(min, e.atSec), Infinity);
   const shift = Number.isFinite(start) ? start : 0;
   return events.map((e) => ({ ...e, atSec: e.atSec - shift }));

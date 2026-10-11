@@ -26,9 +26,27 @@ function verb(detail: AttemptError["detail"]): string {
   return detail?.part === "sing" ? "sang" : "played";
 }
 
-/** One short sentence for an error code. */
-export function describeError(error: AttemptError): string {
+/** Names a MIDI note for reading items, e.g. "E2". Absent for ear items. */
+export type NoteNamer = (midi: number) => string;
+
+/** One short sentence for an error code. With `names` (reading items) notes are named. */
+export function describeError(error: AttemptError, names?: NoteNamer): string {
   const { code, detail } = error;
+  if (names) {
+    const expected = num(detail, "expected");
+    const played = num(detail, "played");
+    if (expected !== undefined && played !== undefined) {
+      if (code === "pitch.wrong") {
+        return `You played ${names(played)}. This note is ${names(expected)}.`;
+      }
+      if (code === "pitch.octave") {
+        return `Right note, wrong octave. You played ${names(played)}. This note is ${names(expected)}.`;
+      }
+      if (code === "sequence.wrong-note") {
+        return `${noteLabel(detail)}: you played ${names(played)}; the target was ${names(expected)}`;
+      }
+    }
+  }
   if (code.startsWith(CONFUSION_PREFIX)) {
     const [expected, played] = code.slice(CONFUSION_PREFIX.length).split("-");
     if (expected !== undefined && played !== undefined && expected !== "" && played !== "") {
@@ -84,10 +102,14 @@ export function describeError(error: AttemptError): string {
 }
 
 /** At most two issue lines, in the order scoring ranked them, without repeats. */
-export function issueLines(errors: readonly AttemptError[], max = MAX_ISSUES): string[] {
+export function issueLines(
+  errors: readonly AttemptError[],
+  max = MAX_ISSUES,
+  names?: NoteNamer,
+): string[] {
   const lines: string[] = [];
   for (const e of errors) {
-    const line = describeError(e);
+    const line = describeError(e, names);
     if (!lines.includes(line)) lines.push(line);
     if (lines.length >= max) break;
   }
@@ -132,6 +154,8 @@ export function buildFeedback(opts: {
   errors: readonly AttemptError[];
   /** The item's mode: degree labels mean different notes in major and minor. */
   mode?: TipMode;
+  /** Reading items: names the notes in pitch errors. */
+  names?: NoteNamer;
 }): FeedbackView {
   const detailed = showDetail(opts.nodeState, opts.attemptIndex, opts.correct);
   const tip =
@@ -141,7 +165,7 @@ export function buildFeedback(opts: {
   return {
     correct: opts.correct,
     detailed,
-    lines: detailed ? issueLines(opts.errors) : [],
+    lines: detailed ? issueLines(opts.errors, MAX_ISSUES, opts.names) : [],
     autoAdvance: !detailed && opts.correct,
     ...(tip ? { tip: tip.text } : {}),
   };

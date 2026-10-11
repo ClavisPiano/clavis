@@ -139,3 +139,45 @@ describe("concept tips in feedback", () => {
     expect(fb.tip).toMatch(/^3 is the dark middle of the minor home chord/);
   });
 });
+
+describe("describeError on reading items (named notes)", () => {
+  const names = (midi: number): string =>
+    ({ 38: "D2", 40: "E2", 52: "E3", 43: "G2" })[midi] ?? `m${String(midi)}`;
+  const table: [AttemptError, string][] = [
+    [
+      { code: "pitch.wrong", detail: { expected: 38, played: 40 } },
+      "You played E2. This note is D2.",
+    ],
+    [
+      { code: "pitch.octave", detail: { expected: 40, played: 52, octaves: 1 } },
+      "Right note, wrong octave. You played E3. This note is E2.",
+    ],
+    [
+      { code: "sequence.wrong-note", detail: { index: 1, expected: 43, played: 40 } },
+      "Note 2: you played E2; the target was G2",
+    ],
+    // Without numeric notes, or for other codes, the ear wording stands.
+    [{ code: "pitch.wrong" }, "That was not the target note"],
+    [{ code: "sequence.missing", detail: { index: 1 } }, "Note 2 was missing"],
+  ];
+  it.each(table)("%j -> %s", (error, line) => {
+    expect(describeError(error, names)).toBe(line);
+  });
+
+  it("leaves ear wording unchanged without a namer", () => {
+    expect(describeError({ code: "pitch.wrong", detail: { expected: 38, played: 40 } })).toBe(
+      "That was not the target note",
+    );
+  });
+
+  it("names notes in the feedback lines", () => {
+    const view = buildFeedback({
+      nodeState: "learning",
+      attemptIndex: 0,
+      correct: false,
+      errors: [{ code: "pitch.wrong", detail: { expected: 38, played: 40 } }],
+      names,
+    });
+    expect(view.lines).toEqual(["You played E2. This note is D2."]);
+  });
+});

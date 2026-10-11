@@ -172,6 +172,11 @@
       </header>
     {/if}
 
+    {#if "item" in view && view.item.display}
+      <!-- The painted score goes here once NotationView arrives (T3.4); the port draws into it. -->
+      <div class="notation-slot" data-testid="notation-slot" data-block={view.item.block}></div>
+    {/if}
+
     {#if view.kind === "idle"}
       <h1>{params?.mode === "away" ? "Away session" : "Session"}</h1>
       <p>
@@ -416,6 +421,13 @@
             {/each}
           </ul>
         {/if}
+        {#if view.summary.notes}
+          <ul class="issues" data-testid="summary-notes">
+            {#each view.summary.notes as note (note)}
+              <li>{note}</li>
+            {/each}
+          </ul>
+        {/if}
         <a class="button" href={resolve("/")} data-testid="home">Back to home</a>
       </section>
     {:else}
@@ -491,6 +503,10 @@
 
   .lead {
     font-size: 1.15rem;
+  }
+
+  .notation-slot {
+    min-height: 8rem;
   }
 
   .prompt {
