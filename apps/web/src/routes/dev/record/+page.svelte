@@ -70,6 +70,9 @@
     result = undefined;
     message = "";
     // Everything below starts inside the tap, so iOS allows the context and the mic prompt.
+    // iOS refuses capture under the "playback" session another page may have set.
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+    if (session?.type === "playback") session.type = "play-and-record";
     const ctx = new AudioContext();
     await ctx.resume();
     try {

@@ -107,7 +107,7 @@ export function createInput(kind: InputKind, deps: CreateInputDeps = {}): InputH
     adapter: new MicInputAdapter({
       source: createMicPitchSource(),
       getContext: async () => {
-        await audio.unlock();
+        await audio.unlock({ capture: true });
         return audio.getContext() as unknown as CaptureContext;
       },
     }),

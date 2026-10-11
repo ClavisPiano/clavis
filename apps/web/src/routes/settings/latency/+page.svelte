@@ -137,7 +137,7 @@
   async function startMic(): Promise<void> {
     message = "";
     try {
-      await audio.unlock();
+      await audio.unlock({ capture: true });
       meter ??= createLevelMeter();
       offOnset?.();
       offOnset = meter.onOnset((ms) => {

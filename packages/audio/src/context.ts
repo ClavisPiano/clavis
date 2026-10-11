@@ -49,8 +49,9 @@ export interface AudioContextManagerOptions {
   /** Defaults to the global `window`, if any. */
   window?: EventTargetLike | undefined;
   /**
-   * Safari 17+ `navigator.audioSession`. Setting `type = "playback"` makes Web Audio play
-   * through the iPhone silent switch. Defaults to the global navigator's, if present.
+   * Safari 17+ `navigator.audioSession`. `unlock()` sets `type = "playback"` so Web Audio plays
+   * through the iPhone silent switch, or `"play-and-record"` once capture is needed: iOS refuses
+   * `getUserMedia` under `playback`. Defaults to the global navigator's, if present.
    */
   audioSession?: { type: string } | undefined;
 }
@@ -77,6 +78,7 @@ export class AudioContextManager {
   #context: AudioContextLike | undefined;
   #lastState: ManagerState = "uninitialized";
   #disposers: (() => void)[] = [];
+  #capture = false;
 
   constructor(options: AudioContextManagerOptions = {}) {
     this.#createContext = options.createContext ?? defaultCreateContext;
@@ -134,11 +136,16 @@ export class AudioContextManager {
    * Call synchronously from a user gesture handler (tap, click). Creates the context if needed,
    * resumes it, and plays a one-sample silent buffer, which iOS still needs on some versions to
    * start output. Safe to call repeatedly. Resolves with the resulting state.
+   *
+   * Pass `capture: true` before opening the microphone. It is sticky for the manager's lifetime:
+   * switching the iOS audio session category back and forth interrupts a running context.
    */
-  unlock(): Promise<ManagerState> {
+  unlock(options: { capture?: boolean } = {}): Promise<ManagerState> {
+    if (options.capture) this.#capture = true;
     if (this.#audioSession) {
+      const type = this.#capture ? "play-and-record" : "playback";
       try {
-        this.#audioSession.type = "playback";
+        if (this.#audioSession.type !== type) this.#audioSession.type = type;
       } catch {
         // Unsupported value: ignore, Web Audio still works with the silent switch off.
       }
