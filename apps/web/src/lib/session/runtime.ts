@@ -13,6 +13,7 @@ import {
   createUlidGenerator,
   getGenerator,
   type LearningEvent,
+  type StimulusSpec,
 } from "@clavis/core";
 import { scoreAttempt } from "@clavis/scoring";
 import { getLearnerState } from "../learner";
@@ -23,6 +24,8 @@ import { parseLatency, type SessionParams } from "./params";
 
 export const HEADPHONES_META_KEY = "headphones";
 export const LATENCY_META_KEY = "latency";
+/** Device meta: the warm-up concept card has been shown in full once. */
+export const ORIENT_CARD_META_KEY = "seen.orient-card";
 
 export interface SessionRuntime {
   machine: SessionMachine;
@@ -32,6 +35,11 @@ export interface SessionRuntime {
   tone(midi: number): void;
   /** Call from a user gesture before `machine.start()` or `resume()`. */
   unlock(): Promise<void>;
+  /** Play a concept card example. Call from a tap; stops anything already sounding. */
+  playExample(spec: StimulusSpec): void;
+  /** True once the warm-up card has been shown in full on this device. */
+  readonly orientCardSeen: boolean;
+  markOrientCardSeen(): void;
   teardown(): void;
 }
 
@@ -96,6 +104,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
         : undefined;
   const headphones = params.headphones === "ask" ? undefined : (params.headphones ?? known);
   const latency = parseLatency(await store.getMeta(LATENCY_META_KEY));
+  let orientCardSeen = (await store.getMeta(ORIENT_CARD_META_KEY)) === true;
 
   const seedBytes = crypto.getRandomValues(new Uint32Array(1));
   const deps: SessionDeps = {
@@ -180,6 +189,28 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
         // session category later would interrupt the running context.
         if (!fake) await audio.unlock({ capture: true });
       },
+      playExample(spec) {
+        if (!fake) void audio.unlock({ capture: true });
+        if (fake) {
+          const w = window as unknown as { __clavisExamplesPlayed?: number };
+          w.__clavisExamplesPlayed = (w.__clavisExamplesPlayed ?? 0) + 1;
+        }
+        void stimulusPlayer
+          .load()
+          .then(() => {
+            stimulusPlayer.stop();
+            stimulusPlayer.play(spec);
+          })
+          .catch(() => undefined);
+      },
+      get orientCardSeen() {
+        return orientCardSeen;
+      },
+      markOrientCardSeen() {
+        if (orientCardSeen) return;
+        orientCardSeen = true;
+        void store.setMeta(ORIENT_CARD_META_KEY, true).catch(() => undefined);
+      },
       teardown() {
         // Leaving mid-session closes it now; a killed tab is cleaned up by the next start.
         machine.finish();
@@ -187,6 +218,7 @@ export async function createSessionRuntime(params: SessionParams): Promise<Runti
         if (fake) {
           detachFakeInput();
           Reflect.deleteProperty(window, "__clavisSession");
+          Reflect.deleteProperty(window, "__clavisExamplesPlayed");
         }
       },
     },

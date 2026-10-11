@@ -524,6 +524,22 @@ describe("feedback fading", () => {
     expect(h.machine.state.kind).toBe("presenting");
   });
 
+  it("mastered: auto-advance still happens after a pause in feedback", async () => {
+    const { h } = await withNodeState("mastered");
+    await h.machine.start();
+    h.machine.next();
+    h.machine.next();
+    await playItem(h);
+    expect(h.machine.state).toMatchObject({ kind: "feedback", feedback: { autoAdvance: true } });
+    h.machine.pause();
+    await h.advance(5000);
+    expect(h.machine.state.kind).toBe("paused");
+    h.machine.resume();
+    expect(h.machine.state.kind).toBe("feedback");
+    await h.advance(860);
+    expect(h.machine.state.kind).toBe("presenting");
+  });
+
   it("mastered: an error shows the detail", async () => {
     const { h } = await withNodeState("mastered");
     await h.machine.start();
