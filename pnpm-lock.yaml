@@ -62,6 +62,9 @@ importers:
       '@clavis/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@clavis/scoring':
+        specifier: workspace:*
+        version: link:../../packages/scoring
       '@clavis/store':
         specifier: workspace:*
         version: link:../../packages/store

@@ -4,9 +4,10 @@ import {
   TapInputAdapter,
   getAudioContextManager,
   type CaptureContext,
+  type FakeClock,
   type InputAdapter,
 } from "@clavis/audio";
-import type { NoteEvent, PitchFrame } from "@clavis/core";
+import type { ExpectedResponse, NoteEvent, PitchFrame } from "@clavis/core";
 import { createMicPitchSource } from "@clavis/audio/web";
 import type { SessionMode } from "./session-mode";
 
@@ -44,9 +45,18 @@ export interface FakeInputHook {
   nowMs(): number;
 }
 
+/** What Playwright reads to answer a session item. Only present in fake mode. */
+export interface SessionHook {
+  phase: string;
+  expected: ExpectedResponse | undefined;
+  stimulusEndMs: number | undefined;
+  phaseStartMs: number | undefined;
+}
+
 declare global {
   interface Window {
     __clavisFakeInput?: FakeInputHook;
+    __clavisSession?: SessionHook;
   }
 }
 
@@ -60,6 +70,11 @@ export interface InputHandle {
 export interface CreateInputDeps {
   /** Where to attach the fake hook. Defaults to `window`. */
   target?: { __clavisFakeInput?: FakeInputHook | undefined };
+  /**
+   * Clock for the fake adapter. The session runner passes the clock its stimulus times come from,
+   * so `nowMs()` and `onsetMs` are comparable with `stimulusEndMs`. Default `performance.now`.
+   */
+  clock?: FakeClock;
 }
 
 /** Build the adapter for `kind` on the shared AudioContext. */
@@ -72,7 +87,10 @@ export function createInput(kind: InputKind, deps: CreateInputDeps = {}): InputH
     return { kind, adapter: tap, tap };
   }
   if (kind === "fake") {
-    const fake = new FakeInputAdapter({ source: "mic" });
+    const fake = new FakeInputAdapter({
+      source: "mic",
+      ...(deps.clock ? { clock: deps.clock } : {}),
+    });
     // Only reached when the caller asked for fake input explicitly (see resolveInputKind).
     const target = deps.target ?? (typeof window === "undefined" ? undefined : window);
     if (target) {
