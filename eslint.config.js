@@ -82,7 +82,7 @@ export default defineConfig(
   },
   {
     // Plain JS/CJS config files at the repo root: not type-checked.
-    files: ["*.js", "*.cjs", "*.mjs", "apps/*/*.js"],
+    files: ["*.js", "*.cjs", "*.mjs", "apps/*/*.js", "apps/*/scripts/*.mjs"],
     languageOptions: { globals: globals.node },
   },
   {
