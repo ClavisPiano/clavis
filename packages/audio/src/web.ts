@@ -8,6 +8,8 @@
  */
 import captureWorkletUrl from "./mic/capture.worklet.ts?worker&url";
 import PitchWorker from "./mic/pitch.worker.ts?worker";
+import levelWorkletUrl from "./latency/level.worklet.ts?worker&url";
+import { LevelMeter, type LevelMeterOptions } from "./latency/level-meter.js";
 import { MicPitchSource, type MicAssets, type MicPitchSourceOptions } from "./mic/mic-source.js";
 
 export const micAssets: MicAssets = {
@@ -20,4 +22,9 @@ export function createMicPitchSource(
   options: Omit<MicPitchSourceOptions, "assets"> = {},
 ): MicPitchSource {
   return new MicPitchSource({ ...options, assets: micAssets });
+}
+
+/** A `LevelMeter` (energy onsets for latency calibration) wired to the bundled worklet. */
+export function createLevelMeter(options: Omit<LevelMeterOptions, "workletUrl"> = {}): LevelMeter {
+  return new LevelMeter({ ...options, workletUrl: levelWorkletUrl });
 }
