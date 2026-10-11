@@ -22,5 +22,9 @@
     "svelte": "5.57.2",
     "svelte-check": "4.7.6",
     "vite": "8.3.4"
+  },
+  "dependencies": {
+    "@clavis/audio": "workspace:*",
+    "@clavis/core": "workspace:*"
   }
 }

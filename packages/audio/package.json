@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@clavis/core": "workspace:*"
+    "@clavis/core": "workspace:*",
+    "smplr": "1.1.0"
   }
 }

@@ -52,6 +52,13 @@ importers:
         version: 5.0.3(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2))
 
   apps/web:
+    dependencies:
+      '@clavis/audio':
+        specifier: workspace:*
+        version: link:../../packages/audio
+      '@clavis/core':
+        specifier: workspace:*
+        version: link:../../packages/core
     devDependencies:
       '@playwright/test':
         specifier: 1.64.0
@@ -92,6 +99,9 @@ importers:
       '@clavis/core':
         specifier: workspace:*
         version: link:../core
+      smplr:
+        specifier: 1.1.0
+        version: 1.1.0
 
   packages/content:
     dependencies:
@@ -1559,6 +1569,10 @@ packages:
 
   sisteransi@1.0.5:
     resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
+
+  smplr@1.1.0:
+    resolution: {integrity: sha512-VW2FeDdSgBU3cg9pofUYvXB1Nb0iMXurbAnUlpgWfOklw/3JGP5vEjKdq7qGaEwL8rzQTMjdDu64AqpR2ul1bQ==}
+    engines: {node: '>=14.0.0'}
 
   source-map-js@1.2.2:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
@@ -3089,6 +3103,8 @@ snapshots:
       totalist: 3.0.1
 
   sisteransi@1.0.5: {}
+
+  smplr@1.1.0: {}
 
   source-map-js@1.2.2: {}
 
