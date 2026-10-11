@@ -1,8 +1,8 @@
 import type { GeneratorId, SkillGraph } from "../graph/schema.js";
 import type { SessionMode } from "../learning/rating.js";
-import type { ItemParams } from "../items/types.js";
+import type { Generator, ItemParams } from "../items/types.js";
 import type { LearnerState } from "../state/types.js";
-import type { Key } from "../theory/keys.js";
+import type { Key, KeyFamily } from "../theory/keys.js";
 
 export interface ComposeInput {
   state: LearnerState;
@@ -15,6 +15,11 @@ export interface ComposeInput {
   /** Default 720 for instrument, 300 for away, or `settings.budgetSec` / `settings.awayBudgetSec`. */
   budgetSec?: number;
   seed: number;
+  /**
+   * Generator registry. Defaults to `GENERATORS`. A node is enabled only when its generators are
+   * implemented in the graph and present here, so tests can stub READ generators.
+   */
+  generators?: Partial<Record<GeneratorId, Generator>>;
 }
 
 /** One item the session runner will turn into a stimulus via `getGenerator(generator).generate(...)`. */
@@ -25,6 +30,14 @@ export interface PlannedItem {
   params: ItemParams;
   isNew: boolean;
   estimatedSec: number;
+  /** Key family of the item (R15). Present for key-dependent nodes only. */
+  fam?: KeyFamily;
+  /**
+   * Key to present in (R15), from `keyForFamily`: the key of the day when it is in `fam` (and the
+   * node's mode), else a seeded pick; C major (A minor) for family A until bass landmarks are
+   * fluent. Present when `fam` is. The runner passes it as `preferredKey`.
+   */
+  key?: Key;
 }
 
 export interface SessionPlan {
@@ -40,6 +53,11 @@ export interface SessionPlan {
   blocks: { ear: PlannedItem[]; read: PlannedItem[]; apply: null };
   /** Node ids to introduce (emit `node.introduced`). At most one. */
   introductions: string[];
+  /**
+   * `keyFamily` to emit on `node.introduced`, by node id, for introduced key-dependent nodes
+   * (always "A", R16). Empty for EAR introductions.
+   */
+  introductionKeyFamilies: Record<string, KeyFamily>;
   diagnostics: {
     /** Due cards found in the strands considered (ear plus read), before the budget cut. */
     dueCount: number;

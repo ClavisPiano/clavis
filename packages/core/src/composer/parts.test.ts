@@ -129,14 +129,32 @@ describe("allocate", () => {
     expect(tiny.orientSec).toBe(20);
   });
 
-  it("gives away mode the whole budget as ear", () => {
+  it("gives away mode the whole budget as ear when read has no content", () => {
+    const a = allocate({
+      budgetSec: 300,
+      mode: "away",
+      readHasContent: false,
+      applyHasContent: true,
+    });
+    expect(a).toMatchObject({ orientSec: 0, earSec: 300, readSec: 0, applySec: 0 });
+  });
+
+  it("splits away mode 60% ear and 40% read when read has content (R16)", () => {
     const a = allocate({
       budgetSec: 300,
       mode: "away",
       readHasContent: true,
       applyHasContent: true,
     });
-    expect(a).toMatchObject({ orientSec: 0, earSec: 300, readSec: 0, applySec: 0 });
+    expect(a).toMatchObject({ orientSec: 0, earSec: 180, readSec: 120, applySec: 0 });
+    const odd = allocate({
+      budgetSec: 123,
+      mode: "away",
+      readHasContent: true,
+      applyHasContent: false,
+    });
+    expect(odd.earSec + odd.readSec).toBe(123);
+    expect(odd.readSec).toBe(49);
   });
 });
 
