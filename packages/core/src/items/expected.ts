@@ -62,12 +62,15 @@ export const SungPitchTargetSchema = z.strictObject({
   /** Octave-agnostic: the sung pitch class must be within tolerance of this note's. */
   targetMidi: midi,
   toleranceCents: z.number().positive(),
+  /** Names confusions for sing-only (Away) attempts, where there is no play target. */
+  degreeLabels: DegreeLabelsSchema.optional(),
 });
 
 export const SungSequenceTargetSchema = z.strictObject({
   kind: z.literal("sungSequence"),
   midi: z.array(midi).min(1),
   toleranceCents: z.number().positive(),
+  degreeLabels: DegreeLabelsSchema.optional(),
 });
 
 export const SingTargetSchema = z.discriminatedUnion("kind", [

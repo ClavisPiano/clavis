@@ -88,7 +88,12 @@ function make(id: GeneratorId, sung: boolean): Generator {
 
       const expected: ExpectedResponse = sung
         ? {
-            sing: { kind: "sungPitch", targetMidi, toleranceCents: SING_TOLERANCE_CENTS },
+            sing: {
+              kind: "sungPitch",
+              targetMidi,
+              toleranceCents: SING_TOLERANCE_CENTS,
+              degreeLabels: labels,
+            },
             play: {
               kind: "pitchClass",
               targetMidi: singable(

@@ -133,7 +133,12 @@ export const cellEcho: Generator = {
       },
       stimulus,
       expected: {
-        sing: { kind: "sungSequence", midi: sung.midi, toleranceCents: SING_TOLERANCE_CENTS },
+        sing: {
+          kind: "sungSequence",
+          midi: sung.midi,
+          toleranceCents: SING_TOLERANCE_CENTS,
+          degreeLabels: labels,
+        },
         play: {
           kind: "sequence",
           midi: played.midi,

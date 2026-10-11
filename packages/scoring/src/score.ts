@@ -90,14 +90,14 @@ export function scoreAttempt(input: ScoreInput): ScoreResult {
             frames,
             stimulusEndMs: input.stimulusEndMs,
             responseWindowMs: input.expected.responseWindowMs,
-            degreeLabels: labelsOf(play),
+            degreeLabels: sing.degreeLabels ?? labelsOf(play),
           })
         : scoreSungSequence({
             midi: sing.midi,
             frames,
             stimulusEndMs: input.stimulusEndMs,
             responseWindowMs: input.expected.responseWindowMs,
-            degreeLabels: labelsOf(play),
+            degreeLabels: sing.degreeLabels ?? labelsOf(play),
           })
       : undefined;
   const played = part !== "sing" && play ? scorePlay(play, input) : undefined;
