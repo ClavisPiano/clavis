@@ -21,6 +21,9 @@ describe("parseEvent", () => {
     expect(parseEvent({ ...device, userAgent: "UA" }).ok).toBe(true);
     expect(parseEvent(settings)).toEqual({ ok: true, event: settings });
     expect(parseEvent({ ...settings, patch: {} }).ok).toBe(true);
+    expect(parseEvent({ ...settings, patch: { weeklyTargetDays: 5 } }).ok).toBe(true);
+    expect(parseEvent({ ...settings, patch: { weeklyTargetDays: 8 } }).ok).toBe(false);
+    expect(parseEvent({ ...settings, patch: { weeklyTargetDays: 0 } }).ok).toBe(false);
   });
 
   it("rejects non-objects and missing type/version", () => {

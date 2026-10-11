@@ -18,12 +18,21 @@ import {
  * - The `LearningEvent` union always holds the LATEST version of each type.
  */
 
+/*
+ * `weeklyTargetDays` (T2.10) was added to the shipped v1 patch as an OPTIONAL key instead of a
+ * v2 with an upcaster. Reading is fully backward compatible (old events simply lack the key).
+ * The only cost is that a client built before this change would reject a new event that carries
+ * the key. That is acceptable here: Clavis ships one client version at a time (a single-user PWA
+ * that updates itself), and a v2 would force every concurrent writer of `v: 1` settings events
+ * to change in lockstep. Any further change to this patch must be a real v2 with an upcaster.
+ */
 export const SettingsPatch = z.strictObject({
   budgetSec: z.int().min(60).max(3600).optional(),
   awayBudgetSec: z.int().min(60).max(1800).optional(),
   voiceRangeLow: z.int().min(21).max(108).optional(),
   voiceRangeHigh: z.int().min(21).max(108).optional(),
   headphones: z.boolean().optional(),
+  weeklyTargetDays: z.int().min(1).max(7).optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;
 
