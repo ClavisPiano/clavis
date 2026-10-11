@@ -68,7 +68,9 @@ test("settings links to latency, backup and shows versions", async ({ page }) =>
 });
 
 test("home shows the 7-day row after a seeded session", async ({ page }) => {
-  const now = Date.now();
+  // Pin the page clock to midday UTC so the seeded session never straddles the 04:00 rollover.
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  await page.clock.setFixedTime(now);
   const doc = {
     format: "clavis-events",
     formatVersion: 1,
