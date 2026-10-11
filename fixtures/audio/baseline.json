@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "onsetToleranceMs": 100,
+  "report": {
+    "overall": {
+      "truth": 21,
+      "detected": 19,
+      "matched": 19,
+      "precision": 1,
+      "recall": 0.9048,
+      "f1": 0.95,
+      "pitchExact": 1,
+      "pitchClass": 1,
+      "octaveErrorRate": 0,
+      "onsetMedianMs": 6.9841,
+      "onsetP90Ms": 15.6463
+    },
+    "byKind": {
+      "sung-degree": {
+        "truth": 8,
+        "detected": 8,
+        "matched": 8,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "onsetMedianMs": 9.2971,
+        "onsetP90Ms": 15.6463
+      },
+      "piano-single": {
+        "truth": 6,
+        "detected": 4,
+        "matched": 4,
+        "precision": 1,
+        "recall": 0.6667,
+        "f1": 0.8,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "onsetMedianMs": 8.2086,
+        "onsetP90Ms": 10.3855
+      },
+      "piano-sequence": {
+        "truth": 7,
+        "detected": 7,
+        "matched": 7,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "onsetMedianMs": 4.8073,
+        "onsetP90Ms": 12.2449
+      }
+    },
+    "entries": {
+      "synthetic-sung-g-low": {
+        "truth": 4,
+        "detected": 4,
+        "matched": 4,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "onsetMedianMs": 9.2971,
+        "onsetP90Ms": 15.6463
+      },
+      "synthetic-sung-c-high": {
+        "truth": 4,
+        "detected": 4,
+        "matched": 4,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "onsetMedianMs": 9.2971,
+        "onsetP90Ms": 15.6463
+      },
+      "synthetic-piano-singles": {
+        "truth": 6,
+        "detected": 4,
+        "matched": 4,
+        "precision": 1,
+        "recall": 0.6667,
+        "f1": 0.8,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "onsetMedianMs": 8.2086,
+        "onsetP90Ms": 10.3855
+      },
+      "synthetic-piano-melody": {
+        "truth": 7,
+        "detected": 7,
+        "matched": 7,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "onsetMedianMs": 4.8073,
+        "onsetP90Ms": 12.2449
+      }
+    }
+  }
+}
