@@ -7,3 +7,4 @@ export * from "./cell.js";
 export * from "./rhythm.js";
 export * from "./registry.js";
 export { createRng, type Rng } from "../random.js";
+export * from "./family.js";
