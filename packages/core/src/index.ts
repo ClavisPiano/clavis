@@ -5,3 +5,5 @@ export * from "./theory/index.js";
 export * from "./json.js";
 export * from "./input/index.js";
 export * from "./stimulus/index.js";
+export * from "./learning/index.js";
+export * from "./items/index.js";
