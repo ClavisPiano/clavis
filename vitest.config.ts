@@ -4,6 +4,6 @@ import { defineConfig } from "vitest/config";
 // Add a vitest.config.ts inside a package when it needs its own environment.
 export default defineConfig({
   test: {
-    projects: ["packages/*", "apps/web"],
+    projects: ["packages/*", "apps/web", "apps/worker"],
   },
 });

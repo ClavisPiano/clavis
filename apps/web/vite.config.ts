@@ -7,6 +7,25 @@ export default defineConfig({
   plugins: [
     sveltekit({
       adapter: adapter({ pages: "build", assets: "build", fallback: "index.html", strict: false }),
+      // The static build has an inline bootstrap script, so script-src uses hashes that SvelteKit
+      // writes into a <meta> CSP tag. Directives a meta tag cannot carry (frame-ancestors) live in
+      // static/_headers. Keep both in sync with docs/deploy.md.
+      csp: {
+        mode: "hash",
+        directives: {
+          "default-src": ["self"],
+          "script-src": ["self", "wasm-unsafe-eval"],
+          "style-src": ["self", "unsafe-inline"],
+          "img-src": ["self", "data:", "blob:"],
+          "media-src": ["self", "blob:"],
+          "font-src": ["self"],
+          "connect-src": ["self"],
+          "worker-src": ["self", "blob:"],
+          "manifest-src": ["self"],
+          "base-uri": ["self"],
+          "object-src": ["none"],
+        },
+      },
     }),
   ],
   test: {
