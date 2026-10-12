@@ -15,8 +15,15 @@ export type Cue =
       now: string | undefined;
       next: string | undefined;
       total: number;
+      /** 0..1 through the gap until the next note is due (1 when there is none). */
+      towardNext: number;
     }
   | { phase: "done" };
+
+/** The distinct beats at which notes start, in order. One click is played on each. */
+export function noteBeats(take: Take): number[] {
+  return [...new Set(take.notes.map((n) => n.beat))].sort((a, b) => a - b);
+}
 
 /** Notes that start together (two-hand takes) are shown as one cue, for example "C3 E3 G3". */
 function groupLabel(take: Take, beat: number): string {
@@ -32,7 +39,7 @@ export function cueAt(take: Take, elapsedMs: number): Cue {
   if (elapsedMs < countInMs) {
     return { phase: "count-in", beatsLeft: COUNT_IN_BEATS - Math.floor(elapsedMs / beatMs) };
   }
-  const beats = [...new Set(take.notes.map((n) => n.beat))].sort((a, b) => a - b);
+  const beats = noteBeats(take);
   const last = take.notes.reduce((m, n) => Math.max(m, n.beat + n.durBeats), 0);
   const beat = (elapsedMs - countInMs) / beatMs;
   if (beat >= last) return { phase: "done" };
@@ -42,12 +49,16 @@ export function cueAt(take: Take, elapsedMs: number): Cue {
   });
   const nowBeat = beats[index];
   const nextBeat = beats[index + 1];
+  const from = nowBeat ?? 0;
+  const towardNext =
+    nextBeat === undefined ? 1 : Math.min(1, Math.max(0, (beat - from) / (nextBeat - from)));
   return {
     phase: "play",
     index,
     now: nowBeat === undefined ? undefined : groupLabel(take, nowBeat),
     next: nextBeat === undefined ? undefined : groupLabel(take, nextBeat),
     total: beats.length,
+    towardNext,
   };
 }
 
@@ -78,7 +89,22 @@ export function scoreTake(
   detected: readonly Pick<NoteEvent, "pitch" | "onsetMs">[],
   toleranceMs = DEVICE_ONSET_TOLERANCE_MS,
 ): TakeScore {
-  const truth = takeTruth(take);
+  return scoreNotes(takeTruth(take), detected, toleranceMs);
+}
+
+/** A ground-truth note, as in a fixture manifest. */
+export interface TruthLike {
+  midi: number;
+  onsetMs: number;
+  offsetMs?: number | undefined;
+}
+
+/** Score detected notes against ground truth (from the score, or heard onsets when self-paced). */
+export function scoreNotes(
+  truth: readonly TruthLike[],
+  detected: readonly Pick<NoteEvent, "pitch" | "onsetMs">[],
+  toleranceMs = DEVICE_ONSET_TOLERANCE_MS,
+): TakeScore {
   const { pairs } = matchNotes(truth, detected, toleranceMs);
   const byTruth = new Map(pairs.map((p) => [p.truth, p.detectedPitch]));
   const notes: TakeNoteResult[] = truth.map((t) => {
@@ -103,4 +129,72 @@ export function scoreTake(
     exactRate: heard === 0 ? null : count("exact") / heard,
     notes,
   };
+}
+
+export interface OnsetDetectorOptions {
+  /** RMS window. */
+  windowMs?: number;
+  /** A window this many times louder than the quietest of the last few counts as an attack. */
+  riseRatio?: number;
+  /** How many earlier windows the rise is measured against. */
+  lookbackWindows?: number;
+  /** Ignore anything quieter than this RMS (room noise). */
+  minRms?: number;
+  /** After an onset, ignore further attacks for this long (one key, one onset). */
+  refractoryMs?: number;
+}
+
+/**
+ * Finds note attacks in a mono stream by a sharp rise in short-window RMS, so a new note is heard
+ * even over the previous one ringing on. Feed samples in order with their absolute frame index;
+ * returns the frames where attacks start. Used to pace self-paced takes; pitch is the pipeline's job.
+ */
+export class OnsetDetector {
+  readonly #window: number;
+  readonly #riseRatio: number;
+  readonly #lookback: number;
+  readonly #minRms: number;
+  readonly #refractory: number;
+  readonly #recent: number[] = [];
+  #sum = 0;
+  #count = 0;
+  #windowStart = 0;
+  #lastOnset = Number.NEGATIVE_INFINITY;
+  /** RMS of the last complete window, for a level meter. */
+  level = 0;
+
+  constructor(sampleRate: number, opts: OnsetDetectorOptions = {}) {
+    this.#window = Math.max(1, Math.round(((opts.windowMs ?? 20) * sampleRate) / 1000));
+    this.#riseRatio = opts.riseRatio ?? 2.5;
+    this.#lookback = opts.lookbackWindows ?? 3;
+    this.#minRms = opts.minRms ?? 0.01;
+    this.#refractory = Math.round(((opts.refractoryMs ?? 300) * sampleRate) / 1000);
+  }
+
+  push(samples: Float32Array, startFrame: number): number[] {
+    const onsets: number[] = [];
+    for (let i = 0; i < samples.length; i++) {
+      if (this.#count === 0) this.#windowStart = startFrame + i;
+      const x = samples[i] ?? 0;
+      this.#sum += x * x;
+      this.#count++;
+      if (this.#count < this.#window) continue;
+      const rms = Math.sqrt(this.#sum / this.#count);
+      this.level = rms;
+      const floor = this.#recent.length < this.#lookback ? Infinity : Math.min(...this.#recent);
+      if (
+        rms >= this.#minRms &&
+        rms > floor * this.#riseRatio &&
+        this.#windowStart - this.#lastOnset >= this.#refractory
+      ) {
+        onsets.push(this.#windowStart);
+        this.#lastOnset = this.#windowStart;
+      }
+      this.#recent.push(rms);
+      if (this.#recent.length > this.#lookback) this.#recent.shift();
+      this.#sum = 0;
+      this.#count = 0;
+    }
+    return onsets;
+  }
 }

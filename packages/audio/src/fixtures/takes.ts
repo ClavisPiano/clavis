@@ -30,6 +30,11 @@ export interface Take {
   cadenceTonic?: number;
   expectedRange?: { low: number; high: number };
   tags?: readonly string[];
+  /**
+   * Single notes played at the performer's own pace: the recorder shows one note at a time, hears
+   * its onset and moves on, so ground-truth onsets come from the recording, not from `bpm`.
+   */
+  selfPaced?: true;
 }
 
 const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -67,10 +72,11 @@ function singlesTake(slug: string, dynamic: string): Take {
     kind: "piano-single",
     instruments: ["acoustic-piano", "digital-piano"],
     label: `Single notes A0 to C8, ${dynamic}`,
-    prompt: `Play each note ${dynamic} on the click and let it ring for about 1.5 beats. Every minor third from A0 (${noteName(21)}) to C8 (${noteName(108)}), 30 notes.`,
+    prompt: `Play each note shown ${dynamic} and let it ring until the next one appears. Every minor third from A0 (${noteName(21)}) to C8 (${noteName(108)}), 30 notes.`,
     bpm: 40,
     notes: seq(midis, 2, 1.5),
     tags: [dynamic],
+    selfPaced: true,
   };
 }
 
@@ -85,11 +91,13 @@ function bassSinglesTake(): Take {
     kind: "piano-single",
     instruments: ["acoustic-piano", "digital-piano"],
     label: "Bass notes C2 to E4, every semitone (for bass reading)",
-    prompt: `Play each note at a normal, medium loudness on the click and let it ring for about 1.5 beats. Every semitone from C2 (two octaves below middle C) up to E4, 29 notes.`,
+    prompt:
+      "Play each note shown at a medium loudness and let it ring until the next one appears. Every semitone from C2 (two octaves below middle C) up to E4, 29 notes.",
     bpm: 40,
     notes: seq(midis, 2, 1.5),
     expectedRange: { low: 36, high: 64 },
     tags: ["bass"],
+    selfPaced: true,
   };
 }
 
@@ -253,8 +261,27 @@ export function takeTruth(take: Take): TruthNote[] {
   }));
 }
 
-/** The manifest entry for a take; `file` is `<kind folder>/<id>.wav`. */
-export function takeToEntry(take: Take, ctx: TakeContext): FixtureEntry {
+/** How long a self-paced note is taken to sound, for its ground-truth offset. */
+export const SELF_PACED_NOTE_MS = 1500;
+
+/**
+ * Ground truth for a self-paced take from the onsets the recorder heard, in ms from the first
+ * sample. A note without an onset (the performer skipped it) is left out.
+ */
+export function selfPacedTruth(take: Take, onsetsMs: readonly (number | undefined)[]): TruthNote[] {
+  return take.notes.flatMap((n, i) => {
+    const onset = onsetsMs[i];
+    if (onset === undefined) return [];
+    const onsetMs = Math.round(onset);
+    return [{ midi: n.midi, onsetMs, offsetMs: onsetMs + SELF_PACED_NOTE_MS }];
+  });
+}
+
+/**
+ * The manifest entry for a take; `file` is `<kind folder>/<id>.wav`. `notes` overrides the truth
+ * derived from the score (self-paced takes pass `selfPacedTruth`).
+ */
+export function takeToEntry(take: Take, ctx: TakeContext, notes?: TruthNote[]): FixtureEntry {
   const id = takeId(take, ctx.instrument, ctx.variant);
   return {
     id,
@@ -263,7 +290,7 @@ export function takeToEntry(take: Take, ctx: TakeContext): FixtureEntry {
     instrument: ctx.instrument,
     device: ctx.device,
     ...(ctx.sampleRate === undefined ? {} : { sampleRate: ctx.sampleRate }),
-    notes: takeTruth(take),
+    notes: notes ?? takeTruth(take),
     ...(take.expectedRange === undefined ? {} : { expectedRange: take.expectedRange }),
     ...(take.tags === undefined ? {} : { tags: [...take.tags] }),
   };
