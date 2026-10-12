@@ -64,6 +64,7 @@ test.describe("concept cards", () => {
     await page.getByTestId("continue").click();
     await expect(page.getByTestId("intro")).toBeVisible();
     await page.getByTestId("finish").click();
+    await page.getByTestId("finish-end").click();
     await expect(page.getByTestId("session")).toHaveAttribute("data-state", "summary");
 
     await page.goto("/session?input=fake&budget=90");

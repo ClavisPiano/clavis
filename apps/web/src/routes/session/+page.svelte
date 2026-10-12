@@ -174,6 +174,30 @@
     void runtime?.unlock();
     machine?.resume();
   }
+
+  /** Finish asks first: the session pauses underneath until the learner chooses. */
+  let confirmingFinish = $state(false);
+
+  function askFinish(): void {
+    if (!machine) return;
+    machine.pause();
+    if (machine.state.kind === "paused") confirmingFinish = true;
+  }
+
+  // A confirm left open must not reappear on a later background pause.
+  $effect(() => {
+    if (view.kind !== "paused") confirmingFinish = false;
+  });
+
+  function cancelFinish(): void {
+    confirmingFinish = false;
+    resume();
+  }
+
+  function confirmFinish(): void {
+    confirmingFinish = false;
+    machine?.finish();
+  }
 </script>
 
 <svelte:head><title>Session</title></svelte:head>
@@ -466,6 +490,18 @@
           {/if}
         {/if}
       </section>
+    {:else if view.kind === "paused" && confirmingFinish}
+      <section class="card" data-testid="finish-confirm">
+        <h1>End the session?</h1>
+        <p class="lead">Your answers so far are saved.</p>
+        <div class="confirm-actions">
+          <button type="button" class="primary" data-testid="finish-cancel" onclick={cancelFinish}>
+            Keep going
+          </button>
+          <button type="button" data-testid="finish-end" onclick={confirmFinish}>End session</button
+          >
+        </div>
+      </section>
     {:else if view.kind === "paused"}
       <section class="card" data-testid="paused">
         <h1>Paused</h1>
@@ -554,9 +590,10 @@
       </div>
     {/if}
 
-    {#if running && view.kind !== "paused"}
+    <!-- Nothing has started during the headphones prompt or while preparing, so Finish is hidden. -->
+    {#if running && view.kind !== "paused" && view.kind !== "headphones" && view.kind !== "preparing"}
       <p class="finish">
-        <button type="button" class="link" data-testid="finish" onclick={() => machine?.finish()}>
+        <button type="button" class="link" data-testid="finish" onclick={askFinish}>
           Finish session
         </button>
       </p>
@@ -751,6 +788,12 @@
   .finish {
     margin: 0;
     text-align: center;
+  }
+
+  .confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
   }
 
   .status {
