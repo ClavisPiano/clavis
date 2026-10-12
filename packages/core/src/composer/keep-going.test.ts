@@ -33,6 +33,24 @@ describe("practice fills the time (keep going)", () => {
     expect(budgetSec - orient - itemSec).toBeLessThan(biggest);
   });
 
+  it("ends when recorded durations are zero", () => {
+    const s = learnerWithDueCards();
+    const zeros = Object.fromEntries(
+      V1_GRAPH.generators.map((g) => [g.id, Array.from({ length: 20 }, () => 0)]),
+    );
+    const plan = compose(
+      { ...s, durations: { ...s.durations, ...zeros } },
+      {
+        practice: true,
+        budgetSec: 720,
+      },
+    );
+    const once = compose(s, { practice: true, budgetSec: 720 });
+    // At most one extra pass over the started items.
+    expect(items(plan).length).toBeLessThanOrEqual(2 * items(once).length);
+    expect(items(plan).length).toBeGreaterThan(0);
+  });
+
   it("repeats items once the single pass is used up", () => {
     const s = learnerWithDueCards();
     const once = compose(s, { practice: true, budgetSec: 60 });

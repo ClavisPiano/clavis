@@ -198,6 +198,8 @@ function fillBlock(opts: {
       }
       if (pass.length === 0) break;
       out.passes.push(pass);
+      // A pass of zero-length items (bad timing data) would never fill the block: stop.
+      if (pass.every((x) => x.estimatedSec <= 0)) break;
     }
   }
   return out;
