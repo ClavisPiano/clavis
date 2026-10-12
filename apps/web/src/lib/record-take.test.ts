@@ -1,6 +1,6 @@
 import { TAKES, takeTruth, type Take } from "@clavis/audio";
 import { describe, expect, it } from "vitest";
-import { cueAt, scoreTake } from "./record-take";
+import { OnsetDetector, cueAt, noteBeats, scoreNotes, scoreTake } from "./record-take";
 
 function take(slug: string): Take {
   const t = TAKES.find((x) => x.slug === slug);
@@ -18,6 +18,12 @@ describe("cueAt", () => {
     expect(cueAt(bass, 6000)).toMatchObject({ phase: "play", index: 0, now: "C2", next: "C#2" });
     expect(cueAt(bass, 8999)).toMatchObject({ index: 0, now: "C2" });
     expect(cueAt(bass, 9000)).toMatchObject({ index: 1, now: "C#2", next: "D2", total: 29 });
+  });
+
+  it("fills a bar toward the next note", () => {
+    expect(cueAt(bass, 6000)).toMatchObject({ towardNext: 0 });
+    expect(cueAt(bass, 7500)).toMatchObject({ towardNext: 0.5 });
+    expect(noteBeats(twoHand)).toEqual([0, 2, 4, 6, 8, 10, 12, 14]);
   });
 
   it("is done after the last note has rung", () => {
@@ -59,5 +65,61 @@ describe("scoreTake", () => {
 
   it("has no rate when nothing was heard", () => {
     expect(scoreTake(bass, []).exactRate).toBeNull();
+  });
+});
+
+describe("scoreNotes", () => {
+  it("scores against heard onsets for self-paced takes", () => {
+    const truth = [
+      { midi: 36, onsetMs: 1234, offsetMs: 2734 },
+      { midi: 37, onsetMs: 4100, offsetMs: 5600 },
+    ];
+    const s = scoreNotes(truth, [
+      { pitch: 36, onsetMs: 1250 },
+      { pitch: 49, onsetMs: 4120 },
+    ]);
+    expect(s).toMatchObject({ heard: 2, exact: 1, octaveErrors: 1 });
+  });
+});
+
+describe("OnsetDetector", () => {
+  const RATE = 22050;
+
+  /** Silence, then decaying low notes struck at `atSec`, each over the previous one's tail. */
+  function piano(atSec: number[], lengthSec: number, noise = 0.001): Float32Array {
+    const out = new Float32Array(Math.round(lengthSec * RATE));
+    let seed = 1;
+    for (let i = 0; i < out.length; i++) {
+      seed = (seed * 16807) % 2147483647;
+      out[i] = (seed / 2147483647 - 0.5) * 2 * noise;
+    }
+    for (const at of atSec) {
+      const start = Math.round(at * RATE);
+      for (let i = start; i < out.length; i++) {
+        const t = (i - start) / RATE;
+        out[i] = (out[i] ?? 0) + 0.3 * Math.exp(-t / 0.8) * Math.sin(2 * Math.PI * 65.4 * t);
+      }
+    }
+    return out;
+  }
+
+  function run(samples: Float32Array, d = new OnsetDetector(RATE)): number[] {
+    const found: number[] = [];
+    for (let i = 0; i < samples.length; i += 128) {
+      found.push(...d.push(samples.subarray(i, i + 128), i));
+    }
+    return found.map((f) => f / RATE);
+  }
+
+  it("finds each strike, including one over the previous note's tail", () => {
+    const onsets = run(piano([0.5, 2.5, 4.0], 6));
+    expect(onsets).toHaveLength(3);
+    [0.5, 2.5, 4.0].forEach((at, i) => {
+      expect(Math.abs((onsets[i] ?? 0) - at)).toBeLessThan(0.03);
+    });
+  });
+
+  it("ignores room noise below the minimum level", () => {
+    expect(run(piano([], 3, 0.004))).toEqual([]);
   });
 });

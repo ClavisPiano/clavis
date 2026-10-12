@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { parseManifest } from "./manifest";
-import { TAKES, noteName, takeToEntry, takeTruth, takesFor } from "./takes";
+import {
+  SELF_PACED_NOTE_MS,
+  TAKES,
+  noteName,
+  selfPacedTruth,
+  takeToEntry,
+  takeTruth,
+  takesFor,
+} from "./takes";
 
 describe("recording takes", () => {
   const entries = (["voice", "acoustic-piano", "digital-piano"] as const).flatMap((instrument) =>
@@ -26,6 +34,19 @@ describe("recording takes", () => {
     const bass = TAKES.find((t) => t.slug === "singles-bass");
     expect(bass?.notes.map((n) => n.midi)).toEqual(Array.from({ length: 29 }, (_, i) => 36 + i));
     expect(bass?.expectedRange).toEqual({ low: 36, high: 64 });
+  });
+
+  it("takes self-paced truth from heard onsets and leaves skipped notes out", () => {
+    const bass = TAKES.find((t) => t.slug === "singles-bass");
+    if (!bass) throw new Error("no bass take");
+    expect(bass.selfPaced).toBe(true);
+    const onsets = bass.notes.map((_, i) => (i === 1 ? undefined : 1000 + i * 3000.4));
+    const truth = selfPacedTruth(bass, onsets);
+    expect(truth).toHaveLength(28);
+    expect(truth[0]).toEqual({ midi: 36, onsetMs: 1000, offsetMs: 1000 + SELF_PACED_NOTE_MS });
+    expect(truth[1]?.midi).toBe(38);
+    const entry = takeToEntry(bass, { instrument: "acoustic-piano", device: "x" }, truth);
+    expect(entry.notes).toBe(truth);
   });
 
   it("covers A0 to C8 in minor thirds and has simultaneous notes in two-hand takes", () => {

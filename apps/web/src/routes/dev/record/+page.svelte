@@ -4,8 +4,10 @@
   import {
     COUNT_IN_BEATS,
     midiToHz,
+    noteName,
     pipelineOptionsFor,
     runWavBytes,
+    selfPacedTruth,
     takeToEntry,
     takeTruth,
     takesFor,
@@ -13,21 +15,42 @@
     type Take,
   } from "@clavis/audio";
   import type { FixtureInstrument } from "@clavis/audio";
-  import { cueAt, scoreTake, type Cue, type TakeScore } from "../../../lib/record-take";
+  import {
+    OnsetDetector,
+    cueAt,
+    noteBeats,
+    scoreNotes,
+    type Cue,
+    type TakeScore,
+  } from "../../../lib/record-take";
 
-  // Records a fixture take to 22.05 kHz mono WAV with a click track and an on-screen cue for every
-  // note, scores it on the device, and builds the matching manifest entry. See
-  // docs/fixtures-recording.md.
+  // Records a fixture take to 22.05 kHz mono WAV, scores it on the device, and builds the matching
+  // manifest entry. Single-note takes are self-paced: one note on screen at a time, and the page
+  // moves on when it hears the note. Timed takes (melodies, two hands) click once per note after a
+  // count-in. See docs/fixtures-recording.md.
   const OUT_RATE = 22050;
+  /** Self-paced: how long a note rings after its attack before the next one is shown. */
+  const RING_MS = 2000;
+  /** Self-paced: recording stops on its own after this long, whatever happens. */
+  const MAX_SELF_PACED_SEC = 600;
+
+  interface SelfCue {
+    index: number;
+    total: number;
+    note: string;
+    next: string | undefined;
+    heard: boolean;
+    level: number;
+  }
 
   let instrument = $state<FixtureInstrument>("acoustic-piano");
   let device = $state("iPhone built-in mic");
   let variant = $state("");
   let slug = $state(takesFor("acoustic-piano")[0]?.slug ?? "");
-  let clickThrough = $state(true);
   let status = $state<"idle" | "recording" | "analysing" | "done">("idle");
   let message = $state("");
   let cue = $state<Cue | undefined>();
+  let selfCue = $state<SelfCue | undefined>();
   let remainingSec = $state(0);
   let result = $state<
     { wav: Uint8Array; snippet: string; name: string; score: TakeScore } | undefined
@@ -36,6 +59,7 @@
   const stop$ = { requested: false };
   const wasStopped = (): boolean => stop$.requested;
   let stopNow: (() => void) | undefined;
+  let skipNote = $state<(() => void) | undefined>();
   let frame = 0;
 
   const takes = $derived(takesFor(instrument));
@@ -96,9 +120,21 @@
     stopNow?.();
   }
 
+  /** Timed takes: louder count-in, then one click on every note (never between notes). */
+  function scheduleClicks(ctx: AudioContext, current: Take, t0: number): void {
+    const beatSec = 60 / current.bpm;
+    for (let b = 0; b < COUNT_IN_BEATS; b++) {
+      beep(ctx, t0 + b * beatSec, b === 0 ? 1600 : 1000, 0.05, 0.4);
+    }
+    for (const beat of noteBeats(current)) {
+      beep(ctx, t0 + (COUNT_IN_BEATS + beat) * beatSec, 1600, 0.05, 0.35);
+    }
+  }
+
   async function record(): Promise<void> {
     if (take === undefined) return;
     const current = take;
+    const selfPaced = current.selfPaced === true;
     result = undefined;
     message = "";
     stop$.requested = false;
@@ -113,34 +149,72 @@
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
       await ctx.audioWorklet.addModule(asset("dev/record-processor.js"));
+      const rate = ctx.sampleRate;
+      // File time 0: samples before it are dropped by frame number.
+      const t0 = ctx.currentTime + (selfPaced ? 0.3 : 0.5);
+      const first = Math.round(t0 * rate);
       const chunks: { frame: number; samples: Float32Array }[] = [];
+
+      // Self-paced state: which note is shown, and the attack heard for each note.
+      const detector = new OnsetDetector(rate);
+      const onsets: (number | undefined)[] = [];
+      let index = 0;
+      let ringUntil: number | undefined;
+      const advance = (): void => {
+        index++;
+        ringUntil = undefined;
+        if (index >= current.notes.length) stopNow?.();
+      };
+      skipNote = selfPaced
+        ? () => {
+            onsets[index] = undefined;
+            advance();
+          }
+        : undefined;
+
       const node = new AudioWorkletNode(ctx, "rec");
       node.port.onmessage = (e: MessageEvent<{ frame: number; samples: Float32Array }>) => {
         chunks.push(e.data);
+        if (!selfPaced) return;
+        for (const at of detector.push(e.data.samples, e.data.frame)) {
+          if (at < first || ringUntil !== undefined || index >= current.notes.length) continue;
+          onsets[index] = ((at - first) / rate) * 1000;
+          ringUntil = at + Math.round((RING_MS / 1000) * rate);
+        }
       };
       const mute = ctx.createGain();
       mute.gain.value = 0;
       ctx.createMediaStreamSource(stream).connect(node);
       node.connect(mute).connect(ctx.destination);
 
-      // File time 0 is the first click: samples before it are dropped by frame number.
-      const t0 = ctx.currentTime + 0.5;
-      const beatSec = 60 / current.bpm;
-      const totalSec = takeLengthSec(current);
-      const clicks = clickThrough ? Math.floor(totalSec / beatSec) : COUNT_IN_BEATS;
-      for (let b = 0; b < clicks; b++) {
-        const countIn = b < COUNT_IN_BEATS;
-        // Count-in clicks are louder; the clicks under the take are quiet so they bleed less.
-        beep(ctx, t0 + b * beatSec, b % 4 === 0 ? 1600 : 1000, 0.04, countIn ? 0.4 : 0.12);
-      }
+      const totalSec = selfPaced ? MAX_SELF_PACED_SEC : takeLengthSec(current);
+      if (!selfPaced) scheduleClicks(ctx, current, t0);
       status = "recording";
       const tick = (): void => {
         const elapsed = ctx.currentTime - t0;
-        cue =
-          elapsed < 0
-            ? { phase: "count-in", beatsLeft: COUNT_IN_BEATS }
-            : cueAt(current, elapsed * 1000);
-        remainingSec = Math.max(0, Math.ceil(totalSec - Math.max(0, elapsed)));
+        if (selfPaced) {
+          const now = Math.round(ctx.currentTime * rate);
+          if (ringUntil !== undefined && now >= ringUntil) advance();
+          const n = current.notes[index];
+          const nx = current.notes[index + 1];
+          selfCue =
+            n === undefined
+              ? undefined
+              : {
+                  index,
+                  total: current.notes.length,
+                  note: noteName(n.midi),
+                  next: nx === undefined ? undefined : noteName(nx.midi),
+                  heard: ringUntil !== undefined,
+                  level: Math.min(1, detector.level * 10),
+                };
+        } else {
+          cue =
+            elapsed < 0
+              ? { phase: "count-in", beatsLeft: COUNT_IN_BEATS }
+              : cueAt(current, elapsed * 1000);
+          remainingSec = Math.max(0, Math.ceil(totalSec - Math.max(0, elapsed)));
+        }
         frame = requestAnimationFrame(tick);
       };
       frame = requestAnimationFrame(tick);
@@ -151,9 +225,13 @@
           resolve();
         };
       });
+      // Let the last self-paced note's tail into the file.
+      const endSec = selfPaced ? ctx.currentTime - t0 + (wasStopped() ? 0 : 0.2) : totalSec;
       stopNow = undefined;
+      skipNote = undefined;
       cancelAnimationFrame(frame);
       cue = undefined;
+      selfCue = undefined;
       node.disconnect();
       for (const tr of stream.getTracks()) tr.stop();
       if (wasStopped()) {
@@ -163,8 +241,7 @@
       }
 
       status = "analysing";
-      const first = Math.round(t0 * ctx.sampleRate);
-      const length = Math.round(totalSec * ctx.sampleRate);
+      const length = Math.max(1, Math.round(endSec * rate));
       const pcm = new Float32Array(length);
       for (const c of chunks) {
         const at = c.frame - first;
@@ -172,8 +249,18 @@
           if (at + i >= 0 && at + i < length) pcm[at + i] = c.samples[i] ?? 0;
         }
       }
-      const out = await resample(pcm, ctx.sampleRate);
-      const entry = takeToEntry(current, { instrument, device, sampleRate: OUT_RATE, variant });
+      const truth = selfPaced ? selfPacedTruth(current, onsets) : takeTruth(current);
+      if (truth.length === 0) {
+        status = "idle";
+        message = "No notes were heard, so nothing was saved. Check the microphone and try again.";
+        return;
+      }
+      const out = await resample(pcm, rate);
+      const entry = takeToEntry(
+        current,
+        { instrument, device, sampleRate: OUT_RATE, variant },
+        truth,
+      );
       const wav = writeWav(out, OUT_RATE);
       // Same pitch pipeline as the app, on the file just recorded.
       const detected = runWavBytes(wav, pipelineOptionsFor(entry)).notes;
@@ -181,13 +268,14 @@
         wav,
         snippet: JSON.stringify(entry, null, 2),
         name: entry.id,
-        score: scoreTake(current, detected),
+        score: scoreNotes(entry.notes, detected),
       };
       status = "done";
       message = "";
     } catch (e) {
       status = "idle";
       cue = undefined;
+      selfCue = undefined;
       cancelAnimationFrame(frame);
       message = `Could not record: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -246,20 +334,23 @@
     Pick the instrument and the take. For bass reading, choose your piano and "Bass notes C2 to E4".
   </li>
   <li>
-    Put the phone on the music stand or about 50 cm from the piano, mic towards the strings or
-    speaker. Turn the phone volume up so you can hear the clicks.
+    Put the phone on the music stand or about 50 cm from the piano, microphone towards the strings
+    or speaker, in a quiet room.
+  </li>
+  <li>Press <strong>Record</strong> and allow the microphone.</li>
+  <li>
+    <strong>Single-note takes</strong> (bass, soft, loud) go at your own pace, with no clicks. The
+    screen shows one note. Play it whenever you are ready and let it ring: the screen ticks when it
+    hears the note, then shows the next one after about 2 seconds. If a note is not picked up, play
+    it again a little louder, or tap <strong>Skip note</strong>.
   </li>
   <li>
-    Press <strong>Record</strong> and allow the microphone. You hear 4 count-in clicks while the screen
-    counts down.
+    <strong>Melodies and two-hand takes</strong> keep time: 4 count-in clicks, then exactly one click
+    for each note. Play the note shown as its click sounds; the bar fills up towards the next one.
   </li>
   <li>
-    Then the screen shows the note to play. Play it on the click and let it ring until the next note
-    appears. Keep going until it says Done. <strong>Stop</strong> cancels.
-  </li>
-  <li>
-    Check the result below, listen back, then <strong>Share</strong> (or Download) the WAV and JSON and
-    send both to me.
+    Check the result below, listen back, then <strong>Share</strong> (or Download) the WAV and JSON
+    and send both to me. <strong>Stop</strong> cancels at any time.
   </li>
 </ol>
 
@@ -282,17 +373,20 @@
   </label>
   <label>Device <input bind:value={device} /></label>
   <label>Id suffix (optional, e.g. laptop) <input bind:value={variant} /></label>
-  <label class="inline">
-    <input type="checkbox" bind:checked={clickThrough} /> Click on every beat (not just the count-in)
-  </label>
 </fieldset>
 
 {#if take}
   <p>{take.prompt}</p>
   <p class="muted">
-    {String(take.bpm)} bpm, {String(take.notes.length)} notes, about {String(
-      Math.round(durationSec),
-    )} s.
+    {#if take.selfPaced}
+      {String(take.notes.length)} notes at your own pace, about {String(
+        Math.round((take.notes.length * 3) / 60),
+      )} minutes.
+    {:else}
+      {String(take.bpm)} bpm, {String(take.notes.length)} notes, about {String(
+        Math.round(durationSec),
+      )} s.
+    {/if}
   </p>
   <p>
     {#if take.cadenceTonic !== undefined}
@@ -301,6 +395,11 @@
       >
     {/if}
     {#if status === "recording"}
+      {#if skipNote}
+        <button type="button" class="button" onclick={() => skipNote?.()} data-testid="rec-skip"
+          >Skip note</button
+        >
+      {/if}
       <button type="button" class="button" onclick={stop} data-testid="rec-stop">Stop</button>
     {:else}
       <button
@@ -327,11 +426,29 @@
         <p class="label">Play now ({cue.index + 1} of {cue.total})</p>
         <p class="big">{cue.now}</p>
         <p class="next">{cue.next === undefined ? "Last note" : `Next: ${cue.next}`}</p>
+        {#if cue.next !== undefined}
+          <div class="bar" aria-hidden="true">
+            <div style:width={`${String(Math.round(cue.towardNext * 100))}%`}></div>
+          </div>
+        {/if}
       {/if}
     {:else}
       <p class="big">Done</p>
     {/if}
     <p class="muted">{remainingSec} s left</p>
+  </div>
+{/if}
+{#if status === "recording" && selfCue}
+  <div class="cue" aria-live="polite" data-testid="rec-cue">
+    <p class="label">Note {selfCue.index + 1} of {selfCue.total}</p>
+    <p class="big">{selfCue.note}</p>
+    <p class="next" data-testid="rec-heard">
+      {selfCue.heard ? "Heard it, let it ring" : "Play it when ready"}
+    </p>
+    <div class="bar level" aria-hidden="true">
+      <div style:width={`${String(Math.round(selfCue.level * 100))}%`}></div>
+    </div>
+    <p class="muted">{selfCue.next === undefined ? "Last note" : `Then: ${selfCue.next}`}</p>
   </div>
 {/if}
 {#if status === "analysing"}
@@ -372,15 +489,7 @@
             <tr class={n.verdict}>
               <td>{n.expected}</td>
               <td>{n.heard ?? "-"}</td>
-              <td
-                >{n.verdict === "exact"
-                  ? "ok"
-                  : n.verdict === "octave"
-                    ? "octave"
-                    : n.verdict === "wrong"
-                      ? "wrong"
-                      : "missed"}</td
-              >
+              <td>{n.verdict === "exact" ? "ok" : n.verdict}</td>
             </tr>
           {/each}
         </tbody>
@@ -441,6 +550,20 @@
   .label,
   .next {
     font-size: 1.1rem;
+  }
+
+  .bar {
+    height: 8px;
+    margin: var(--space-2) auto 0;
+    max-width: 16rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bar div {
+    height: 100%;
+    background: var(--color-accent);
   }
 
   .result table {

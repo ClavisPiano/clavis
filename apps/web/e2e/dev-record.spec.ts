@@ -15,7 +15,7 @@ test.use({
   },
 });
 
-test("the bass take is offered and recording shows a count-in then the note to play", async ({
+test("the bass take is self-paced: one note at a time, skippable, no count-in", async ({
   page,
 }) => {
   test.setTimeout(30_000);
@@ -24,10 +24,14 @@ test("the bass take is offered and recording shows a count-in then the note to p
 
   await page.getByTestId("rec-start").click();
   const cue = page.getByTestId("rec-cue");
-  await expect(cue).toContainText("Get ready");
-  // 40 bpm: the count-in takes 6 s, then the first note is C2.
-  await expect(cue).toContainText("C2", { timeout: 10_000 });
-  await expect(cue).toContainText("Next: C#2");
+  await expect(cue).toContainText("Note 1 of 29");
+  await expect(cue).toContainText("C2");
+  await expect(cue).toContainText("Then: C#2");
+
+  // Skip moves on whether or not the fake microphone's beep was heard as a note.
+  const shown = await cue.locator(".big").textContent();
+  await page.getByTestId("rec-skip").click();
+  await expect(cue.locator(".big")).not.toHaveText(shown ?? "");
 
   await page.getByTestId("rec-stop").click();
   await expect(page.getByTestId("rec-message")).toHaveText("Stopped. Nothing was saved.");
