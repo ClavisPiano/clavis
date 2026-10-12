@@ -181,8 +181,13 @@
   function askFinish(): void {
     if (!machine) return;
     machine.pause();
-    confirmingFinish = true;
+    if (machine.state.kind === "paused") confirmingFinish = true;
   }
+
+  // A confirm left open must not reappear on a later background pause.
+  $effect(() => {
+    if (view.kind !== "paused") confirmingFinish = false;
+  });
 
   function cancelFinish(): void {
     confirmingFinish = false;
@@ -585,7 +590,8 @@
       </div>
     {/if}
 
-    {#if running && view.kind !== "paused"}
+    <!-- Nothing has started during the headphones prompt or while preparing, so Finish is hidden. -->
+    {#if running && view.kind !== "paused" && view.kind !== "headphones" && view.kind !== "preparing"}
       <p class="finish">
         <button type="button" class="link" data-testid="finish" onclick={askFinish}>
           Finish session

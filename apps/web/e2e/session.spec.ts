@@ -85,6 +85,8 @@ test.describe("session runner", () => {
     await page.goto("/session?input=fake&budget=60&headphones=ask");
     await page.getByTestId("start").click();
     await expect(page.getByRole("heading", { name: "Using headphones?" })).toBeVisible();
+    // Nothing has started yet: no Finish to tap during the prompt.
+    await expect(page.getByTestId("finish")).toHaveCount(0);
     await page.getByTestId("headphones-yes").click();
     await expect(page.getByTestId("orient")).toBeVisible();
     await page.getByTestId("finish").click();
