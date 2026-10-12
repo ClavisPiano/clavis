@@ -135,7 +135,11 @@ describe("composeSession with READ goldens", () => {
     expect(summarise(plan)).toMatchInlineSnapshot(`
       {
         "budgetSec": 720,
-        "ear": [],
+        "ear": [
+          "NEW degreeSing degrees.major.135|degree=1 8s",
+          "NEW degreeId degrees.major.135|degree=3 6s",
+          "NEW degreeSing degrees.major.135|degree=5 8s",
+        ],
         "introductionKeyFamilies": {},
         "introductions": [],
         "key": "C major",
@@ -152,11 +156,9 @@ describe("composeSession with READ goldens", () => {
           "NEW bassNoteRead bass.landmarks|fam=B|pos=C2 in Eb major 5s",
           "due bassNoteRead bass.landmarks|fam=A|pos=C2 in C major 5s",
           "due bassNoteRead bass.landmarks|fam=A|pos=C4 in C major 5s",
-          "NEW bassNoteRead bass.landmarks|fam=B|pos=F3 in D major 5s",
           "due bassNoteRead bass.landmarks|fam=A|pos=F3 in C major 5s",
-          "NEW bassNoteRead bass.landmarks|fam=B|pos=C4 in D major 5s",
+          "NEW bassNoteRead bass.landmarks|fam=B|pos=F3 in D major 5s",
           "due bassNoteRead bass.landmarks|fam=A|pos=G2 in C major 5s",
-          "NEW bassNoteRead bass.landmarks|fam=B|pos=G2 in D major 5s",
         ],
       }
     `);
@@ -187,7 +189,11 @@ describe("composeSession with READ goldens", () => {
     expect(summarise(learning)).toMatchInlineSnapshot(`
       {
         "budgetSec": 720,
-        "ear": [],
+        "ear": [
+          "NEW degreeSing degrees.major.135|degree=1 8s",
+          "NEW degreeId degrees.major.135|degree=3 6s",
+          "NEW degreeSing degrees.major.135|degree=5 8s",
+        ],
         "introductionKeyFamilies": {},
         "introductions": [],
         "key": "G major",
@@ -203,8 +209,6 @@ describe("composeSession with READ goldens", () => {
         "read": [
           "NEW bassNoteRead bass.landmarks|fam=A|pos=F3 in C major 5s",
           "NEW bassNoteRead bass.landmarks|fam=A|pos=C2 in C major 5s",
-          "NEW bassNoteRead bass.landmarks|fam=A|pos=C4 in C major 5s",
-          "NEW bassNoteRead bass.landmarks|fam=A|pos=G2 in C major 5s",
         ],
       }
     `);

@@ -1,4 +1,10 @@
-import { hasNewMaterial, type LearnerState, type SessionMode, type SkillGraph } from "@clavis/core";
+import {
+  composeSession,
+  hasNewMaterial,
+  type LearnerState,
+  type SessionMode,
+  type SkillGraph,
+} from "@clavis/core";
 import { effectiveSettings, hasStartedItems } from "./home";
 import { MAX_BUDGET_SEC, MIN_BUDGET_SEC } from "./session/params";
 
@@ -53,6 +59,22 @@ export function nextSteps(opts: {
       budgetSec: opts.budgetSec,
     }),
   };
+}
+
+/**
+ * True when a plain Start session would have no items (nothing due, nothing new), so Home can
+ * stop promoting it. It composes the same plan that the session would.
+ */
+export function startWouldBeEmpty(opts: {
+  state: LearnerState;
+  graph: SkillGraph;
+  now: number;
+  tzOffsetMin: number;
+  mode: SessionMode;
+  budgetSec: number;
+}): boolean {
+  const plan = composeSession({ ...opts, seed: 0 });
+  return plan.blocks.ear.length + plan.blocks.read.length === 0;
 }
 
 /**

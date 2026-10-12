@@ -12,7 +12,7 @@
     todaySummary,
     weekProgress,
   } from "../lib/home";
-  import { nextSteps } from "../lib/next-steps";
+  import { nextSteps, startWouldBeEmpty } from "../lib/next-steps";
   import { PLACEMENT_SKIPPED_META_KEY, shouldOfferPlacement } from "../lib/placement";
 
   const learner = useLearner();
@@ -48,9 +48,22 @@
     snap && placementSkipped !== undefined ? shouldOfferPlacement(snap, placementSkipped) : false,
   );
   const today = $derived(snap ? todaySummary(snap, now, deviceTzOffsetMin()) : undefined);
-  /** Once today's session is done, Home promotes Keep going and Learn something new. */
+  /** A plain Start session that would have no items is not promoted (it shows "Nothing is due"). */
+  const startEmpty = $derived(
+    snap && !firstRun && learner.status === "ready"
+      ? startWouldBeEmpty({
+          state: snap,
+          graph: learner.ctx.graph,
+          now,
+          tzOffsetMin: deviceTzOffsetMin(),
+          mode: "instrument",
+          budgetSec: settings.budgetSec,
+        })
+      : false,
+  );
+  /** Once today's session is done, or nothing is due, Home promotes Keep going and Learn something new. */
   const steps = $derived(
-    snap && today?.completed === true && learner.status === "ready"
+    snap && (today?.completed === true || startEmpty) && learner.status === "ready"
       ? nextSteps({
           state: snap,
           graph: learner.ctx.graph,
@@ -165,7 +178,7 @@
     data-testid="start-session"
   >
     <strong>Start session</strong>
-    <span>{minutesLabel(settings.budgetSec)}</span>
+    <span>{startEmpty ? "Nothing is due right now" : minutesLabel(settings.budgetSec)}</span>
   </a>
   <a class="button secondary" href={resolve("/session?mode=away")} data-testid="start-away">
     <strong>Away session</strong>

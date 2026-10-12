@@ -37,6 +37,15 @@ interface Candidate {
   fam?: KeyFamily;
 }
 
+/**
+ * Where a node's uncarded items rank among new items. Learning and being-introduced nodes come
+ * first, then fluent nodes (which includes skills placed there, R19, that never got cards), then
+ * mastered nodes as a last resort.
+ */
+const TIER_LEARNING = 0;
+const TIER_FLUENT = 1;
+const TIER_MASTERED = 2;
+
 type Registry = Partial<Record<GeneratorId, Generator>>;
 
 /** The READ node whose fluency ends the C-major-first rule (R15). */
@@ -236,10 +245,14 @@ function arrange(fill: Fill, rng: Rng, practice: boolean): PlannedItem[] {
  *   has no card yet.
  * - Due items come first and may use the whole ear block, as in the spec's fill order; new items
  *   follow, so a deep backlog defers new material.
- * - New items of a non-key-dependent node come only from nodes in `learning` state, in graph
- *   order, then `listItems` order. For key-dependent nodes (READ) they come from every open key
- *   family of any node at `learning` or beyond, the key-of-the-day family first, then A, B, C
- *   (R15). Due items keep their stored params.
+ * - New items are items without a card. They come from enabled nodes at `learning` or beyond,
+ *   whatever route got them there, so a skill placed at `fluent` (R19) writes no cards but still
+ *   feeds sessions. Order: nodes being learned or introduced first, then `fluent` nodes, each in
+ *   graph order then `listItems` order. Uncarded items of `mastered` nodes follow only when the
+ *   strand has no other new candidate and no node it could introduce. For key-dependent nodes
+ *   (READ) the items come from every open key family of any node at `learning` or beyond (R15),
+ *   after the same learning-first ordering, the key-of-the-day family first, then A, B, C. Due
+ *   items keep their stored params.
  * - Each strand (EAR, READ) may introduce a node when none of its own enabled nodes is learning
  *   (R16), but a session introduces at most one. When both have a candidate the strand whose most
  *   recent introduction is older wins, ties go to EAR. A node is introduced only when the daily
@@ -334,13 +347,14 @@ export function composeSession(input: ComposeInput): SessionPlan {
 
   const candidates = (strand: Strand) => {
     const dueAll: (Candidate & { card: CardState })[] = [];
-    const fresh: Candidate[] = [];
+    const fresh: (Candidate & { tier: number })[] = [];
     for (const [nodeId, info] of infos) {
       if (info.node.strand !== strand) continue;
       const rec = state.nodes[nodeId];
       const learning = rec?.state === "learning";
       const introducing = intro?.id === nodeId;
       if (stateOf(nodeId) < NODE_RANK.learning && !introducing) continue;
+      const nodeRank = stateOf(nodeId);
       const keyDependent = info.node.keyDependent;
       // Families that may supply new items (R15). A node being introduced opens family A.
       const open: KeyFamily[] = !keyDependent
@@ -358,18 +372,32 @@ export function composeSession(input: ComposeInput): SessionPlan {
         } else if (
           // Practice (T2.15) drills items that already have cards only.
           !input.practice &&
-          (fam !== undefined ? open.includes(fam) : learning || introducing)
+          (fam !== undefined ? open.includes(fam) : nodeRank >= NODE_RANK.learning || introducing)
         ) {
-          fresh.push({ ...u, nodeId, isNew: true, ...famPart });
+          // Key-dependent nodes only offer items in open families (R15), which already follow
+          // from their state, so they never need the mastered fallback.
+          const tier =
+            learning || introducing
+              ? TIER_LEARNING
+              : nodeRank >= NODE_RANK.mastered && fam === undefined
+                ? TIER_MASTERED
+                : TIER_FLUENT;
+          fresh.push({ ...u, nodeId, isNew: true, tier, ...famPart });
         }
       }
     }
     const due = (
       input.practice ? rankWeakest(dueAll, input.now) : rankDue(dueAll, input.now)
     ) as Candidate[];
-    // Stable sort: key-of-the-day family first, then A, B, C; graph and item order within.
-    fresh.sort((a, b) => famRank(a.fam) - famRank(b.fam));
-    return { due, fresh };
+    // Mastered items are a last resort: only when nothing else can supply new material here.
+    const fallbackOnly =
+      !fresh.some((c) => c.tier !== TIER_MASTERED) &&
+      (strand === "EAR" ? earIntro : readIntro) === undefined;
+    const usable = fresh.filter((c) => c.tier !== TIER_MASTERED || fallbackOnly);
+    // Stable sort: learning, then fluent, then mastered; within a tier the key-of-the-day family
+    // first, then A, B, C; graph and item order within.
+    usable.sort((a, b) => a.tier - b.tier || famRank(a.fam) - famRank(b.fam));
+    return { due, fresh: usable as Candidate[] };
   };
 
   const ear = candidates("EAR");

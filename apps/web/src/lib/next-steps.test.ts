@@ -1,7 +1,7 @@
 import { loadGraph } from "@clavis/content";
 import { createScheduler, LearnerStateService, MemoryEventStore } from "@clavis/core";
 import { describe, expect, it } from "vitest";
-import { followUpSearch, keepGoingBudgetSec, nextSteps } from "./next-steps";
+import { followUpSearch, keepGoingBudgetSec, nextSteps, startWouldBeEmpty } from "./next-steps";
 
 describe("keepGoingBudgetSec", () => {
   it.each([
@@ -84,5 +84,9 @@ describe("nextSteps", () => {
     // Something can still be introduced.
     expect(steps.learn).toBe(true);
     expect(steps.keepGoingSec).toBe(600);
+  });
+
+  it("a plain Start session is not empty for a new learner", async () => {
+    expect(startWouldBeEmpty({ ...base, state: await emptyState() })).toBe(false);
   });
 });
