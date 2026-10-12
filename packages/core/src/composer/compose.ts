@@ -6,7 +6,7 @@ import { familyOfParams, keyForFamily, openFamilies } from "../items/family.js";
 import { GENERATORS } from "../items/registry.js";
 import type { Generator, ItemParams } from "../items/types.js";
 import { learnerDay } from "../learning/day.js";
-import { createRng } from "../random.js";
+import { createRng, type Rng } from "../random.js";
 import { newItemAllowance } from "../scheduler/new-items.js";
 import { rankDue } from "../scheduler/rank.js";
 import type { CardState } from "../scheduler/card.js";
@@ -127,6 +127,11 @@ function chooseGenerator(info: NodeInfo, taken: number): GeneratorId {
 
 interface Fill {
   items: PlannedItem[];
+  /**
+   * The items split into passes over the candidate list. A normal fill is one pass. A practice
+   * fill (`cycle`) starts a new pass each time it wraps round to the weakest item again.
+   */
+  passes: PlannedItem[][];
   newCount: number;
   usedSec: number;
 }
@@ -142,22 +147,26 @@ function fillBlock(opts: {
   fresh: Candidate[];
   allowance: number;
   forceFirst: boolean;
+  /**
+   * Practice only: after the first pass keep cycling `due` (weakest first) until nothing more
+   * fits, so the plan fills the block. The same item never follows itself while another exists.
+   */
+  cycle?: boolean;
   infos: Map<string, NodeInfo>;
   taken: Map<string, number>;
   state: LearnerState;
   graph: SkillGraph;
 }): Fill {
-  const out: Fill = { items: [], newCount: 0, usedSec: 0 };
-  for (const c of [...opts.due, ...opts.fresh]) {
-    if (c.isNew && out.newCount >= opts.allowance) break;
+  const out: Fill = { items: [], passes: [[]], newCount: 0, usedSec: 0 };
+  const take = (c: Candidate, pass: PlannedItem[]): boolean => {
     const info = opts.infos.get(c.nodeId);
-    if (!info) continue;
+    if (!info) return false;
     const generator = chooseGenerator(info, opts.taken.get(c.nodeId) ?? 0);
     const seed = opts.graph.generators.find((g) => g.id === generator)?.seedDurationSec ?? 10;
     const estimatedSec = medianDurationSec(opts.state, generator, seed);
     const fits = out.usedSec + estimatedSec <= opts.blockSec;
-    if (!fits && !(opts.forceFirst && out.items.length === 0)) continue;
-    out.items.push({
+    if (!fits && !(opts.forceFirst && out.items.length === 0)) return false;
+    const planned: PlannedItem = {
       itemId: c.itemId,
       nodeId: c.nodeId,
       generator,
@@ -165,10 +174,54 @@ function fillBlock(opts: {
       isNew: c.isNew,
       estimatedSec,
       ...(c.fam !== undefined ? { fam: c.fam } : {}),
-    });
+    };
+    out.items.push(planned);
+    pass.push(planned);
     out.usedSec += estimatedSec;
     if (c.isNew) out.newCount++;
     opts.taken.set(c.nodeId, (opts.taken.get(c.nodeId) ?? 0) + 1);
+    return true;
+  };
+  for (const c of [...opts.due, ...opts.fresh]) {
+    if (c.isNew && out.newCount >= opts.allowance) break;
+    take(c, out.passes[0] ?? []);
+  }
+  if (opts.cycle && out.items.length > 0) {
+    // Later passes: same order, skipping what no longer fits and an item that would directly
+    // follow itself. A pass that adds nothing ends the fill.
+    for (;;) {
+      const pass: PlannedItem[] = [];
+      for (const c of opts.due) {
+        const last = out.items[out.items.length - 1];
+        if (opts.due.length > 1 && last?.itemId === c.itemId) continue;
+        take(c, pass);
+      }
+      if (pass.length === 0) break;
+      out.passes.push(pass);
+    }
+  }
+  return out;
+}
+
+/**
+ * Order a fill for presentation. A normal fill is interleaved as one block. A practice fill is
+ * interleaved pass by pass, and the seam between passes is fixed so an item never follows itself.
+ */
+function arrange(fill: Fill, rng: Rng, practice: boolean): PlannedItem[] {
+  if (!practice) return interleave(fill.items, rng);
+  const out: PlannedItem[] = [];
+  for (const pass of fill.passes) {
+    const ordered = interleave(pass, rng);
+    const last = out[out.length - 1];
+    const first = ordered[0];
+    if (first !== undefined && first.itemId === last?.itemId) {
+      const second = ordered[1];
+      if (second !== undefined) {
+        ordered[0] = second;
+        ordered[1] = first;
+      }
+    }
+    out.push(...ordered);
   }
   return out;
 }
@@ -195,6 +248,10 @@ function fillBlock(opts: {
  *   Ear and Read when Read has content, else all Ear.
  * - Generators come from `input.generators` (default `GENERATORS`).
  * - Apply is always null (M5).
+ * - `extraNewItems` raises the new-item allowance for this plan only (Learn something new). The
+ *   introduction and strand rules are unchanged.
+ * - A practice plan cycles the started items, weakest first, until the block budget is spent.
+ *   Repeats are safe because practice attempts never move a card.
  */
 export function composeSession(input: ComposeInput): SessionPlan {
   const { state, graph, mode } = input;
@@ -209,9 +266,10 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const key = keyOfDay(state, graph, input.now, input.tzOffsetMin);
   const dayFamily = keyFamily(key);
   const introducedToday = state.daily[today]?.newItems ?? 0;
+  const extraNew = Math.max(0, Math.floor(input.extraNewItems ?? 0));
   const newAllowance = input.practice
     ? 0
-    : newItemAllowance({ introducedToday, cap: state.settings.newItemsPerDay });
+    : newItemAllowance({ introducedToday, cap: state.settings.newItemsPerDay }) + extraNew;
   const notes: string[] = [];
 
   const infos = new Map<string, NodeInfo>();
@@ -327,6 +385,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     fresh: ear.fresh,
     allowance: newAllowance - readReserve,
     forceFirst: true,
+    cycle: input.practice === true,
     infos,
     taken,
     state,
@@ -338,6 +397,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     fresh: read.fresh,
     allowance: newAllowance - earFill.newCount,
     forceFirst: false,
+    cycle: input.practice === true,
     infos,
     taken,
     state,
@@ -362,8 +422,11 @@ export function composeSession(input: ComposeInput): SessionPlan {
       return { ...item, key: keyForFamily(item.fam, itemMode, key, keyRng, { cMajorFirst }) };
     });
 
-  const earItems = withKey(interleave(earFill.items, createRng(input.seed)));
-  const readItems = withKey(interleave(readFill.items, createRng((input.seed ^ 0x5bd1e995) >>> 0)));
+  const practice = input.practice === true;
+  const earItems = withKey(arrange(earFill, createRng(input.seed), practice));
+  const readItems = withKey(
+    arrange(readFill, createRng((input.seed ^ 0x5bd1e995) >>> 0), practice),
+  );
 
   const orient =
     mode === "away"

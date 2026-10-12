@@ -13,6 +13,8 @@
   import type { SessionState } from "../../lib/session/machine";
   import { parseSessionParams, type SessionParams } from "../../lib/session/params";
   import { createSessionRuntime, type SessionRuntime } from "../../lib/session/runtime";
+  import { followUpSearch } from "../../lib/next-steps";
+  import { minutesLabel } from "../../lib/home";
 
   type Phase = "loading" | "failed" | "ready";
 
@@ -33,6 +35,18 @@
   const timeLeft = $derived(
     machine && running ? Math.max(0, Math.round(machine.budgetSec - elapsed)) : undefined,
   );
+  /** After the session: what else to offer today. Read once the summary shows. */
+  const steps = $derived(
+    runtime && view.kind === "summary" ? runtime.nextSteps(view.summary.elapsedSec) : undefined,
+  );
+  const keepGoingSearch = $derived(
+    steps ? followUpSearch(page.url.searchParams, "practice", steps.keepGoingSec) : "",
+  );
+  const learnSearch = $derived(steps ? followUpSearch(page.url.searchParams, "learn") : "");
+  // resolve() has no typed form for a query string, so the base path is resolved and the query is
+  // appended. The links reload the page (data-sveltekit-reload) to start a fresh session.
+  const keepGoingHref = $derived(resolve("/session") + keepGoingSearch);
+  const learnHref = $derived(resolve("/session") + learnSearch);
   const showKeyboard = $derived(
     params?.mode === "away" && view.kind === "listening" && view.phase === "play",
   );
@@ -187,11 +201,19 @@
 
     {#if view.kind === "idle"}
       <h1>
-        {params?.practice ? "Practise more" : params?.mode === "away" ? "Away session" : "Session"}
+        {params?.practice
+          ? "Practise more"
+          : params?.learn
+            ? "Learn something new"
+            : params?.mode === "away"
+              ? "Away session"
+              : "Session"}
       </h1>
       <p data-testid="session-intro">
         {#if params?.practice}
           Extra practice on skills you have started. This does not change your review schedule.
+        {:else if params?.learn}
+          One more batch of new material today, then the usual review.
         {:else if params?.mode === "away"}
           A short ear session with no piano. Headphones are best.
         {:else}
@@ -442,7 +464,43 @@
             {/each}
           </ul>
         {/if}
-        <a class="button" href={resolve("/")} data-testid="home">Back to home</a>
+        {#if steps && (steps.keepGoing || steps.learn)}
+          <h2>Keep going?</h2>
+          <!-- eslint-disable svelte/no-navigation-without-resolve -- the base path is resolved in keepGoingHref and learnHref; only the query string is added -->
+          <div class="next-steps" data-testid="next-steps">
+            {#if steps.keepGoing}
+              <a
+                class="button stacked"
+                href={keepGoingHref}
+                data-sveltekit-reload
+                data-testid="keep-going"
+              >
+                <strong>Keep going</strong>
+                <span>{minutesLabel(steps.keepGoingSec)} of extra practice</span>
+              </a>
+            {/if}
+            {#if steps.learn}
+              <a
+                class="button secondary stacked"
+                href={learnHref}
+                data-sveltekit-reload
+                data-testid="learn-more"
+              >
+                <strong>Learn something new</strong>
+                <span>One more batch of new items</span>
+              </a>
+            {/if}
+          </div>
+          <!-- eslint-enable svelte/no-navigation-without-resolve -->
+        {/if}
+        <a
+          class="button"
+          class:secondary={steps && (steps.keepGoing || steps.learn)}
+          href={resolve("/")}
+          data-testid="home"
+        >
+          {steps && (steps.keepGoing || steps.learn) ? "Done for today" : "Back to home"}
+        </a>
       </section>
     {:else}
       <section class="card">
@@ -555,6 +613,23 @@
 
   .row button {
     flex: 1 1 8rem;
+  }
+
+  .next-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .button.stacked {
+    flex-direction: column;
+    padding: var(--space-3) var(--space-4);
+    font-weight: 400;
+  }
+
+  .button.stacked strong {
+    font-weight: 700;
   }
 
   .stack {

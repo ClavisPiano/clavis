@@ -25,6 +25,12 @@ export interface ComposeInput {
    * in a node at learning or beyond is a candidate, weakest first, whether or not it is due.
    */
   practice?: boolean;
+  /**
+   * Learn more today: extra new items allowed in this plan on top of what is left of the daily
+   * cap (the caller passes one batch, the `newItemsPerDay` setting). Nothing is stored, so it
+   * applies to this plan only. Ignored for practice.
+   */
+  extraNewItems?: number;
 }
 
 /** One item the session runner will turn into a stimulus via `getGenerator(generator).generate(...)`. */

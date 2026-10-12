@@ -108,6 +108,8 @@ export interface HarnessOptions {
   mode?: "instrument" | "away";
   budgetSec?: number;
   practice?: boolean;
+  /** Learn something new: extra new items for this session. */
+  extraNewItems?: number;
   inputSource?: "mic" | "tap";
   headphones?: boolean | undefined;
   askHeadphones?: boolean;
@@ -156,6 +158,7 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     deviceId: "device-1",
     mode,
     ...(opts.practice ? { practice: true } : {}),
+    ...(opts.extraNewItems ? { extraNewItems: opts.extraNewItems } : {}),
     graph,
     ...(opts.placement
       ? { placement: { plan: placementPlan(graph, createRng(opts.seed ?? 1234)) } }

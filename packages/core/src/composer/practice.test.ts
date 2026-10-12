@@ -174,7 +174,6 @@ describe("composeSession practice properties", () => {
           expect(i.isNew).toBe(false);
           expect(s.cards[i.itemId]?.nodeId).toBe(i.nodeId);
         }
-        expect(new Set(picked.map((i) => i.itemId)).size).toBe(picked.length);
         const biggest = Math.max(0, ...picked.map((i) => i.estimatedSec));
         expect(plan.estimatedSec).toBeLessThanOrEqual(plan.budgetSec + biggest);
         if (r.learner === "new") expect(picked).toEqual([]);

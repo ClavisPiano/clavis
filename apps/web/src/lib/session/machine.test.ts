@@ -907,3 +907,60 @@ describe("practice session (T2.15)", () => {
     expect(await h.log()).toEqual([]);
   });
 });
+
+describe("keep going and learn more", () => {
+  async function runLong(h: Harness): Promise<void> {
+    await h.machine.start();
+    for (let guard = 0; guard < 600 && h.machine.state.kind !== "summary"; guard++) {
+      const s = h.machine.state;
+      if (s.kind === "orient" || s.kind === "intro") h.machine.next();
+      else if (s.kind === "presenting" || s.kind === "listening") await playItem(h);
+      else if (s.kind === "feedback") h.machine.next();
+      await h.advance(50);
+    }
+  }
+
+  it("plays the same item more than once in a practice plan, with distinct attempts and untouched cards", async () => {
+    const first = await makeHarness({ budgetSec: 90 });
+    await runWholeSession(first);
+    const history = await first.log();
+    const cardsBefore = JSON.stringify(first.service.state.cards);
+
+    const h = await makeHarness({ budgetSec: 400, practice: true, history, idSalt: 91 });
+    await runLong(h);
+    expect(h.machine.state.kind).toBe("summary");
+    const planned = [...(h.machine.plan?.blocks.ear ?? []), ...(h.machine.plan?.blocks.read ?? [])];
+    const ids = planned.map((p) => p.itemId);
+    expect(new Set(ids).size).toBeLessThan(ids.length);
+    ids.forEach((id, i) => {
+      expect(id).not.toBe(ids[i - 1]);
+    });
+
+    const events = (await h.log()).filter((e) => !history.some((o) => o.id === e.id));
+    const attempts = byType(events, "attempt.completed");
+    expect(attempts.length).toBeGreaterThan(planned.length / 2);
+    expect(new Set(attempts.map((a) => a.id)).size).toBe(attempts.length);
+    expect(byType(events, "item.presented").length).toBe(attempts.length);
+    const summary = h.machine.state;
+    if (summary.kind === "summary") expect(summary.summary.items).toBe(attempts.length);
+    expect(JSON.stringify(h.service.state.cards)).toBe(cardsBefore);
+  });
+
+  it("extraNewItems introduces new items after the daily cap is reached", async () => {
+    const first = await makeHarness({ budgetSec: 90 });
+    await runWholeSession(first);
+    const history = await first.log();
+    const plain = await makeHarness({ budgetSec: 90, history, idSalt: 55 });
+    await plain.machine.start();
+    const more = await makeHarness({ budgetSec: 90, history, idSalt: 66, extraNewItems: 5 });
+    await more.machine.start();
+    const fresh = (h: Harness) =>
+      [...(h.machine.plan?.blocks.ear ?? []), ...(h.machine.plan?.blocks.read ?? [])].filter(
+        (i) => i.isNew,
+      ).length;
+    expect(fresh(more)).toBeGreaterThanOrEqual(fresh(plain));
+    expect(more.machine.plan?.diagnostics.newAllowance).toBe(
+      (plain.machine.plan?.diagnostics.newAllowance ?? 0) + 5,
+    );
+  });
+});
