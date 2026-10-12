@@ -88,9 +88,27 @@ test.describe("session runner", () => {
     await page.getByTestId("headphones-yes").click();
     await expect(page.getByTestId("orient")).toBeVisible();
     await page.getByTestId("finish").click();
+    await page.getByTestId("finish-end").click();
     await expect(page.getByTestId("summary")).toBeVisible();
     const types = await storedEventTypes(page);
     expect(types).toContain("settings.changed");
+  });
+
+  test("Finish asks first: Keep going resumes, End session ends", async ({ page }) => {
+    await page.goto("/session?input=fake&budget=90");
+    await page.getByTestId("start").click();
+    await expect(page.getByTestId("orient")).toBeVisible();
+    await page.getByTestId("finish").click();
+    await expect(page.getByTestId("finish-confirm")).toBeVisible();
+    await expect(page.getByTestId("finish")).toHaveCount(0);
+    await page.getByTestId("finish-cancel").click();
+    await expect(page.getByTestId("orient")).toBeVisible();
+    await page.getByTestId("finish").click();
+    await page.getByTestId("finish-end").click();
+    await expect(page.getByTestId("summary")).toBeVisible();
+    // Keep going did not end the session: exactly one end was written.
+    const ended = (await storedEventTypes(page)).filter((t) => t === "session.ended");
+    expect(ended).toHaveLength(1);
   });
 
   test("the test hook is only exposed with fake input", async ({ page }) => {
