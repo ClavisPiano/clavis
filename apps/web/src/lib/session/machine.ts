@@ -196,6 +196,8 @@ export type SessionState =
   | { kind: "feedback"; item: ItemView; feedback: FeedbackView; canReplay: boolean }
   | { kind: "paused"; resumeTo: SessionState["kind"] }
   | { kind: "summary"; summary: SessionSummary }
+  /** The plan has no items (nothing due, nothing new). Nothing was written. */
+  | { kind: "nothing" }
   | { kind: "error"; message: string };
 
 /** What the Playwright hook needs (exposed on `window` only in fake mode). */
@@ -421,6 +423,7 @@ export class SessionMachine {
     const s = this.#state;
     if (s.kind === "idle" || s.kind === "preparing" || s.kind === "headphones") return;
     if (s.kind === "paused" || s.kind === "summary" || s.kind === "error") return;
+    if (s.kind === "nothing") return;
     this.#beforePause = s;
     this.#pausedAt = this.#d.clock.wallNow();
     this.#stopActivity();
@@ -463,7 +466,7 @@ export class SessionMachine {
   finish(): void {
     const kind = this.#state.kind;
     if (kind === "idle" || kind === "preparing" || kind === "headphones") return;
-    if (kind === "summary" || kind === "error") return;
+    if (kind === "summary" || kind === "error" || kind === "nothing") return;
     // Placement finishes only by running out of items; stopping early writes nothing.
     const reason = this.#attempts > 0 && !this.#d.placement ? "completed" : "abandoned";
     void this.#enqueue(() => this.#end(reason));
@@ -579,6 +582,12 @@ export class SessionMachine {
     });
     if (d.practice && plan.blocks.ear.length + plan.blocks.read.length === 0) {
       throw new Error("Nothing to practise yet. Finish a regular session first, then come back.");
+    }
+    if (plan.blocks.ear.length + plan.blocks.read.length === 0) {
+      // An empty plan is not a session: no events, no inputs, just a screen that says so.
+      this.#plan = plan;
+      this.#setState({ kind: "nothing" });
+      return;
     }
     this.#plan = plan;
     this.#items = [

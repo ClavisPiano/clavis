@@ -30,14 +30,21 @@
   const machine = $derived(runtime?.machine);
   const plan = $derived(view.kind === "idle" ? undefined : machine?.plan);
   const running = $derived(
-    view.kind !== "idle" && view.kind !== "summary" && view.kind !== "error",
+    view.kind !== "idle" &&
+      view.kind !== "summary" &&
+      view.kind !== "error" &&
+      view.kind !== "nothing",
   );
   const timeLeft = $derived(
     machine && running ? Math.max(0, Math.round(machine.budgetSec - elapsed)) : undefined,
   );
-  /** After the session: what else to offer today. Read once the summary shows. */
+  /** After the session, or on the Nothing-due screen: what else to offer today. */
   const steps = $derived(
-    runtime && view.kind === "summary" ? runtime.nextSteps(view.summary.elapsedSec) : undefined,
+    runtime && view.kind === "summary"
+      ? runtime.nextSteps(view.summary.elapsedSec)
+      : runtime && view.kind === "nothing"
+        ? runtime.nextSteps(0)
+        : undefined,
   );
   const keepGoingSearch = $derived(
     steps ? followUpSearch(page.url.searchParams, "practice", steps.keepGoingSec) : "",
@@ -137,7 +144,8 @@
         elapsed = m.elapsedSec();
         expected = s.kind === "listening" ? m.debug().expected : undefined;
         // Never swap the app version while a session is open.
-        updateState.canUpdateNow = s.kind === "idle" || s.kind === "summary" || s.kind === "error";
+        updateState.canUpdateNow =
+          s.kind === "idle" || s.kind === "summary" || s.kind === "error" || s.kind === "nothing";
       });
       phase = "ready";
     });
@@ -169,6 +177,38 @@
 </script>
 
 <svelte:head><title>Session</title></svelte:head>
+
+{#snippet nextStepLinks()}
+  {#if steps && (steps.keepGoing || steps.learn)}
+    <h2>Keep going?</h2>
+    <!-- eslint-disable svelte/no-navigation-without-resolve -- the base path is resolved in keepGoingHref and learnHref; only the query string is added -->
+    <div class="next-steps" data-testid="next-steps">
+      {#if steps.keepGoing}
+        <a
+          class="button stacked"
+          href={keepGoingHref}
+          data-sveltekit-reload
+          data-testid="keep-going"
+        >
+          <strong>Keep going</strong>
+          <span>{minutesLabel(steps.keepGoingSec)} of extra practice</span>
+        </a>
+      {/if}
+      {#if steps.learn}
+        <a
+          class="button secondary stacked"
+          href={learnHref}
+          data-sveltekit-reload
+          data-testid="learn-more"
+        >
+          <strong>Learn something new</strong>
+          <span>One more batch of new items</span>
+        </a>
+      {/if}
+    </div>
+    <!-- eslint-enable svelte/no-navigation-without-resolve -->
+  {/if}
+{/snippet}
 
 <div class="session" data-testid="session" data-state={view.kind}>
   {#if phase === "loading"}
@@ -432,6 +472,23 @@
         <p class="lead">The session stopped while the app was in the background.</p>
         <button type="button" class="primary" data-testid="resume" onclick={resume}>Resume</button>
       </section>
+    {:else if view.kind === "nothing"}
+      <section class="card" data-testid="nothing">
+        <h1>Nothing is due right now</h1>
+        <p class="lead">
+          There is nothing to review and no new material to add at the moment. Come back tomorrow.
+        </p>
+        <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+        {@render nextStepLinks()}
+        <a
+          class="button"
+          class:secondary={steps && (steps.keepGoing || steps.learn)}
+          href={resolve("/")}
+          data-testid="home"
+        >
+          {steps && (steps.keepGoing || steps.learn) ? "Done for today" : "Back to home"}
+        </a>
+      </section>
     {:else if view.kind === "summary"}
       <section class="card" data-testid="summary">
         <h1>{view.summary.reason === "completed" ? "Session complete" : "Session ended"}</h1>
@@ -464,35 +521,8 @@
             {/each}
           </ul>
         {/if}
-        {#if steps && (steps.keepGoing || steps.learn)}
-          <h2>Keep going?</h2>
-          <!-- eslint-disable svelte/no-navigation-without-resolve -- the base path is resolved in keepGoingHref and learnHref; only the query string is added -->
-          <div class="next-steps" data-testid="next-steps">
-            {#if steps.keepGoing}
-              <a
-                class="button stacked"
-                href={keepGoingHref}
-                data-sveltekit-reload
-                data-testid="keep-going"
-              >
-                <strong>Keep going</strong>
-                <span>{minutesLabel(steps.keepGoingSec)} of extra practice</span>
-              </a>
-            {/if}
-            {#if steps.learn}
-              <a
-                class="button secondary stacked"
-                href={learnHref}
-                data-sveltekit-reload
-                data-testid="learn-more"
-              >
-                <strong>Learn something new</strong>
-                <span>One more batch of new items</span>
-              </a>
-            {/if}
-          </div>
-          <!-- eslint-enable svelte/no-navigation-without-resolve -->
-        {/if}
+        <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+        {@render nextStepLinks()}
         <a
           class="button"
           class:secondary={steps && (steps.keepGoing || steps.learn)}
