@@ -33,6 +33,10 @@
   const OUT_RATE = 22050;
   /** Self-paced: how long a note rings after its attack before the next one is shown. */
   const RING_MS = 2000;
+  /** Self-paced: attacks this soon after Record are the tap or the room settling, not a note. */
+  const START_GUARD_MS = 500;
+  /** Self-paced: a rough time per note for the length estimate (ring plus playing the next). */
+  const SELF_PACED_SEC_PER_NOTE = RING_MS / 1000 + 1;
   /** Self-paced: recording stops on its own after this long, whatever happens. */
   const MAX_SELF_PACED_SEC = 600;
 
@@ -226,7 +230,8 @@
         chunks.push(e.data);
         if (!selfPaced) return;
         for (const at of detector.push(e.data.samples, e.data.frame)) {
-          if (at < first || ringUntil !== undefined || index >= current.notes.length) continue;
+          const guard = first + Math.round((START_GUARD_MS / 1000) * rate);
+          if (at < guard || ringUntil !== undefined || index >= current.notes.length) continue;
           onsets[index] = ((at - first) / rate) * 1000;
           ringUntil = at + Math.round((RING_MS / 1000) * rate);
         }
@@ -485,7 +490,7 @@
   <p class="muted">
     {#if take.selfPaced}
       {String(take.notes.length)} notes at your own pace, about {String(
-        Math.round((take.notes.length * 3) / 60),
+        Math.round((take.notes.length * SELF_PACED_SEC_PER_NOTE) / 60),
       )} minutes.
     {:else}
       {String(take.bpm)} bpm, {String(take.notes.length)} notes, about {String(
