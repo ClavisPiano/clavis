@@ -8,10 +8,10 @@ Onset match tolerance: 100 ms. Precision and recall count a note only when the o
 
 | | Truth | Detected | Precision | Recall | F1 | Pitch exact | Pitch class | Octave err | Bass octave err | Onset median ms | Onset p90 ms |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| all | 21 | 19 | 1.000 | 0.905 | 0.950 | 1.000 | 1.000 | 0.000 | 0.000 | 7.0 | 15.6 |
+| all | 66 | 64 | 0.984 | 0.955 | 0.969 | 1.000 | 1.000 | 0.000 | 0.000 | 12.2 | 32.5 |
 | sung-degree | 8 | 8 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | n/a | 9.3 | 15.6 |
-| piano-single | 6 | 4 | 1.000 | 0.667 | 0.800 | 1.000 | 1.000 | 0.000 | 0.000 | 8.2 | 10.4 |
-| piano-sequence | 7 | 7 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | n/a | 4.8 | 12.2 |
+| piano-single | 36 | 34 | 1.000 | 0.944 | 0.971 | 1.000 | 1.000 | 0.000 | 0.000 | 11.3 | 21.0 |
+| piano-sequence | 22 | 22 | 0.955 | 0.955 | 0.955 | 1.000 | 1.000 | 0.000 | n/a | 21.0 | 60.4 |
 
 ## Entries
 
@@ -21,3 +21,5 @@ Onset match tolerance: 100 ms. Precision and recall count a note only when the o
 | synthetic-sung-c-high | sung-degree | voice | synthetic | 4 | 4 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | n/a | 9.3 | 15.6 |
 | synthetic-piano-singles | piano-single | acoustic-piano | synthetic | 6 | 4 | 1.000 | 0.667 | 0.800 | 1.000 | 1.000 | 0.000 | 0.000 | 8.2 | 10.4 |
 | synthetic-piano-melody | piano-sequence | acoustic-piano | synthetic | 7 | 7 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | n/a | 4.8 | 12.2 |
+| dig-singles-bass | piano-single | digital-piano | iPhone built-in mic | 30 | 30 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 12.1 | 21.0 |
+| dig-melody-ode | piano-sequence | digital-piano | iPhone built-in mic | 15 | 15 | 0.933 | 0.933 | 0.933 | 1.000 | 1.000 | 0.000 | n/a | 31.4 | 62.8 |

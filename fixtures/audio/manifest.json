@@ -169,5 +169,262 @@
     "tags": [
       "synthetic"
     ]
+  },
+  {
+    "id": "dig-singles-bass",
+    "file": "piano-single/dig-singles-bass.wav",
+    "kind": "piano-single",
+    "instrument": "digital-piano",
+    "device": "iPhone built-in mic",
+    "sampleRate": 22050,
+    "notes": [
+      {
+        "midi": 36,
+        "onsetMs": 2080,
+        "offsetMs": 3580
+      },
+      {
+        "midi": 37,
+        "onsetMs": 6060,
+        "offsetMs": 7560
+      },
+      {
+        "midi": 37,
+        "onsetMs": 9000,
+        "offsetMs": 10500
+      },
+      {
+        "midi": 38,
+        "onsetMs": 12040,
+        "offsetMs": 13540
+      },
+      {
+        "midi": 39,
+        "onsetMs": 15140,
+        "offsetMs": 16640
+      },
+      {
+        "midi": 40,
+        "onsetMs": 17940,
+        "offsetMs": 19440
+      },
+      {
+        "midi": 41,
+        "onsetMs": 20640,
+        "offsetMs": 22140
+      },
+      {
+        "midi": 42,
+        "onsetMs": 23240,
+        "offsetMs": 24740
+      },
+      {
+        "midi": 43,
+        "onsetMs": 25920,
+        "offsetMs": 27420
+      },
+      {
+        "midi": 44,
+        "onsetMs": 28600,
+        "offsetMs": 30100
+      },
+      {
+        "midi": 45,
+        "onsetMs": 31260,
+        "offsetMs": 32760
+      },
+      {
+        "midi": 46,
+        "onsetMs": 33800,
+        "offsetMs": 35300
+      },
+      {
+        "midi": 47,
+        "onsetMs": 36460,
+        "offsetMs": 37960
+      },
+      {
+        "midi": 48,
+        "onsetMs": 39020,
+        "offsetMs": 40520
+      },
+      {
+        "midi": 49,
+        "onsetMs": 41480,
+        "offsetMs": 42980
+      },
+      {
+        "midi": 50,
+        "onsetMs": 43980,
+        "offsetMs": 45480
+      },
+      {
+        "midi": 51,
+        "onsetMs": 46540,
+        "offsetMs": 48040
+      },
+      {
+        "midi": 52,
+        "onsetMs": 49080,
+        "offsetMs": 50580
+      },
+      {
+        "midi": 53,
+        "onsetMs": 51640,
+        "offsetMs": 53140
+      },
+      {
+        "midi": 54,
+        "onsetMs": 54080,
+        "offsetMs": 55580
+      },
+      {
+        "midi": 55,
+        "onsetMs": 56560,
+        "offsetMs": 58060
+      },
+      {
+        "midi": 56,
+        "onsetMs": 59020,
+        "offsetMs": 60520
+      },
+      {
+        "midi": 57,
+        "onsetMs": 61480,
+        "offsetMs": 62980
+      },
+      {
+        "midi": 58,
+        "onsetMs": 64180,
+        "offsetMs": 65680
+      },
+      {
+        "midi": 59,
+        "onsetMs": 66640,
+        "offsetMs": 68140
+      },
+      {
+        "midi": 60,
+        "onsetMs": 69200,
+        "offsetMs": 70700
+      },
+      {
+        "midi": 61,
+        "onsetMs": 71640,
+        "offsetMs": 73140
+      },
+      {
+        "midi": 62,
+        "onsetMs": 74540,
+        "offsetMs": 76040
+      },
+      {
+        "midi": 63,
+        "onsetMs": 77280,
+        "offsetMs": 78780
+      },
+      {
+        "midi": 64,
+        "onsetMs": 79760,
+        "offsetMs": 81260
+      }
+    ],
+    "expectedRange": {
+      "low": 36,
+      "high": 64
+    },
+    "tags": [
+      "bass",
+      "onsets-corrected"
+    ]
+  },
+  {
+    "id": "dig-melody-ode",
+    "file": "piano-sequence/dig-melody-ode.wav",
+    "kind": "piano-sequence",
+    "instrument": "digital-piano",
+    "device": "iPhone built-in mic",
+    "sampleRate": 22050,
+    "notes": [
+      {
+        "midi": 64,
+        "onsetMs": 3000,
+        "offsetMs": 3675
+      },
+      {
+        "midi": 64,
+        "onsetMs": 3750,
+        "offsetMs": 4425
+      },
+      {
+        "midi": 65,
+        "onsetMs": 4500,
+        "offsetMs": 5175
+      },
+      {
+        "midi": 67,
+        "onsetMs": 5250,
+        "offsetMs": 5925
+      },
+      {
+        "midi": 67,
+        "onsetMs": 6000,
+        "offsetMs": 6675
+      },
+      {
+        "midi": 65,
+        "onsetMs": 6750,
+        "offsetMs": 7425
+      },
+      {
+        "midi": 64,
+        "onsetMs": 7500,
+        "offsetMs": 8175
+      },
+      {
+        "midi": 62,
+        "onsetMs": 8250,
+        "offsetMs": 8925
+      },
+      {
+        "midi": 60,
+        "onsetMs": 9000,
+        "offsetMs": 9675
+      },
+      {
+        "midi": 60,
+        "onsetMs": 9750,
+        "offsetMs": 10425
+      },
+      {
+        "midi": 62,
+        "onsetMs": 10500,
+        "offsetMs": 11175
+      },
+      {
+        "midi": 64,
+        "onsetMs": 11250,
+        "offsetMs": 11925
+      },
+      {
+        "midi": 64,
+        "onsetMs": 12000,
+        "offsetMs": 13013
+      },
+      {
+        "midi": 62,
+        "onsetMs": 13125,
+        "offsetMs": 13463
+      },
+      {
+        "midi": 62,
+        "onsetMs": 13500,
+        "offsetMs": 14850
+      }
+    ],
+    "expectedRange": {
+      "low": 58,
+      "high": 70
+    }
   }
 ]

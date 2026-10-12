@@ -3,19 +3,19 @@
   "onsetToleranceMs": 100,
   "report": {
     "overall": {
-      "truth": 21,
-      "detected": 19,
-      "matched": 19,
-      "precision": 1,
-      "recall": 0.9048,
-      "f1": 0.95,
+      "truth": 66,
+      "detected": 64,
+      "matched": 63,
+      "precision": 0.9844,
+      "recall": 0.9545,
+      "f1": 0.9692,
       "pitchExact": 1,
       "pitchClass": 1,
       "octaveErrorRate": 0,
-      "bassMatched": 1,
+      "bassMatched": 14,
       "bassOctaveErrorRate": 0,
-      "onsetMedianMs": 6.9841,
-      "onsetP90Ms": 15.6463
+      "onsetMedianMs": 12.2449,
+      "onsetP90Ms": 32.5397
     },
     "byKind": {
       "sung-degree": {
@@ -34,34 +34,34 @@
         "onsetP90Ms": 15.6463
       },
       "piano-single": {
-        "truth": 6,
-        "detected": 4,
-        "matched": 4,
+        "truth": 36,
+        "detected": 34,
+        "matched": 34,
         "precision": 1,
-        "recall": 0.6667,
-        "f1": 0.8,
+        "recall": 0.9444,
+        "f1": 0.9714,
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
-        "bassMatched": 1,
+        "bassMatched": 14,
         "bassOctaveErrorRate": 0,
-        "onsetMedianMs": 8.2086,
-        "onsetP90Ms": 10.3855
+        "onsetMedianMs": 11.2925,
+        "onsetP90Ms": 20.9524
       },
       "piano-sequence": {
-        "truth": 7,
-        "detected": 7,
-        "matched": 7,
-        "precision": 1,
-        "recall": 1,
-        "f1": 1,
+        "truth": 22,
+        "detected": 22,
+        "matched": 21,
+        "precision": 0.9545,
+        "recall": 0.9545,
+        "f1": 0.9545,
         "pitchExact": 1,
         "pitchClass": 1,
         "octaveErrorRate": 0,
         "bassMatched": 0,
         "bassOctaveErrorRate": null,
-        "onsetMedianMs": 4.8073,
-        "onsetP90Ms": 12.2449
+        "onsetMedianMs": 20.9524,
+        "onsetP90Ms": 60.4308
       }
     },
     "entries": {
@@ -124,6 +124,36 @@
         "bassOctaveErrorRate": null,
         "onsetMedianMs": 4.8073,
         "onsetP90Ms": 12.2449
+      },
+      "dig-singles-bass": {
+        "truth": 30,
+        "detected": 30,
+        "matched": 30,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "bassMatched": 13,
+        "bassOctaveErrorRate": 0,
+        "onsetMedianMs": 12.0862,
+        "onsetP90Ms": 20.9524
+      },
+      "dig-melody-ode": {
+        "truth": 15,
+        "detected": 15,
+        "matched": 14,
+        "precision": 0.9333,
+        "recall": 0.9333,
+        "f1": 0.9333,
+        "pitchExact": 1,
+        "pitchClass": 1,
+        "octaveErrorRate": 0,
+        "bassMatched": 0,
+        "bassOctaveErrorRate": null,
+        "onsetMedianMs": 31.3946,
+        "onsetP90Ms": 62.7664
       }
     }
   }
