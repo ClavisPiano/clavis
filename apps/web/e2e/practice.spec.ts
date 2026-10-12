@@ -14,7 +14,7 @@ test.describe("practise more", () => {
   }) => {
     await page.goto("/");
     await expect(page.getByTestId("start-session")).toBeVisible();
-    await expect(page.getByTestId("start-practice")).toHaveCount(0);
+    await expect(page.getByTestId("keep-going")).toHaveCount(0);
 
     await page.goto("/session?input=fake&budget=90");
     await page.getByTestId("start").click();
@@ -23,9 +23,9 @@ test.describe("practise more", () => {
 
     await page.getByTestId("home").click();
     await expect(page.getByTestId("today-status")).toContainText("Session done today");
-    const link = page.getByTestId("start-practice");
+    const link = page.getByTestId("keep-going");
     await expect(link).toBeVisible();
-    await expect(link).toContainText("Practise more");
+    await expect(link).toContainText("Keep going");
     await expect(link).toHaveAttribute("href", /\/session\?practice=1$/);
 
     await page.goto("/session?practice=1&input=fake&budget=90");

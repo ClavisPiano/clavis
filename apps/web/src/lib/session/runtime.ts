@@ -18,6 +18,8 @@ import {
   type StimulusSpec,
 } from "@clavis/core";
 import { scoreAttempt } from "@clavis/scoring";
+import { effectiveSettings } from "../home";
+import { nextSteps as computeNextSteps, type NextSteps } from "../next-steps";
 import { getLearnerState } from "../learner";
 import { getNotationClient } from "../notation/shared";
 import { createNotationViewPort, type NotationViewPort } from "../notation/view-port";
@@ -35,6 +37,8 @@ export interface SessionRuntime {
   machine: SessionMachine;
   /** The on-screen keyboard feeds this in Away mode. */
   tap: TapInputAdapter | undefined;
+  /** What to offer after the session (Keep going, Learn something new), from the current state. */
+  nextSteps(elapsedSec: number): NextSteps;
   /** Short piano note for key presses. No-op when silent. */
   tone(midi: number): void;
   /** Call from a user gesture before `machine.start()` or `resume()`. */
@@ -129,6 +133,9 @@ export async function createSessionRuntime(
     deviceId,
     mode: placement ? "instrument" : params.mode,
     ...(params.practice ? { practice: true } : {}),
+    ...(params.learn && !placement
+      ? { extraNewItems: effectiveSettings(service.state.settings).newItemsPerDay }
+      : {}),
     graph,
     // Placement (R19): the plan replaces the composer and nothing but its result is stored.
     ...(placement ? { placement: { plan: placementPlan(graph, createRng(seed)) } } : {}),
@@ -196,6 +203,17 @@ export async function createSessionRuntime(
       machine,
       tap,
       notation,
+      nextSteps(elapsedSec) {
+        return computeNextSteps({
+          state: service.state,
+          graph,
+          now: Date.now(),
+          tzOffsetMin: deps.tzOffsetMin,
+          mode: params.mode,
+          budgetSec: machine.budgetSec,
+          elapsedSec,
+        });
+      },
       tone(midi) {
         if (params.silent) return;
         void stimulusPlayer

@@ -6,13 +6,13 @@
   import {
     deviceTzOffsetMin,
     effectiveSettings,
-    hasStartedItems,
     isFirstRun,
     lastDays,
     minutesLabel,
     todaySummary,
     weekProgress,
   } from "../lib/home";
+  import { nextSteps } from "../lib/next-steps";
   import { PLACEMENT_SKIPPED_META_KEY, shouldOfferPlacement } from "../lib/placement";
 
   const learner = useLearner();
@@ -48,7 +48,21 @@
     snap && placementSkipped !== undefined ? shouldOfferPlacement(snap, placementSkipped) : false,
   );
   const today = $derived(snap ? todaySummary(snap, now, deviceTzOffsetMin()) : undefined);
-  const canPractise = $derived(snap ? hasStartedItems(snap) && today?.completed === true : false);
+  /** Once today's session is done, Home promotes Keep going and Learn something new. */
+  const steps = $derived(
+    snap && today?.completed === true && learner.status === "ready"
+      ? nextSteps({
+          state: snap,
+          graph: learner.ctx.graph,
+          now,
+          tzOffsetMin: deviceTzOffsetMin(),
+          mode: "instrument",
+          budgetSec: settings.budgetSec,
+          elapsedSec: 0,
+        })
+      : undefined,
+  );
+  const afterSession = $derived(steps !== undefined && (steps.keepGoing || steps.learn));
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
   const week = $derived(weekProgress(cells, settings.weeklyTargetDays));
 
@@ -121,7 +135,35 @@
 {/if}
 
 <div class="actions">
-  <a class="button primary" href={resolve("/session")} data-testid="start-session">
+  {#if afterSession && steps}
+    {#if steps.keepGoing}
+      <a class="button primary" href={resolve("/session?practice=1")} data-testid="keep-going">
+        <strong>Keep going</strong>
+        <span
+          >{minutesLabel(steps.keepGoingSec)} of extra practice, your review schedule stays as it is</span
+        >
+      </a>
+    {/if}
+    {#if steps.learn}
+      <a
+        class="button"
+        class:primary={!steps.keepGoing}
+        class:secondary={steps.keepGoing}
+        href={resolve("/session?learn=1")}
+        data-testid="learn-more"
+      >
+        <strong>Learn something new</strong>
+        <span>One more batch of new items</span>
+      </a>
+    {/if}
+  {/if}
+  <a
+    class="button"
+    class:primary={!afterSession}
+    class:secondary={afterSession}
+    href={resolve("/session")}
+    data-testid="start-session"
+  >
     <strong>Start session</strong>
     <span>{minutesLabel(settings.budgetSec)}</span>
   </a>
@@ -129,12 +171,6 @@
     <strong>Away session</strong>
     <span>{minutesLabel(settings.awayBudgetSec)}, no piano needed</span>
   </a>
-  {#if canPractise}
-    <a class="button secondary" href={resolve("/session?practice=1")} data-testid="start-practice">
-      <strong>Practise more</strong>
-      <span>Extra practice, your review schedule stays as it is</span>
-    </a>
-  {/if}
 </div>
 
 {#if snap && today && !firstRun}

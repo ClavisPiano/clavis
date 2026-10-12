@@ -91,6 +91,8 @@ export interface SessionDeps {
   mode: SessionMode;
   /** Extra practice (T2.15): compose with `practice` and write `session.started` with it. */
   practice?: boolean;
+  /** Learn something new: extra new items for this session on top of the daily allowance. */
+  extraNewItems?: number;
   graph: SkillGraph;
   /** Placement mode (T3.16): present this plan instead of composing a session. */
   placement?: { plan: PlacementPlan };
@@ -572,6 +574,7 @@ export class SessionMachine {
       mode: d.mode,
       ...(d.budgetSec === undefined ? {} : { budgetSec: d.budgetSec }),
       ...(d.practice ? { practice: true } : {}),
+      ...(d.extraNewItems ? { extraNewItems: d.extraNewItems } : {}),
       seed: d.seed,
     });
     if (d.practice && plan.blocks.ear.length + plan.blocks.read.length === 0) {

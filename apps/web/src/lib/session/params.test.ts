@@ -12,6 +12,7 @@ describe("parseSessionParams", () => {
       silent: false,
       headphones: undefined,
       practice: false,
+      learn: false,
     });
   });
 
@@ -23,6 +24,18 @@ describe("parseSessionParams", () => {
     });
     for (const raw of ["practice=0", "practice=true", "practice=", ""]) {
       expect(parseSessionParams(q(raw)).practice).toBe(false);
+    }
+  });
+
+  it("?learn=1 sets learn, and practice wins when both are set", () => {
+    expect(parseSessionParams(q("learn=1")).learn).toBe(true);
+    expect(parseSessionParams(q("learn=1&mode=away"))).toMatchObject({ learn: true, mode: "away" });
+    expect(parseSessionParams(q("learn=1&practice=1"))).toMatchObject({
+      learn: false,
+      practice: true,
+    });
+    for (const raw of ["learn=0", "learn=true", "learn=", "practice=1", ""]) {
+      expect(parseSessionParams(q(raw)).learn).toBe(false);
     }
   });
 

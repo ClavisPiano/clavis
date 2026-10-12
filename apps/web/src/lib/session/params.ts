@@ -15,6 +15,11 @@ export interface SessionParams {
   headphones: boolean | "ask" | undefined;
   /** `?practice=1`: extra practice on started items (T2.15). Cards and schedule stay untouched. */
   practice: boolean;
+  /**
+   * `?learn=1`: "Learn something new" grants one more batch of new items beyond the daily cap for
+   * this session only. Nothing is stored. Practice wins when both are set.
+   */
+  learn: boolean;
 }
 
 export const MIN_BUDGET_SEC = 30;
@@ -42,6 +47,7 @@ export function parseSessionParams(
     inputKind,
     silent,
     practice: searchParams.get("practice") === "1",
+    learn: searchParams.get("practice") !== "1" && searchParams.get("learn") === "1",
     headphones: headphones ?? (inputKind === "fake" ? true : undefined),
   };
 }
