@@ -9,7 +9,7 @@ import type { PlacementAttempt, PlacementSection, PlacementState, StageOutcome }
  * EAR stages ("ear" rule), n items: mastered needs at least n-1 correct and a median latency of the
  * correct answers within the target; fluent is at least n-2 correct. For the 9 item stage that is
  * R19's 8+/7, for the 8 item diatonic stage it is 7+/6. R19 says "the same rule" for the diatonic
- * stage without numbers; the n-1 / n-2 reading is ours and needs the owner's confirmation.
+ * stage without numbers; the n-1 / n-2 reading was confirmed by the owner (2026-10-12).
  * A stage with n-1 correct but a slow median is fluent, not mastered.
  *
  * READ stages ("read" rule), per node: mastered needs every item correct and within its target
