@@ -84,6 +84,15 @@ describe("practice fills the time (keep going)", () => {
     expect(new Set(items(normal).map((i) => i.itemId)).size).toBe(items(normal).length);
   });
 
+  it.each([
+    [341, 2147483619, "instrument"],
+    [2387, 1575504143, "away"],
+  ] as const)("never ends a pass on a repeat (budget %i, seed %i, %s)", (budgetSec, seed, mode) => {
+    const s = learnerWithDueCards();
+    for (const id of Object.keys(s.cards).slice(2)) Reflect.deleteProperty(s.cards, id);
+    expectNoImmediateRepeat(compose(s, { practice: true, budgetSec, seed, mode }));
+  });
+
   it("property: fills the budget, no immediate repeats, deterministic", () => {
     fc.assert(
       fc.property(

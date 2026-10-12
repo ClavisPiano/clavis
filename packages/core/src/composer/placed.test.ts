@@ -63,13 +63,14 @@ describe("placed skills feed new items", () => {
     expect(hasNewMaterial({ ...base, state, mode: "instrument", batch: 5 })).toBe(true);
   });
 
-  it("puts the learning node's items first when the allowance is tight", () => {
+  it("alternates learning and placed items, learning first, when the allowance is tight", () => {
     const state = fold(ownerHistory());
     const tight = news(compose(state, { now: NOW + DAY_MS }));
     expect(tight.length).toBe(5);
-    expect(count(tight, RHYTHM)).toBe(5);
-    expect(count(tight, D135)).toBe(0);
-    // Growing the allowance never drops a learning item in favour of a placed one.
+    // One item each per round, learning first: rhythm, 135, rhythm, 135, rhythm.
+    expect(count(tight, RHYTHM)).toBe(3);
+    expect(count(tight, D135)).toBe(2);
+    // A larger allowance takes the rest of 135 and more rhythm.
     const roomy = news(compose(state, { now: NOW + DAY_MS, extraNewItems: 40 }));
     expect(count(roomy, RHYTHM)).toBeGreaterThan(5);
     expect(count(roomy, D135)).toBe(3);
@@ -82,8 +83,8 @@ describe("placed skills feed new items", () => {
     expect(plan.introductions).toEqual([RHYTHM]);
     expect(count(news(plan), D135)).toBe(3);
     const tight = compose(state);
-    expect(count(news(tight), RHYTHM)).toBe(5);
-    expect(count(news(tight), D135)).toBe(0);
+    expect(count(news(tight), RHYTHM)).toBe(3);
+    expect(count(news(tight), D135)).toBe(2);
   });
 
   it("offers mastered nodes' items only when nothing else can supply new material", () => {

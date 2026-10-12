@@ -137,8 +137,8 @@ describe("composeSession with READ goldens", () => {
         "budgetSec": 720,
         "ear": [
           "NEW degreeSing degrees.major.135|degree=1 8s",
+          "NEW degreeSing degrees.major.diatonic|degree=1 8s",
           "NEW degreeId degrees.major.135|degree=3 6s",
-          "NEW degreeSing degrees.major.135|degree=5 8s",
         ],
         "introductionKeyFamilies": {},
         "introductions": [],
@@ -191,8 +191,8 @@ describe("composeSession with READ goldens", () => {
         "budgetSec": 720,
         "ear": [
           "NEW degreeSing degrees.major.135|degree=1 8s",
+          "NEW degreeSing degrees.major.diatonic|degree=1 8s",
           "NEW degreeId degrees.major.135|degree=3 6s",
-          "NEW degreeSing degrees.major.135|degree=5 8s",
         ],
         "introductionKeyFamilies": {},
         "introductions": [],
