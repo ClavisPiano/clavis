@@ -70,16 +70,24 @@ On each device, open <https://clavis.clavis-7fc.workers.dev/dev/notation> in Saf
 
 | Device | Run | Cold init (ms) | First render (ms) | Warm p50 (ms) | Warm p95 (ms) | WASM heap | Notes |
 |---|---|---|---|---|---|---|---|
-| iPhone (model, iOS) | 1 (first) | | | | | | |
-| iPhone (model, iOS) | 2 (cached) | | | | | | |
+| iPhone, iOS 18.7, Safari 27.0.1 (installed PWA, T3.4 runtime) | cached | 138 | 16 | 3 | 7 | n/a | Measured 2026-10-12 through the T3.4 client on `/dev/notation` |
 | iPad 9th gen, iPadOS | 1 (first) | | | | | | |
 | iPad 9th gen, iPadOS | 2 (cached) | | | | | | |
 
 Paste the JSON for each run below:
 
 ```json
+{
+  "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0.1 Mobile/15E148 Safari/604.1",
+  "coldInitMs": 138,
+  "firstRenderMs": 16,
+  "warmRenders": 50,
+  "warmRoundTripMs": { "p50": 3, "p95": 7, "max": 10 },
+  "jsHeapUsedBytes": null,
+  "jsHeapLimitBytes": null
+}
 ```
 
 ## Decision
 
-**Pending device numbers.** The size threshold passes on desktop. The two timing thresholds are decided on the iPad 9th gen numbers above (second run for cold init, warm p95 for rendering). If both pass, keep Verovio and proceed with T3.3 and T3.4 as planned. If either fails, build `SvgStaffRenderer` behind `NotationRenderer` for READ and keep Verovio lazy for M7 imports.
+**Keep Verovio (provisional, iPad confirmation outstanding).** On the iPhone the T3.4 runtime cold-starts in 138 ms and renders at 7 ms p95, an order of magnitude inside the 1.5 s and 100 ms limits, and far faster than the desktop CI runners. An A13 iPad is slower than a current iPhone but not by 10x, so the floor device is very likely to pass; the iPad run below confirms it. The size threshold passes on desktop. The two timing thresholds are decided on the iPad 9th gen numbers above (second run for cold init, warm p95 for rendering). If both pass, keep Verovio and proceed with T3.3 and T3.4 as planned. If either fails, build `SvgStaffRenderer` behind `NotationRenderer` for READ and keep Verovio lazy for M7 imports.

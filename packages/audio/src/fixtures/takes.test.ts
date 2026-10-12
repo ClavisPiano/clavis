@@ -8,7 +8,7 @@ describe("recording takes", () => {
   );
 
   it("produce a valid manifest with unique ids", () => {
-    expect(entries).toHaveLength(4 + 2 * 7);
+    expect(entries).toHaveLength(4 + 2 * 8);
     expect(() => parseManifest(entries)).not.toThrow();
   });
 
@@ -20,6 +20,12 @@ describe("recording takes", () => {
     // 60 bpm: 4 count-in beats = 4000 ms, then one note every 4 beats.
     expect(truth.slice(0, 2).map((n) => n.onsetMs)).toEqual([4000, 8000]);
     expect(truth.map((n) => n.midi)).toEqual([48, 55, 52, 59, 50, 57, 53]);
+  });
+
+  it("covers the bass reading range C2 to E4 by semitone, with the reading input range", () => {
+    const bass = TAKES.find((t) => t.slug === "singles-bass");
+    expect(bass?.notes.map((n) => n.midi)).toEqual(Array.from({ length: 29 }, (_, i) => 36 + i));
+    expect(bass?.expectedRange).toEqual({ low: 36, high: 64 });
   });
 
   it("covers A0 to C8 in minor thirds and has simultaneous notes in two-hand takes", () => {

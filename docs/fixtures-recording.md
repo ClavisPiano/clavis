@@ -11,8 +11,8 @@ A 30 to 45 minute session that produces the ground-truth audio for the pitch acc
 ## Fastest path: the in-app recorder
 
 1. Run the app (`pnpm --filter @clavis/web dev`, or the deployed preview) on the phone or iPad and open `/dev/record`.
-2. Choose the instrument, type the device name (for example `iPhone 15 built-in mic`), pick a take, press Record, and play along with the 4 count-in clicks. For sung takes press "Play cadence" first (headphones help).
-3. Listen back, then press "Download WAV + manifest snippet". You get `<id>.wav` and `<id>.json` (a ready manifest entry whose ground truth comes from the score and the click tempo).
+2. Choose the instrument, type the device name (for example `iPhone 15 built-in mic`), pick a take and press Record. After 4 count-in clicks the screen shows the note to play on each click, with the next one underneath, until it says Done. A quiet click keeps going under the take (untick it to click only the count-in). For sung takes press "Play cadence" first (headphones help).
+3. The page runs the app's pitch pipeline on the take and shows how many notes it heard, exact pitch and octave errors, note by note. Listen back, then Share (iOS) or Download. You get `<id>.wav` and `<id>.json` (a ready manifest entry whose ground truth comes from the score and the click tempo).
 4. Repeat for every take in the list below. The page records mono at 22.05 kHz, so no conversion is needed.
 
 ## Fallback: Voice Memos
@@ -34,6 +34,7 @@ Each instrument gets the takes that apply to it. Ids are `voice-…`, `ac-…` (
 | --- | --- | --- | --- |
 | `sung-c-low`, `sung-c-high` | voice | Play the cadence I IV V I in C (tonic C3 for low, C4 for high), then sing "ah" on 1 5 3 7 2 6 4 of C major, one note every 4 clicks, held about 3 | 60 |
 | `sung-g-low`, `sung-g-high` | voice | Same in G major (tonic G3 and G4) | 60 |
+| `singles-bass` | both pianos | Every semitone from C2 to E4 (29 notes), medium loudness, one note every 2 beats, ring about 1.5 beats. This is the bass reading range and decides R20 (octave-exact bass grading from the mic); the page scores it on the device | 40 |
 | `singles-soft`, `singles-loud` | both pianos | A0, C1, D#1, F#1, A1 and on, every minor third up to C8 (30 notes), one note every 2 beats, ring about 1.5 beats. Once soft, once loud | 40 |
 | `melody-ode` | both pianos | E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4(1.5) D4(0.5) D4(2), quarter notes unless shown | 80 |
 | `melody-twinkle` | both pianos | C4 C4 G4 G4 A4 A4 G4(2) F4 F4 E4 E4 D4 D4 C4(2) | 80 |
@@ -41,7 +42,7 @@ Each instrument gets the takes that apply to it. Ids are `voice-…`, `ac-…` (
 | `two-hand-c` | both pianos | One bar each, 4 beats per bar. Left hand chord on beat 1, right hand notes on beats 1 and 3: C3-E3-G3 with E4, G4; F3-A3-C4 with F4, A4; G3-B3-D4 with D4, B4; C3-E3-G3 with C4, C5 | 60 |
 | `two-hand-g` | both pianos | The same passage transposed up a fifth (G major) | 60 |
 
-That is 4 voice takes and 7 takes on each piano. Allow about 2 minutes for each 30 note take and 1 minute for the rest, plus setup and retakes, so 30 to 45 minutes in all. If you also record a laptop mic, repeat only the `singles-soft` and `two-hand-c` takes and use the id suffix `laptop` (the recorder has a field for it).
+That is 4 voice takes and 8 takes on each piano. Allow about 2 minutes for each 30 note take and 1 minute for the rest, plus setup and retakes, so 30 to 45 minutes in all. If you also record a laptop mic, repeat only the `singles-soft` and `two-hand-c` takes and use the id suffix `laptop` (the recorder has a field for it).
 
 Why these: sung degrees test voice tracking with vibrato and drift in two registers, which is the main M1 input. Single notes across A0 to C8 expose octave errors and the weak low fundamentals. The melodies exercise onset detection with repeated notes and fast restrikes. The two-hand takes are the S1 test set, so play them cleanly and at a steady tempo.
 

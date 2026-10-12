@@ -74,6 +74,25 @@ function singlesTake(slug: string, dynamic: string): Take {
   };
 }
 
+/**
+ * Bass register for R20 (T3.12): every semitone C2 to E4, the reading range, with the expected range
+ * set as a reading item sets it. Decides whether bass reading is graded octave-exact from the mic.
+ */
+function bassSinglesTake(): Take {
+  const midis = Array.from({ length: 29 }, (_, i) => 36 + i); // C2 .. E4
+  return {
+    slug: "singles-bass",
+    kind: "piano-single",
+    instruments: ["acoustic-piano", "digital-piano"],
+    label: "Bass notes C2 to E4, every semitone (for bass reading)",
+    prompt: `Play each note at a normal, medium loudness on the click and let it ring for about 1.5 beats. Every semitone from C2 (two octaves below middle C) up to E4, 29 notes.`,
+    bpm: 40,
+    notes: seq(midis, 2, 1.5),
+    expectedRange: { low: 36, high: 64 },
+    tags: ["bass"],
+  };
+}
+
 const melody = (
   slug: string,
   label: string,
@@ -138,6 +157,7 @@ export const TAKES: readonly Take[] = [
   sungTake("sung-c-high", 60, "Sung degrees, C major, high register"),
   sungTake("sung-g-low", 55, "Sung degrees, G major, low register"),
   sungTake("sung-g-high", 67, "Sung degrees, G major, high register"),
+  bassSinglesTake(),
   singlesTake("singles-soft", "soft"),
   singlesTake("singles-loud", "loud"),
   melody(
