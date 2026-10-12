@@ -3,11 +3,13 @@
   import { asset } from "$app/paths";
   import {
     COUNT_IN_BEATS,
+    KEYBOARD_RANGES,
     midiToHz,
     noteName,
     pipelineOptionsFor,
     runWavBytes,
     selfPacedTruth,
+    takeInRange,
     takeToEntry,
     takeTruth,
     takesFor,
@@ -31,6 +33,10 @@
   const OUT_RATE = 22050;
   /** Self-paced: how long a note rings after its attack before the next one is shown. */
   const RING_MS = 2000;
+  /** Self-paced: attacks this soon after Record are the tap or the room settling, not a note. */
+  const START_GUARD_MS = 500;
+  /** Self-paced: a rough time per note for the length estimate (ring plus playing the next). */
+  const SELF_PACED_SEC_PER_NOTE = RING_MS / 1000 + 1;
   /** Self-paced: recording stops on its own after this long, whatever happens. */
   const MAX_SELF_PACED_SEC = 600;
 
@@ -62,12 +68,59 @@
   let skipNote = $state<(() => void) | undefined>();
   let frame = 0;
 
+  // The keys this piano has, remembered on the device. Takes leave out notes outside it.
+  const RANGE_STORAGE_KEY = "clavisRecordRange";
+  interface Range {
+    low: number;
+    high: number;
+  }
+  const DEFAULT_RANGE: Range = KEYBOARD_RANGES["88 keys (A0 to C8)"];
+  function loadRange(): Range {
+    try {
+      const raw = localStorage.getItem(RANGE_STORAGE_KEY);
+      const r = raw === null ? undefined : (JSON.parse(raw) as Partial<Range>);
+      if (
+        r !== undefined &&
+        typeof r.low === "number" &&
+        typeof r.high === "number" &&
+        r.low >= 21 &&
+        r.high <= 108 &&
+        r.low < r.high
+      ) {
+        return { low: r.low, high: r.high };
+      }
+    } catch {
+      // Storage blocked or bad value: use the full piano.
+    }
+    return DEFAULT_RANGE;
+  }
+  let range = $state<Range>(loadRange());
+  function setRange(r: Range): void {
+    range = r;
+    try {
+      localStorage.setItem(RANGE_STORAGE_KEY, JSON.stringify(r));
+    } catch {
+      // Not remembered; still applies to this visit.
+    }
+  }
+  const presetName = $derived(
+    Object.entries(KEYBOARD_RANGES).find(
+      ([, r]) => r.low === range.low && r.high === range.high,
+    )?.[0] ?? "custom",
+  );
+  const KEY_CHOICES = Array.from({ length: 88 }, (_, i) => 21 + i);
+
   const takes = $derived(takesFor(instrument));
-  const take = $derived<Take | undefined>(takes.find((t) => t.slug === slug) ?? takes[0]);
+  const baseTake = $derived<Take | undefined>(takes.find((t) => t.slug === slug) ?? takes[0]);
+  const take = $derived<Take | undefined>(
+    baseTake === undefined || instrument === "voice"
+      ? baseTake
+      : takeInRange(baseTake, range.low, range.high),
+  );
   const durationSec = $derived(take === undefined ? 0 : takeLengthSec(take));
 
   $effect(() => {
-    if (take !== undefined && take.slug !== slug) slug = take.slug;
+    if (baseTake !== undefined && baseTake.slug !== slug) slug = baseTake.slug;
   });
 
   onDestroy(() => {
@@ -177,7 +230,8 @@
         chunks.push(e.data);
         if (!selfPaced) return;
         for (const at of detector.push(e.data.samples, e.data.frame)) {
-          if (at < first || ringUntil !== undefined || index >= current.notes.length) continue;
+          const guard = first + Math.round((START_GUARD_MS / 1000) * rate);
+          if (at < guard || ringUntil !== undefined || index >= current.notes.length) continue;
           onsets[index] = ((at - first) / rate) * 1000;
           ringUntil = at + Math.round((RING_MS / 1000) * rate);
         }
@@ -371,16 +425,72 @@
       {/each}
     </select>
   </label>
+  {#if instrument !== "voice"}
+    <label
+      >Keyboard
+      <select
+        value={presetName}
+        data-testid="rec-range"
+        onchange={(e) => {
+          const name = e.currentTarget.value;
+          const preset = KEYBOARD_RANGES[name as keyof typeof KEYBOARD_RANGES] as Range | undefined;
+          if (preset) setRange(preset);
+        }}
+      >
+        {#each Object.keys(KEYBOARD_RANGES) as name (name)}
+          <option value={name}>{name}</option>
+        {/each}
+        <option value="custom" disabled>Custom</option>
+      </select>
+    </label>
+    <div class="inline">
+      <label
+        >Lowest key
+        <select
+          value={range.low}
+          data-testid="rec-range-low"
+          onchange={(e) => {
+            const low = Number(e.currentTarget.value);
+            if (low < range.high) setRange({ low, high: range.high });
+          }}
+        >
+          {#each KEY_CHOICES as m (m)}
+            <option value={m}>{noteName(m)}</option>
+          {/each}
+        </select>
+      </label>
+      <label
+        >Highest key
+        <select
+          value={range.high}
+          data-testid="rec-range-high"
+          onchange={(e) => {
+            const high = Number(e.currentTarget.value);
+            if (high > range.low) setRange({ low: range.low, high });
+          }}
+        >
+          {#each KEY_CHOICES as m (m)}
+            <option value={m}>{noteName(m)}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+  {/if}
   <label>Device <input bind:value={device} /></label>
   <label>Id suffix (optional, e.g. laptop) <input bind:value={variant} /></label>
 </fieldset>
 
 {#if take}
   <p>{take.prompt}</p>
+  {#if baseTake && take.notes.length < baseTake.notes.length}
+    <p class="muted" data-testid="rec-range-note">
+      {take.notes.length} of {baseTake.notes.length} notes are on your keyboard; the rest are left out.
+    </p>
+  {/if}
   <p class="muted">
     {#if take.selfPaced}
       {String(take.notes.length)} notes at your own pace, about {String(
-        Math.round((take.notes.length * 3) / 60),
+        Math.round((take.notes.length * SELF_PACED_SEC_PER_NOTE) / 60),
       )} minutes.
     {:else}
       {String(take.bpm)} bpm, {String(take.notes.length)} notes, about {String(

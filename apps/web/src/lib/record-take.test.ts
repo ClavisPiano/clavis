@@ -119,6 +119,16 @@ describe("OnsetDetector", () => {
     });
   });
 
+  it("fires once for a double strike inside the refractory window", () => {
+    const onsets = run(piano([0.5, 0.6], 2));
+    expect(onsets).toHaveLength(1);
+  });
+
+  it("does not fire before it has enough history to compare against", () => {
+    // A note struck at the very first sample has no quieter windows before it.
+    expect(run(piano([0], 1))).toEqual([]);
+  });
+
   it("ignores room noise below the minimum level", () => {
     expect(run(piano([], 3, 0.004))).toEqual([]);
   });

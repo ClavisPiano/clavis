@@ -49,3 +49,23 @@ test("a finished take is analysed on the device and offered for download", async
   await expect(result).toContainText("of 10 notes");
   await expect(result.getByRole("button", { name: "Download WAV + JSON" })).toBeVisible();
 });
+
+test("a keyboard range leaves out notes the piano does not have, and is remembered", async ({
+  page,
+}) => {
+  await page.goto("/dev/record");
+  await page.getByTestId("rec-take").selectOption("singles-soft");
+  await expect(page.getByTestId("rec-range-note")).toHaveCount(0);
+
+  await page.getByTestId("rec-range").selectOption("61 keys (C2 to C7)");
+  await expect(page.getByTestId("rec-range-note")).toContainText(
+    "of 30 notes are on your keyboard",
+  );
+
+  await page.reload();
+  await expect(page.getByTestId("rec-range")).toHaveValue("61 keys (C2 to C7)");
+  await expect(page.getByTestId("rec-range-low")).toHaveValue("36");
+  // The bass take fits a 61-key keyboard, so nothing is left out.
+  await expect(page.getByTestId("rec-take")).toHaveValue("singles-bass");
+  await expect(page.getByTestId("rec-range-note")).toHaveCount(0);
+});

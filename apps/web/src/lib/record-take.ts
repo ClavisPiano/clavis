@@ -134,7 +134,11 @@ export function scoreNotes(
 export interface OnsetDetectorOptions {
   /** RMS window. */
   windowMs?: number;
-  /** A window this many times louder than the quietest of the last few counts as an attack. */
+  /**
+   * A window this many times louder than the quietest of the last few counts as an attack. Tuned
+   * on a real digital piano bass take (C2 to E4): 2x over the last 100 ms catches a soft note
+   * played over the previous one still ringing.
+   */
   riseRatio?: number;
   /** How many earlier windows the rise is measured against. */
   lookbackWindows?: number;
@@ -165,8 +169,8 @@ export class OnsetDetector {
 
   constructor(sampleRate: number, opts: OnsetDetectorOptions = {}) {
     this.#window = Math.max(1, Math.round(((opts.windowMs ?? 20) * sampleRate) / 1000));
-    this.#riseRatio = opts.riseRatio ?? 2.5;
-    this.#lookback = opts.lookbackWindows ?? 3;
+    this.#riseRatio = opts.riseRatio ?? 2;
+    this.#lookback = opts.lookbackWindows ?? 5;
     this.#minRms = opts.minRms ?? 0.01;
     this.#refractory = Math.round(((opts.refractoryMs ?? 300) * sampleRate) / 1000);
   }

@@ -248,6 +248,29 @@ export const takeId = (take: Take, instrument: FixtureInstrument, variant?: stri
     ...(variant === undefined || variant === "" ? [] : [variant]),
   ].join("-");
 
+/** Keyboard range presets for the recorder (MIDI, inclusive). */
+export const KEYBOARD_RANGES = {
+  "88 keys (A0 to C8)": { low: 21, high: 108 },
+  "76 keys (E1 to G7)": { low: 28, high: 103 },
+  "61 keys (C2 to C7)": { low: 36, high: 96 },
+  "49 keys (C2 to C6)": { low: 36, high: 84 },
+} as const;
+
+/**
+ * A take limited to the keys an instrument has. Notes outside `low..high` are dropped (their beats
+ * keep their place, so timed takes stay in time) and the take is tagged with the range, so the
+ * manifest records what was asked for. Returns the take unchanged when every note fits.
+ */
+export function takeInRange(take: Take, low: number, high: number): Take {
+  const notes = take.notes.filter((n) => n.midi >= low && n.midi <= high);
+  if (notes.length === take.notes.length) return take;
+  return {
+    ...take,
+    notes,
+    tags: [...(take.tags ?? []), `range-${String(low)}-${String(high)}`],
+  };
+}
+
 export const takesFor = (instrument: FixtureInstrument): Take[] =>
   TAKES.filter((t) => t.instruments.includes(instrument));
 

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { parseManifest } from "./manifest";
 import {
+  KEYBOARD_RANGES,
   SELF_PACED_NOTE_MS,
   TAKES,
   noteName,
   selfPacedTruth,
   takeToEntry,
+  takeInRange,
   takeTruth,
   takesFor,
 } from "./takes";
@@ -47,6 +49,23 @@ describe("recording takes", () => {
     expect(truth[1]?.midi).toBe(38);
     const entry = takeToEntry(bass, { instrument: "acoustic-piano", device: "x" }, truth);
     expect(entry.notes).toBe(truth);
+  });
+
+  it("limits a take to a keyboard's range and tags it", () => {
+    const soft = TAKES.find((t) => t.slug === "singles-soft");
+    if (!soft) throw new Error("no singles take");
+    const { low, high } = KEYBOARD_RANGES["61 keys (C2 to C7)"];
+    const limited = takeInRange(soft, low, high);
+    expect(limited.notes.every((n) => n.midi >= 36 && n.midi <= 96)).toBe(true);
+    expect(limited.notes.map((n) => noteName(n.midi))[0]).toBe("C2");
+    expect(limited.notes.length).toBeLessThan(soft.notes.length);
+    expect(limited.tags).toContain("range-36-96");
+    expect(takeToEntry(limited, { instrument: "digital-piano", device: "x" }).notes).toHaveLength(
+      limited.notes.length,
+    );
+    const bass = TAKES.find((t) => t.slug === "singles-bass");
+    if (!bass) throw new Error("no bass take");
+    expect(takeInRange(bass, low, high)).toBe(bass);
   });
 
   it("covers A0 to C8 in minor thirds and has simultaneous notes in two-hand takes", () => {
