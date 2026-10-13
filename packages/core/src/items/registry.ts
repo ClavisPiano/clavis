@@ -3,6 +3,7 @@ import { bassNoteRead } from "./bass-note-read.js";
 import { cellEcho } from "./cell.js";
 import { degreeId, degreeSing } from "./degree.js";
 import { rhythmRead } from "./rhythm-read.js";
+import { trebleNoteRead } from "./treble-note-read.js";
 import { rhythmEcho } from "./rhythm.js";
 import type { Generator } from "./types.js";
 
@@ -14,6 +15,7 @@ export const GENERATORS: Partial<Record<GeneratorId, Generator>> = {
   rhythmEcho,
   rhythmRead,
   bassNoteRead,
+  trebleNoteRead,
 };
 
 export function getGenerator(id: GeneratorId): Generator {

@@ -35,8 +35,8 @@ export function parseGraph(raw: unknown): SkillGraph {
  * snapshots computed against a different graph.
  *
  * The four ear generators (degreeSing, degreeId, cellEcho, rhythmEcho, T2.6) and the two reading
- * generators (bassNoteRead, rhythmRead, T3.15) are implemented in core/items; the rest ship with
- * `implemented: false`.
+ * generators (bassNoteRead, rhythmRead, T3.15) and trebleNoteRead (TP.2) are implemented in
+ * core/items; the rest ship with `implemented: false`.
  */
 export function loadGraph(): SkillGraph {
   return parseGraph(v1);

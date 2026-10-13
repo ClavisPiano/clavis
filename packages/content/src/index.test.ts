@@ -33,6 +33,9 @@ const SPEC_IDS = [
   "read.grand.2line",
   "read.grand.sight",
   "read.minor.accidentals",
+  "read.treble.landmarks",
+  "read.treble.steps",
+  "read.treble.skips",
   // HANDS
   "hands.lh.triads.root",
   "hands.lh.inversions",
@@ -56,14 +59,14 @@ describe("v1 skill graph", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("has 31 nodes with exactly the spec ids", () => {
-    expect(graph.nodes).toHaveLength(31);
+  it("has 34 nodes with exactly the spec ids and the treble nodes", () => {
+    expect(graph.nodes).toHaveLength(34);
     expect(graph.nodes.map((n) => n.id).sort()).toEqual([...SPEC_IDS].sort());
   });
 
   it("has the expected strand counts", () => {
     const count = (s: string) => graph.nodes.filter((n) => n.strand === s).length;
-    expect([count("EAR"), count("READ"), count("HANDS"), count("BYEAR")]).toEqual([12, 9, 7, 3]);
+    expect([count("EAR"), count("READ"), count("HANDS"), count("BYEAR")]).toEqual([12, 12, 7, 3]);
   });
 
   it("encodes the R10 prerequisites", () => {
@@ -86,13 +89,13 @@ describe("v1 skill graph", () => {
   });
 
   it("lists every generator once and implements exactly the core registry", () => {
-    expect(graph.generators).toHaveLength(15);
+    expect(graph.generators).toHaveLength(16);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
     expect(implemented.sort()).toEqual(Object.keys(GENERATORS).sort());
     for (const id of implemented) expect(getGenerator(id)).toBeDefined();
   });
 
-  it("enables the ear M2 nodes and the six reading nodes", () => {
+  it("enables the ear M2 nodes and the nine reading nodes", () => {
     const enabled = graph.nodes.filter((n) => isNodeEnabled(n, graph.generators)).map((n) => n.id);
     for (const id of [
       "ear.degrees.major.135",
@@ -111,6 +114,9 @@ describe("v1 skill graph", () => {
       "read.bass.steps",
       "read.minor.accidentals",
       "read.rhythm.basic",
+      "read.treble.landmarks",
+      "read.treble.skips",
+      "read.treble.steps",
     ]);
     expect(enabled.every((id) => id.startsWith("ear.") || id.startsWith("read."))).toBe(true);
   });

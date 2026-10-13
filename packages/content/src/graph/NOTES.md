@@ -2,7 +2,7 @@
 
 JSON cannot carry comments, so the rationale for `v1.json` lives here.
 
-- **Counts.** 12 EAR, 9 READ, 7 HANDS, 3 BYEAR. READ and HANDS each include one R10 node (`read.minor.accidentals`, `hands.minor.leadingTone`).
+- **Counts.** 12 EAR, 12 READ, 7 HANDS, 3 BYEAR. READ and HANDS each include one R10 node (`read.minor.accidentals`, `hands.minor.leadingTone`). Three of the READ nodes are the treble nodes added in TP.2.
 - **Bass landmarks.** Spec: "low C, F (clef line), middle C, low G". Chosen pitches: C2 (low C), F3 (the F line of the bass clef), C4 (middle C), G2 (low G). Scientific pitch notation, middle C = C4.
 - **`read.bass.skips` full range.** `fullRange: ["C2", "E4"]` covers the bass staff plus two ledger lines above.
 - **Key dependence.** EAR and BYEAR false. READ and HANDS true, except `read.rhythm.basic` (rhythm only, single pitch) which is false.
@@ -17,3 +17,4 @@ JSON cannot carry comments, so the rationale for `v1.json` lives here.
 - **`ear.cadence`.** Reuses `progressionId` with a `cadences` param (two-chord endings) rather than a separate generator.
 - **`contentVersion`** must change whenever graph semantics change.
 - **Reading enabled (T3.15).** `bassNoteRead` enables `read.bass.landmarks`, `read.bass.steps`, `read.bass.skips`, `read.bass.intervals` and `read.minor.accidentals` (R18); `rhythmRead` enables `read.rhythm.basic`. `read.bass.chords`, `read.grand.2line` and `read.grand.sight` stay disabled. Flipping the flags changes graph semantics, so `contentVersion` moved from 2026.10.1 to 2026.10.2 and stored snapshots are discarded and refolded (R8).
+- **Treble reading enabled (TP.2).** `trebleNoteRead` enables `read.treble.landmarks` (C4, G4, C5: middle C, the G the clef curls round, the C above), `read.treble.steps` and `read.treble.skips` (the whole range C4 to A5, one ledger line below the staff to one above). They mirror the bass nodes: key dependent, the same mastery and latency targets, the same generator rules (R15, R17). The generator is the bass one with a different staff (`makeNoteRead`). The nodes sit after the other READ nodes in the file, so the composer still introduces bass landmarks and rhythm before treble landmarks (it breaks ties by file order); move them earlier to change that. Treble has no interval or minor accidental nodes yet and is not part of placement. `contentVersion` moved to 2026.10.5.
