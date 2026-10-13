@@ -70,6 +70,7 @@ M0 skeleton ──> M1 hear & respond ──> M2 learning core ──> [dogfood 
                       │                                                   └─> M4 accounts & sync (parallel with M3)
                       └─> S1 polyphonic spike (parallel, de-risks M5)
 M3 + M4 ──> M5 hands ──> M6 progress ──> M7 by ear & import
+M3 ──> MP pieces (hands separate; harmonic ear pulled forward from M7; runs beside the T3.17 device week)
 ```
 
 Two changes to the arch build plan:
@@ -199,6 +200,29 @@ Merge order and lanes:
 
 Exit: on iPhone and an iPad 9th gen or newer, installed, with airplane mode on after one online launch: placement places EAR and READ nodes; daily sessions show Orient, Ear and Read with notation within the T3.2 thresholds; bass-note items are graded octave-exact through the mic or by the R20 fallback; Away sessions include READ; one week of daily sessions with no data loss, median session within ±20% of budget, and at least one READ node past `learning`.
 
+### MP: Pieces (pulled forward, runs beside the T3.17 device week)
+
+Goal: real tunes to play early, to keep motivation up, without waiting for M5 or M7. Pieces are short public-domain melodies split into phrases. The learner reads or hears a phrase, plays it, and the attempt is graded and logged like any other item (feeds FSRS and mastery). Hands separate only: a right-hand treble line first, then left-hand bass-clef lines. Hands together stays in M5 because it needs alignment and polyphonic input; the spec's "repertoire library" non-goal is relaxed only to this small hand-picked set.
+
+Also pulls the cheap part of M7 forward: harmonic ear nodes whose answers are chosen on the keyboard or by tap, so no polyphonic mic work is needed.
+
+Reuses: `ScoreSpec` and the notation runtime (T3.1, T3.4), `expected.play` `exactPitch` `sequence` and `rhythm` grading, the composer's generator registry (T3.9), concept cards (T2.12).
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| TP.1 | **Harmonic ear.** Generators `bassMotion` (identify the bass root motion of a short progression, for `ear.bass.I-IV-V-vi`) and `chordQuality` (major or minor, then diminished, triad in context, for `ear.quality.triad`). Answers by on-screen keyboard or tap choice. Concept cards for both nodes. Register the generators, set `implemented: true`, bump `contentVersion` | T2.12 | Seeded tests: stimulus and expected answer agree; ids stable; universe sizes. Content tests (card coverage). Away variant works with tap answers. Playwright (both browsers): a seeded learner meets each node and answers by tap |
+| TP.2 | **Treble reading.** `trebleNoteRead` derived from `bassNoteRead` (landmarks: middle C, G line, high C; then steps and skips), new `read.treble.*` nodes with prerequisites, cards, a mic `inputRange` for the treble register. Key families follow R15. Exported, then registered in the enabling PR | T3.15 | Seeded tests as T3.6: ids stable across keys within a family, MIDI within `inputRange`, display validates. Content tests. Playwright: a treble READ item renders and grades a played note |
+| TP.3 | **Piece schema and library.** `PieceSchema` in `content` (title, composer or source, `ScoreSpec`, phrase boundaries as measure ranges, key, required node ids, difficulty). 8-10 public-domain melodies ordered by difficulty: right-hand treble first, then a few left-hand bass-clef lines. Provenance noted in `docs/licences.md`. `piece.list(learnerState)` pure helper | TP.2 | Schema and content tests: every piece validates, phrases tile the score exactly, required nodes exist, difficulty order holds, provenance recorded. Table tests for unlock rules |
+| TP.4 | **`pieceLine` generator.** One phrase per item, shown as notation, graded with the existing `sequence` and `rhythm` expectations (pitch first, rhythm second). Composer places piece phrases in the Apply slot after Read; node and piece state are fed by attempts. A whole-piece run chains the phrases and logs a `piece.completed` style outcome (new event version with upcaster rules per CLAUDE.md) | TP.3, T3.10 | Machine tests with a fake `NotationPort`. Composer goldens and properties (unlock rule, no adjacent same type, budget). Reducer tests: piece progress is derived and refold order independent. Event schema and upcaster tests |
+| TP.5 | **Home piece card and milestones.** Current piece, phrase progress, "play it through" run, a completion moment, and a list of unlocked and locked pieces with what unlocks each | TP.4 | Component tests; Playwright: a seeded learner sees the card, plays a phrase, completes a piece, and the milestone persists across reload and offline |
+| TP.6 | **Play it by ear (known tunes).** For a learned piece, the learner hears a phrase with no notation, sings it, plays it, then the score is revealed to check. A staged loop in the spirit of `byEarPhrase`, using the existing stimulus playback, sung and played grading, and R12 sub-scores. Not shown until the piece's reading phrases are learned | TP.4, TP.1 | Machine tests for the stages; table tests for combined scoring; Playwright: a phrase goes hear, sing, play, reveal, and a wrong sung part reads "Not quite" |
+
+Merge order and lanes: TP.1 and TP.2 in parallel (separate lanes, no shared files beyond the registry and graph, so rebase carefully). TP.3 starts once TP.2's node ids are fixed, with authoring able to begin earlier against a stub. Then TP.4, then TP.5 and TP.6 in parallel.
+
+Exit: a learner with a few treble nodes past `learning` is offered a first piece, plays it phrase by phrase from notation, completes it end to end, and later replays its phrases by ear; harmonic ear nodes are available in sessions alongside; all work offline.
+
+Follow-ups, deliberately out of MP: hands-together pieces (M5 alignment, MIDI first), a larger library, import (M7).
+
 ### M4: Accounts and sync (parallel with M3)
 
 - Passkeys via `@simplewebauthn`; credentials in D1; HMAC-signed session cookie; recovery codes; add-second-passkey flow.
@@ -214,6 +238,7 @@ Exit: on iPhone and an iPad 9th gen or newer, installed, with airplane mode on a
 - Transcription worker (Basic Pitch or the S1 winner), post-take only; take length cap.
 - DTW alignment with local-tempo model; per-note classification (correct, wrong pitch, missed, extra, early, late, short); tolerances by source.
 - Generators: `lhPattern`, `coordTask`; task-level scheduling (spec 5.4) and micro-drill spawning into FSRS.
+- Hands-together versions of the MP pieces (RH melody plus LH), MIDI first if S1 says mic input is too weak.
 - Apply block in the composer; placement HANDS section.
 - Risk: polyphonic mic accuracy. S1 results decide whether mic-based HANDS ships in v1 or HANDS is MIDI-first.
 
@@ -226,7 +251,7 @@ Exit: on iPhone and an iPad 9th gen or newer, installed, with airplane mode on a
 
 ### M7: By ear and import
 
-- EAR progression nodes and generators (`bassMotion`, `chordQuality`, `progressionId`), minor and colour progressions.
+- EAR progression nodes and generators (`progressionId`; `bassMotion` and `chordQuality` move to MP, TP.1), minor and colour progressions.
 - `byEarPhrase` staged loop (spec 9) with stage gating.
 - Import: MusicXML/MXL (primary), MIDI, ABC (via Verovio conversion), audio with loop regions; phrase splitting and difficulty estimate; private R2 storage.
 - `ear.real.phrase` content sourcing (public domain first).
