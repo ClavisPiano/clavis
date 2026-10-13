@@ -18,6 +18,13 @@
     return typeof midi === "number" ? midi : undefined;
   }
 
+  /** Bass roots of a presented bassMotion item, for the e2e specs (comma separated MIDI notes). */
+  function presentedRoots(event: LearningEvent): string | undefined {
+    if (event.type !== "item.presented" || event.generator !== "bassMotion") return undefined;
+    const roots = event.presentation.targetMidi;
+    return Array.isArray(roots) ? roots.map(Number).join(",") : undefined;
+  }
+
   onMount(async () => {
     const result = await initAppStore();
     if (result.ok) {
@@ -43,6 +50,7 @@
         data-v={event.v}
         data-practice={event.type === "session.started" && event.practice === true}
         data-midi={presentedMidi(event)}
+        data-roots={presentedRoots(event)}
         data-block={event.type === "item.presented" ? event.block : undefined}
         data-generator={event.type === "item.presented" ? event.generator : undefined}
       >

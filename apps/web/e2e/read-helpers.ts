@@ -21,7 +21,11 @@ export interface SeedNode {
 export async function seedLearner(
   page: Page,
   nodes: readonly SeedNode[],
-  opts: { newItemsPerDay?: number } = {},
+  opts: {
+    newItemsPerDay?: number;
+    /** Nodes placed as mastered (a `placement.completed`), so their dependents unlock. */
+    placedMastered?: readonly string[];
+  } = {},
 ): Promise<number> {
   const at = Date.now() - 3 * 86_400_000;
   const id = (n: number): string => `${SEED_ID_PREFIX}${String(n).padStart(5, "0")}`;
@@ -49,6 +53,18 @@ export async function seedLearner(
       nodeId: n.nodeId,
       ...(n.keyFamily === undefined ? {} : { keyFamily: n.keyFamily }),
     })),
+    ...(opts.placedMastered === undefined
+      ? []
+      : [
+          {
+            ...base,
+            id: id(101),
+            at: at + 500,
+            type: "placement.completed",
+            placementId: id(102),
+            results: Object.fromEntries(opts.placedMastered.map((n) => [n, "mastered"])),
+          },
+        ]),
     ...(opts.newItemsPerDay === undefined
       ? []
       : [

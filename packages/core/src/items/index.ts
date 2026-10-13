@@ -7,6 +7,7 @@ export * from "./cell.js";
 export * from "./rhythm.js";
 export * from "./rhythm-read.js";
 export * from "./bass-note-read.js";
+export * from "./bass-motion.js";
 export * from "./registry.js";
 export { createRng, type Rng } from "../random.js";
 export * from "./family.js";
