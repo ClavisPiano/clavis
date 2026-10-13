@@ -6,6 +6,7 @@ import {
   scoreNoteIds,
   type AttemptError,
   type AttemptOutcome,
+  type ChoiceOption,
   type ComposeInput,
   type ExpectedResponse,
   type GenerateContext,
@@ -146,6 +147,8 @@ export interface ItemView {
   display?: ScoreSpec;
   /** Playable range for the on-screen keyboard, when the item sets one. */
   inputRange?: VoiceRange;
+  /** Buttons to answer with, for choice items (R21). They replace the keyboard. */
+  choices?: ChoiceOption[];
 }
 
 export interface NodeChange {
@@ -224,6 +227,8 @@ interface Current {
   tailMs: number;
   playNotes: NoteEvent[];
   singFrames: PitchFrame[];
+  /** The option picked, for choice items. */
+  choice?: { id: string; atMs: number };
 }
 
 type Listener = (state: SessionState) => void;
@@ -238,6 +243,13 @@ export function phasesFor(expected: ExpectedResponse, mode: SessionMode): Phase[
   return play ? ["play"] : ["sing"];
 }
 
+/** "Major or minor?" or "Major, minor or diminished?" from the option labels. */
+export function choiceQuestion(options: readonly ChoiceOption[]): string {
+  const labels = options.map((o, i) => (i === 0 ? o.label : o.label.toLowerCase()));
+  const last = labels[labels.length - 1] ?? "";
+  return `${labels.slice(0, -1).join(", ")} or ${last}?`;
+}
+
 export function promptFor(
   phase: Phase,
   phases: readonly Phase[],
@@ -248,6 +260,7 @@ export function promptFor(
   if (phase === "sing") return "Sing it";
   if (phases.length > 1) return "Now play it";
   const play = expected.play;
+  if (play?.kind === "choice") return choiceQuestion(play.options);
   if (display && play) {
     if (play.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
     if (mode === "away") return "Find it on the keyboard";
@@ -404,6 +417,16 @@ export class SessionMachine {
   /** End the listening phase now and score what was heard. */
   answerDone(): void {
     if (this.#state.kind === "listening") this.#endPhase();
+  }
+
+  /** Choice items (R21): the learner picked an option. The first pick is the answer. */
+  answerChoice(id: string): void {
+    const cur = this.#cur;
+    if (this.#state.kind !== "listening" || !cur || cur.choice) return;
+    const play = cur.instance.expected.play;
+    if (play?.kind !== "choice" || !play.options.some((o) => o.id === id)) return;
+    cur.choice = { id, atMs: this.#d.clock.contextNowMs() };
+    this.#endPhase();
   }
 
   /** Feedback: hear the reference and your attempt back to back. */
@@ -922,6 +945,9 @@ export class SessionMachine {
       block: cur.block,
       ...(cur.instance.display ? { display: cur.instance.display } : {}),
       ...(cur.instance.inputRange ? { inputRange: cur.instance.inputRange } : {}),
+      ...(cur.instance.expected.play?.kind === "choice"
+        ? { choices: cur.instance.expected.play.options }
+        : {}),
     };
   }
 
@@ -1065,6 +1091,8 @@ export class SessionMachine {
     const note: NoteEvent = { ...raw, onsetMs: raw.onsetMs - this.#offset(raw.source) };
     if (note.offsetMs !== undefined) note.offsetMs -= this.#offset(raw.source);
     if (note.onsetMs < cur.gateMs) return;
+    // Choice items are answered with buttons; stray notes from the mic mean nothing.
+    if (cur.instance.expected.play?.kind === "choice") return;
     if (phase === "play") cur.playNotes.push(note);
     this.#check();
   }
@@ -1126,6 +1154,7 @@ export class SessionMachine {
   } {
     const d = this.#d;
     const expected = cur.instance.expected;
+    const isChoice = expected.play?.kind === "choice";
     let sing: ScoreResult | undefined;
     let play: ScoreResult | undefined;
     if (cur.phases.includes("sing") && expected.sing) {
@@ -1143,8 +1172,9 @@ export class SessionMachine {
         expected,
         notes: cur.playNotes,
         frames: [],
+        ...(cur.choice ? { choice: cur.choice } : {}),
         stimulusEndMs: cur.refMs.play ?? cur.stimulusEndMs,
-        source: d.input.source,
+        source: isChoice ? "tap" : d.input.source,
         part: "play",
       });
     }
@@ -1158,7 +1188,7 @@ export class SessionMachine {
       outcome: combined.outcome,
       subScores,
       errors: combined.errors,
-      source: play ? d.input.source : this.#adapterFor("sing").source,
+      source: play ? (isChoice ? "tap" : d.input.source) : this.#adapterFor("sing").source,
     };
   }
 

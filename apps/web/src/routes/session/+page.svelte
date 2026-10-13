@@ -54,8 +54,10 @@
   // appended. The links reload the page (data-sveltekit-reload) to start a fresh session.
   const keepGoingHref = $derived(resolve("/session") + keepGoingSearch);
   const learnHref = $derived(resolve("/session") + learnSearch);
+  /** Buttons to answer a choice item (R21), in both modes. They replace the keyboard. */
+  const choices = $derived(view.kind === "listening" ? view.item.choices : undefined);
   const showKeyboard = $derived(
-    params?.mode === "away" && view.kind === "listening" && view.phase === "play",
+    params?.mode === "away" && view.kind === "listening" && view.phase === "play" && !choices,
   );
   const awayKeys = $derived(
     awayKeyboard(view.kind === "listening" ? view.item.inputRange : undefined),
@@ -397,15 +399,31 @@
             }}>Tap</button
           >
         {/if}
+        {#if choices}
+          <div class="choices" role="group" aria-label="Your answer">
+            {#each choices as option (option.id)}
+              <button
+                type="button"
+                class="primary"
+                data-testid={`choice-${option.id}`}
+                onclick={() => machine?.answerChoice(option.id)}
+              >
+                {option.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
         <div class="row">
-          <button
-            type="button"
-            class="primary"
-            data-testid="done"
-            onclick={() => machine?.answerDone()}
-          >
-            Done
-          </button>
+          {#if !choices}
+            <button
+              type="button"
+              class="primary"
+              data-testid="done"
+              onclick={() => machine?.answerDone()}
+            >
+              Done
+            </button>
+          {/if}
           <button
             type="button"
             class="secondary"
@@ -602,6 +620,15 @@
 </div>
 
 <style>
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .choices button {
+    flex: 1 1 8rem;
+    min-height: 3.5rem;
+  }
   .session {
     display: flex;
     flex-direction: column;

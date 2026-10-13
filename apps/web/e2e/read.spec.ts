@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { expectNotationDrawn, seedLearner, skipToReadItem } from "./read-helpers";
 import { runToSummary } from "./session-helpers";
@@ -7,6 +9,13 @@ import { runToSummary } from "./session-helpers";
  * content graph. These specs cover a whole instrument session with all three blocks, a reload
  * while offline in the middle of a session, and the snapshot discard when `contentVersion` changes.
  */
+
+/** The `contentVersion` in the content package's graph file, read as plain JSON. */
+function graphContentVersion(): string {
+  const file = join(import.meta.dirname, "../../../packages/content/src/graph/v1.json");
+  const graph = JSON.parse(readFileSync(file, "utf8")) as { contentVersion: string };
+  return graph.contentVersion;
+}
 
 const LANDMARKS = { nodeId: "read.bass.landmarks", keyFamily: "A" } as const;
 const DEGREES = { nodeId: "ear.degrees.major.135" } as const;
@@ -183,7 +192,8 @@ test.describe("reading is enabled", () => {
     const realCount = await page.getByTestId("event-count").textContent();
     expect(Number(realCount)).toBeGreaterThan(1);
     const current = (await page.getByTestId("content-version").textContent()) ?? "";
-    expect(current).toBe("2026.10.3");
+    // The page shows the graph's own version, so a content bump never needs a spec edit.
+    expect(current).toBe(graphContentVersion());
 
     // Control: a snapshot for the current content version is trusted.
     await writeSnapshot(current);

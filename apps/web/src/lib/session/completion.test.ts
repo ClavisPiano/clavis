@@ -60,6 +60,20 @@ describe("checkPlayDone", () => {
     expect(checkPlayDone(t, all, 1800 + SEQUENCE_QUIET_MS).done).toBe(true);
   });
 
+  it("choice: never done from notes, however many arrive", () => {
+    const target: PlayTarget = {
+      kind: "choice",
+      options: [
+        { id: "major", label: "Major" },
+        { id: "minor", label: "Minor" },
+      ],
+      correct: "major",
+    };
+    const stray = [note(60, 100), note(64, 200), note(67, 300), note(72, 400)];
+    expect(checkPlayDone(target, stray, 10_000)).toEqual({ done: false });
+    expect(checkPlayDone(target, [], 10_000)).toEqual({ done: false });
+  });
+
   it("rhythm: expected count of onsets, then one beat of quiet", () => {
     const t: PlayTarget = {
       kind: "rhythm",

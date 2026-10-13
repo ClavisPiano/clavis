@@ -304,7 +304,7 @@ Notes:
 
 - "Keys" means the `NoteEvent` stream from either MIDI or mic transcription. Scoring tolerances widen when the source is mic.
 - Singing uses monophonic pitch tracking (YIN/pYIN). Reliable on any device mic; this is the ear-training input most robust on iOS.
-- Tap responses (on-screen keyboard or buttons) are used in Away mode only (6.5). At the instrument, responses are always played or sung.
+- Tap responses (on-screen keyboard or buttons) are used in Away mode only (6.5). At the instrument, responses are always played or sung, except choice answers that are not a pitch, such as the quality of a chord: those use on-screen buttons in both modes (implementation plan R21).
 - Every played generator scores rhythm as well as pitch: onset deviation relative to local tempo, plus duration for held notes. Summary feedback reports whichever dimension is weaker.
 
 ---

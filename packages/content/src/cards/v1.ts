@@ -222,5 +222,41 @@ export const CARDS_V1: unknown[] = [
       { label: "Root motion (musictheory.net)", url: `${MT}/56` },
     ],
   },
+  {
+    id: "concept.quality.triad",
+    nodeIds: ["ear.quality.triad"],
+    title: "Triad quality",
+    body: [
+      "A triad is three notes stacked in thirds: a root, a third above it and a fifth above that. The gap between the root and the middle note sets the colour. A major third sounds bright and open. A minor third, one half step smaller, sounds darker and sadder.",
+      "You do not need to name the root to hear this. Listen to the whole chord and ask whether it is bright or dark. In a major key the chords on 1, 4 and 5 are major, and the chords on 2, 3 and 6 are minor, so you can compare them by ear.",
+    ],
+    howTo: [
+      "Listen to the cadence, then one chord held for two beats.",
+      "Tap the button that names its quality, such as major or minor.",
+      "There is nothing to play or sing. Away mode works the same way.",
+      "Quick answers count for more than slow ones, but get it right first.",
+    ],
+    examples: [
+      {
+        kind: "progression",
+        label: "Major then minor: I then vi",
+        romans: ["I", "vi"],
+        afterCadence: true,
+      },
+      {
+        kind: "progression",
+        label: "Major then minor: IV then ii",
+        romans: ["IV", "ii"],
+        afterCadence: true,
+      },
+      {
+        kind: "progression",
+        label: "Major then minor: V then iii",
+        romans: ["V", "iii"],
+        afterCadence: true,
+      },
+    ],
+    links: [{ label: "Triads (musictheory.net)", url: `${MT}/40` }],
+  },
   ...READ_CARDS_V1,
 ];
