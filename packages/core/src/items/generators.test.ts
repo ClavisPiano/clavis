@@ -49,6 +49,20 @@ const NODES: SkillNode[] = [
     itemGenerators: ["rhythmEcho"],
     params: { bars: [1, 2], meter: "4/4" },
   },
+  {
+    ...base,
+    id: "ear.quality.triad",
+    itemGenerators: ["chordQuality"],
+    params: { qualities: ["major", "minor"], roots: [1, 2, 3, 4, 5, 6] },
+    targetLatencyMs: 2000,
+  },
+  {
+    ...base,
+    id: "ear.bass.I-IV-V-vi",
+    itemGenerators: ["bassMotion"],
+    params: { mode: "major", chords: ["I", "IV", "V", "vi"] },
+    targetLatencyMs: 4000,
+  },
 ];
 const nodeFor = (id: string): SkillNode => {
   const n = NODES.find((x) => x.id === id);
@@ -85,7 +99,17 @@ describe("itemId", () => {
 describe("registry and universes", () => {
   it("registers the ear and reading generators", () => {
     expect(Object.keys(GENERATORS).sort()).toEqual(
-      ["bassNoteRead", "cellEcho", "degreeId", "degreeSing", "rhythmEcho", "rhythmRead"].sort(),
+      [
+        "bassMotion",
+        "bassNoteRead",
+        "cellEcho",
+        "chordQuality",
+        "degreeId",
+        "degreeSing",
+        "rhythmEcho",
+        "rhythmRead",
+        "trebleNoteRead",
+      ].sort(),
     );
   });
 
@@ -263,7 +287,8 @@ describe("item generation", { timeout: 30000 }, () => {
 
   it("nothing is sung: targets are in the keyboard range and cells are diatonic", () => {
     for (const { node, g, params } of ALL) {
-      if (g === "rhythmEcho") continue;
+      // Degree and cell items only: harmonic ear items sound chords and ask for their roots.
+      if (g !== "degreeSing" && g !== "degreeId" && g !== "cellEcho") continue;
       for (let s = 0; s < 6; s++) {
         const inst = getGenerator(g).generate(node, params, ctx(s, { keyboardRange: KEYBOARD }));
         const { sing, play } = inst.expected;

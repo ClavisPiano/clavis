@@ -47,6 +47,7 @@ describe("cardExampleStimulus", () => {
     { kind: "scale", label: "s" },
     { kind: "degrees", label: "d", degrees: [1, 3, 5, 8], afterCadence: true },
     { kind: "rhythm", label: "r", onsetsBeats: [0, 1, 1.5, 2] },
+    { kind: "progression", label: "p", romans: ["I", "IV", "V", "vi"], afterCadence: true },
   ];
 
   it.each(ALL_KEYS.map((k) => [`${k.tonic} ${k.mode}`, k] as const))(
@@ -69,6 +70,47 @@ describe("cardExampleStimulus", () => {
     const singles = spec.events.filter((e) => e.role === undefined).map((e) => e.midi[0]);
     expect(singles).toEqual([62, 66, 69, 74]);
     expect(spec.events.filter((e) => e.role === "cadence")).toHaveLength(4);
+  });
+
+  it("plays a progression one chord per beat after the cadence, always in a major key", () => {
+    const example: CardExample = {
+      kind: "progression",
+      label: "p",
+      romans: ["I", "IV", "V", "vi"],
+      afterCadence: true,
+    };
+    for (const key of [
+      { tonic: "D", mode: "major" } as const,
+      { tonic: "D", mode: "minor" } as const,
+    ]) {
+      const spec = cardExampleStimulus(example, key);
+      expect(spec.events.filter((e) => e.role === "cadence")).toHaveLength(4);
+      const chords = spec.events.filter((e) => e.role === undefined);
+      expect(chords.map((e) => e.midi[0])).toEqual([38, 43, 45, 47]);
+      expect(chords.every((e) => e.midi.length === 4)).toBe(true);
+      chords.forEach((e, i) => {
+        if (i > 0) expect(e.atSec - (chords[i - 1]?.atSec ?? 0)).toBeCloseTo(beat, 6);
+      });
+    }
+  });
+
+  it("plays a progression from time zero without the cadence", () => {
+    const spec = cardExampleStimulus(
+      { kind: "progression", label: "p", romans: ["I", "V"], afterCadence: false },
+      { tonic: "C", mode: "major" },
+    );
+    expect(spec.events.map((e) => e.atSec)).toEqual([0, beat]);
+  });
+
+  it("rejects progression examples with unknown numerals or too few chords", () => {
+    const base = { kind: "progression", label: "p", afterCadence: false };
+    const bad = [
+      { ...base, romans: ["I", "bII"] },
+      { ...base, romans: ["I"] },
+    ];
+    for (const ex of bad) {
+      expect(ConceptCardSchema.safeParse({ ...card, examples: [ex] }).success).toBe(false);
+    }
   });
 
   it("starts degrees immediately without the cadence", () => {

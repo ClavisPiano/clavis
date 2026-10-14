@@ -15,6 +15,14 @@ describe("describeError", () => {
       { code: "degree.confusion.", detail: { part: "sing" } },
       "You sang a different note from the target",
     ],
+    [
+      {
+        code: "choice.wrong",
+        detail: { expectedLabel: "Major", playedLabel: "Minor", part: "play" },
+      },
+      "You chose minor; it was major",
+    ],
+    [{ code: "choice.wrong" }, "That was not the right choice"],
     [{ code: "pitch.wrong" }, "That was not the target note"],
     [{ code: "pitch.octave" }, "Right note, wrong octave"],
     [{ code: "response.timeout" }, "No answer was heard in time"],

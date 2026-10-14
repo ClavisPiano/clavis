@@ -119,6 +119,7 @@ export const V1_GRAPH: SkillGraph = {
       params: {
         qualities: ["major", "minor"],
         laterQualities: ["diminished"],
+        roots: [1, 2, 3, 4, 5, 6],
       },
       mastery: {
         minAccuracy: 0.9,

@@ -7,6 +7,8 @@ import {
 import { CARDS_V1, ORIENT_CARD_ID } from "./cards/v1.js";
 
 export { conceptTip, type ConceptTip, type TipMode } from "./tips.js";
+export { loadPieces } from "./pieces/library.js";
+export { line, type LineSpec } from "./pieces/line.js";
 import v1 from "./graph/v1.json";
 
 export const PACKAGE_NAME = "@clavis/content";
@@ -34,8 +36,9 @@ export function parseGraph(raw: unknown): SkillGraph {
  * snapshots are keyed by it (R8), so a stale version would silently reuse
  * snapshots computed against a different graph.
  *
- * The four ear generators (degreeSing, degreeId, cellEcho, rhythmEcho, T2.6) and the two reading
- * generators (bassNoteRead, rhythmRead, T3.15) are implemented in core/items; the rest ship with
+ * The four ear generators (degreeSing, degreeId, cellEcho, rhythmEcho, T2.6), the two reading
+ * generators (bassNoteRead, rhythmRead, T3.15), trebleNoteRead (TP.2) and the two harmonic ear
+ * generators (bassMotion, chordQuality, TP.1) are implemented in core/items; the rest ship with
  * `implemented: false`.
  */
 export function loadGraph(): SkillGraph {

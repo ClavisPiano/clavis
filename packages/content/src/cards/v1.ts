@@ -177,5 +177,82 @@ export const CARDS_V1: unknown[] = [
       { label: "Measures and time signatures (musictheory.net)", url: `${MT}/12` },
     ],
   },
+  {
+    id: "concept.bass.motion",
+    nodeIds: ["ear.bass.I-IV-V-vi"],
+    title: "Bass motion",
+    body: [
+      "Under every melody sits a bass line. The lowest note of each chord is its root, and the way the roots move from chord to chord is called root motion. It is the skeleton of a progression.",
+      "This skill uses four chords built on the scale: I (root 1), IV (root 4), V (root 5) and vi (root 6). I and IV sound settled and warm. V pushes back towards home. vi is the softer, sadder relative of I.",
+      "Listen to the lowest voice as it steps or leaps. Each move has its own pull, and hearing those pulls tells you which chord has arrived.",
+    ],
+    howTo: [
+      "Listen to the cadence, then four chords. The first is always I.",
+      "Play the lowest note, the root, of each chord in order. The first is the home note, 1.",
+      "Any octave on your piano counts. The order matters, the octave does not.",
+      "A wrong or missing root costs part of the score, not the whole item.",
+      "In Away mode, tap the roots on the on-screen keyboard.",
+    ],
+    examples: [
+      {
+        kind: "progression",
+        label: "I IV V vi: the roots climb 1 4 5 6",
+        romans: ["I", "IV", "V", "vi"],
+        afterCadence: true,
+      },
+      {
+        kind: "progression",
+        label: "I vi IV V: the roots go 1 6 4 5",
+        romans: ["I", "vi", "IV", "V"],
+        afterCadence: true,
+      },
+      {
+        kind: "degrees",
+        label: "Just the roots: 1 4 5 6",
+        degrees: [1, 4, 5, 6],
+        afterCadence: true,
+      },
+    ],
+    links: [
+      { label: "Diatonic triads (musictheory.net)", url: `${MT}/43` },
+      { label: "Root motion (musictheory.net)", url: `${MT}/56` },
+    ],
+  },
+  {
+    id: "concept.quality.triad",
+    nodeIds: ["ear.quality.triad"],
+    title: "Triad quality",
+    body: [
+      "A triad is three notes stacked in thirds: a root, a third above it and a fifth above that. The gap between the root and the middle note sets the colour. A major third sounds bright and open. A minor third, one half step smaller, sounds darker and sadder.",
+      "You do not need to name the root to hear this. Listen to the whole chord and ask whether it is bright or dark. In a major key the chords on 1, 4 and 5 are major, and the chords on 2, 3 and 6 are minor, so you can compare them by ear.",
+    ],
+    howTo: [
+      "Listen to the cadence, then one chord held for two beats.",
+      "Tap the button that names its quality, such as major or minor.",
+      "There is nothing to play or sing. Away mode works the same way.",
+      "Quick answers count for more than slow ones, but get it right first.",
+    ],
+    examples: [
+      {
+        kind: "progression",
+        label: "Major then minor: I then vi",
+        romans: ["I", "vi"],
+        afterCadence: true,
+      },
+      {
+        kind: "progression",
+        label: "Major then minor: IV then ii",
+        romans: ["IV", "ii"],
+        afterCadence: true,
+      },
+      {
+        kind: "progression",
+        label: "Major then minor: V then iii",
+        romans: ["V", "iii"],
+        afterCadence: true,
+      },
+    ],
+    links: [{ label: "Triads (musictheory.net)", url: `${MT}/40` }],
+  },
   ...READ_CARDS_V1,
 ];

@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.3",
+  "contentVersion": "2026.10.6",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -110,7 +110,8 @@
       "itemGenerators": ["chordQuality"],
       "params": {
         "qualities": ["major", "minor"],
-        "laterQualities": ["diminished"]
+        "laterQualities": ["diminished"],
+        "roots": [1, 2, 3, 4, 5, 6]
       },
       "mastery": {
         "minAccuracy": 0.9,
@@ -442,6 +443,69 @@
       "targetLatencyMs": 1500
     },
     {
+      "id": "read.treble.landmarks",
+      "strand": "READ",
+      "title": "Treble landmarks",
+      "description": "Treble staff landmarks: middle C, the G on the clef line, the C above.",
+      "prerequisites": [],
+      "itemGenerators": ["trebleNoteRead"],
+      "params": {
+        "clef": "treble",
+        "notes": ["C4", "G4", "C5"]
+      },
+      "mastery": {
+        "minAccuracy": 0.9,
+        "maxMedianLatencyMs": 1200,
+        "windowAttempts": 20,
+        "distinctSessions": 2
+      },
+      "keyDependent": true,
+      "targetLatencyMs": 1200
+    },
+    {
+      "id": "read.treble.steps",
+      "strand": "READ",
+      "title": "Treble steps",
+      "description": "Treble notes a step from the landmarks.",
+      "prerequisites": ["read.treble.landmarks"],
+      "itemGenerators": ["trebleNoteRead"],
+      "params": {
+        "clef": "treble",
+        "anchors": ["C4", "G4", "C5"],
+        "maxOffsetSteps": 1
+      },
+      "mastery": {
+        "minAccuracy": 0.9,
+        "maxMedianLatencyMs": 1200,
+        "windowAttempts": 20,
+        "distinctSessions": 2
+      },
+      "keyDependent": true,
+      "targetLatencyMs": 1200
+    },
+    {
+      "id": "read.treble.skips",
+      "strand": "READ",
+      "title": "Treble skips",
+      "description": "Treble notes a third from the landmarks, then the whole range from middle C to the A above the staff.",
+      "prerequisites": ["read.treble.steps"],
+      "itemGenerators": ["trebleNoteRead"],
+      "params": {
+        "clef": "treble",
+        "anchors": ["C4", "G4", "C5"],
+        "maxOffsetSteps": 2,
+        "fullRange": ["C4", "A5"]
+      },
+      "mastery": {
+        "minAccuracy": 0.9,
+        "maxMedianLatencyMs": 1500,
+        "windowAttempts": 20,
+        "distinctSessions": 2
+      },
+      "keyDependent": true,
+      "targetLatencyMs": 1500
+    },
+    {
       "id": "hands.lh.triads.root",
       "strand": "HANDS",
       "title": "Root-position triads",
@@ -662,14 +726,14 @@
     },
     {
       "id": "bassMotion",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 15,
       "awayEligible": true,
       "requires": ["keys"]
     },
     {
       "id": "chordQuality",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 8,
       "awayEligible": true,
       "requires": ["keys"]
@@ -683,6 +747,13 @@
     },
     {
       "id": "bassNoteRead",
+      "implemented": true,
+      "seedDurationSec": 5,
+      "awayEligible": true,
+      "requires": ["keys", "notation"]
+    },
+    {
+      "id": "trebleNoteRead",
       "implemented": true,
       "seedDurationSec": 5,
       "awayEligible": true,

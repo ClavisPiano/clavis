@@ -16,7 +16,10 @@ export async function answerCurrentPhase(page: Page): Promise<void> {
     const base = fake.nowMs() + 300;
     if (session.phase === "listening-play" && expected.play) {
       const play = expected.play;
-      if (play.kind === "pitchClass" || play.kind === "exactPitch") {
+      if (play.kind === "choice") {
+        // Choice items are answered with buttons, not notes.
+        document.querySelector<HTMLElement>(`[data-testid="choice-${play.correct}"]`)?.click();
+      } else if (play.kind === "pitchClass" || play.kind === "exactPitch") {
         fake.emitNote(play.targetMidi, { onsetMs: base });
       } else if (play.kind === "sequence") {
         play.midi.forEach((midi, i) => fake.emitNote(midi, { onsetMs: base + i * 400 }));

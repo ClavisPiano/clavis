@@ -69,17 +69,57 @@ const maxLeap = (a: Midi[], b: Midi[]): number =>
 
 /**
  * I-IV-V-I (major) or i-iv-V-i (minor, harmonic V) as a bass root plus three close-position
- * upper voices. Upper voicings minimise total movement by dynamic programming, subject to every
- * voice moving at most MAX_VOICE_LEAP semitones. Voices are ordered ascending, so they never
- * cross. Ties resolve to the earliest candidate (lowest, root position first): the output is
- * deterministic. Throws RangeError if the ranges cannot hold a valid cadence.
+ * upper voices. See `voiceLead` for how the voices are chosen. Throws RangeError if the ranges
+ * cannot hold a valid cadence.
  */
 export function cadence(key: Key, opts: CadenceOptions = {}): Cadence {
+  return { chords: voiceLead(key, specs(key), opts) };
+}
+
+/** Root scale degree of each diatonic major triad, by Roman numeral. */
+export const MAJOR_ROMAN_ROOTS: Readonly<Record<string, number>> = {
+  I: 1,
+  ii: 2,
+  iii: 3,
+  IV: 4,
+  V: 5,
+  vi: 6,
+};
+
+/** Roman numerals `progression` accepts (major keys). */
+export const MAJOR_ROMANS: readonly string[] = Object.keys(MAJOR_ROMAN_ROOTS);
+
+/**
+ * A chord progression in a major key as a bass root plus three close-position upper voices, one
+ * `Chord` per numeral (I, ii, iii, IV, V, vi). Voiced like `cadence`, so a progression and a
+ * cadence sound alike. Throws RangeError for a minor key, an unknown numeral or an empty list.
+ */
+export function progression(
+  key: Key,
+  romans: readonly string[],
+  opts: CadenceOptions = {},
+): Chord[] {
+  if (key.mode !== "major") throw new RangeError("progression supports major keys only");
+  if (romans.length === 0) throw new RangeError("progression needs at least one chord");
+  const sp = romans.map((roman): Spec => {
+    const root = MAJOR_ROMAN_ROOTS[roman];
+    if (root === undefined) throw new RangeError(`unknown Roman numeral: ${roman}`);
+    return { roman, degrees: [root, root + 2, root + 4] };
+  });
+  return voiceLead(key, sp, opts);
+}
+
+/**
+ * Voice a chord sequence. Upper voicings minimise total movement by dynamic programming, subject
+ * to every voice moving at most MAX_VOICE_LEAP semitones. Voices are ordered ascending, so they
+ * never cross. Ties resolve to the earliest candidate (lowest, root position first): the output
+ * is deterministic.
+ */
+function voiceLead(key: Key, sp: Spec[], opts: CadenceOptions): Chord[] {
   const bassRange = opts.bassRange ?? DEFAULT_BASS_RANGE;
   const upperRange = opts.upperRange ?? DEFAULT_UPPER_RANGE;
   if (bassRange.high - bassRange.low < 11)
     throw new RangeError("bassRange must span at least an octave");
-  const sp = specs(key);
   const cands = sp.map((s) => closeVoicings(chordChromas(key, s), upperRange));
   if (cands.some((c) => c.length === 0))
     throw new RangeError("upperRange too narrow for the cadence voicings");
@@ -132,5 +172,5 @@ export function cadence(key: Key, opts: CadenceOptions = {}): Cadence {
   if (chords.some((c) => c.bass >= at(c.upper, 0))) {
     throw new RangeError("bass must stay below the upper voices");
   }
-  return { chords };
+  return chords;
 }
