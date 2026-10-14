@@ -55,3 +55,4 @@ Type-only imports are detected by dependency-cruiser (`tsPreCompilationDeps: tru
 - One task per PR. Title starts with the task id, for example `T0.1: Monorepo scaffold`.
 - The body says `Closes #<issue>`.
 - `pnpm check` must be green.
+- CI minutes are limited. Run `pnpm check` locally and push once it passes; every push to a PR runs CI. On a PR, CI runs the Chromium end-to-end tests only, and docs-only changes (`docs/` and Markdown) run just the format check. Mobile Safari runs after merge on `main`, desktop WebKit weekly. For a change that could behave differently in Safari, run the CI workflow by hand on the branch (Actions tab, Run workflow) before merging: that runs all three browsers.
