@@ -51,6 +51,13 @@ const NODES: SkillNode[] = [
   },
   {
     ...base,
+    id: "ear.quality.triad",
+    itemGenerators: ["chordQuality"],
+    params: { qualities: ["major", "minor"], roots: [1, 2, 3, 4, 5, 6] },
+    targetLatencyMs: 2000,
+  },
+  {
+    ...base,
     id: "ear.bass.I-IV-V-vi",
     itemGenerators: ["bassMotion"],
     params: { mode: "major", chords: ["I", "IV", "V", "vi"] },
@@ -96,6 +103,7 @@ describe("registry and universes", () => {
         "bassMotion",
         "bassNoteRead",
         "cellEcho",
+        "chordQuality",
         "degreeId",
         "degreeSing",
         "rhythmEcho",

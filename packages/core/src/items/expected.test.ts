@@ -21,6 +21,19 @@ describe("ExpectedResponseSchema", () => {
     expect(r.success).toBe(true);
   });
 
+  it("accepts a choice item and rejects bad ones", () => {
+    const options = [
+      { id: "major", label: "Major" },
+      { id: "minor", label: "Minor" },
+    ];
+    const ok = (play: unknown) =>
+      ExpectedResponseSchema.safeParse({ play, responseWindowMs: 8000 }).success;
+    expect(ok({ kind: "choice", options, correct: "minor" })).toBe(true);
+    expect(ok({ kind: "choice", options, correct: "diminished" })).toBe(false);
+    expect(ok({ kind: "choice", options: [options[0]], correct: "major" })).toBe(false);
+    expect(ok({ kind: "choice", options: [options[0], options[0]], correct: "major" })).toBe(false);
+  });
+
   it("rejects an empty response", () => {
     expect(ExpectedResponseSchema.safeParse({ responseWindowMs: 1000 }).success).toBe(false);
   });

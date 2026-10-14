@@ -61,6 +61,14 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
       return "That was not the target note";
     case "pitch.octave":
       return "Right note, wrong octave";
+    case "choice.wrong": {
+      const expected = detail?.expectedLabel;
+      const played = detail?.playedLabel;
+      if (typeof expected === "string" && typeof played === "string") {
+        return `You chose ${played.toLowerCase()}; it was ${expected.toLowerCase()}`;
+      }
+      return "That was not the right choice";
+    }
     case "response.timeout":
       return "No answer was heard in time";
     case "response.skipped":
