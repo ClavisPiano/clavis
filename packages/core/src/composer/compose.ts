@@ -53,6 +53,9 @@ type Registry = Partial<Record<GeneratorId, Generator>>;
 /** New piece phrases offered in one session (MP). Later phrases wait for the next one. */
 export const APPLY_NEW_PHRASES_PER_SESSION = 2;
 
+/** New phrases to play by ear in a session (TP.6): hearing and singing is slower than reading. */
+export const APPLY_NEW_EAR_PHRASES_PER_SESSION = 1;
+
 /** The READ node whose fluency ends the C-major-first rule (R15). */
 const LANDMARKS_NODE = "read.bass.landmarks";
 const FAMILY_ORDER: readonly KeyFamily[] = ["A", "B", "C"];
@@ -258,32 +261,57 @@ function arrange(fill: Fill, rng: Rng, practice: boolean): PlannedItem[] {
  * piece only: the first unlocked piece that has not been played through, in phrase order.
  */
 function applyCandidates(
-  info: NodeInfo,
+  infos: readonly NodeInfo[],
   pieces: readonly Piece[],
   state: LearnerState,
   now: number,
 ): { due: Candidate[]; fresh: Candidate[] } {
-  const nodeId = info.node.id;
-  const dueAll: (Candidate & { card: CardState })[] = [];
-  for (const u of info.universe) {
-    const card = state.cards[u.itemId];
-    if (card?.nodeId === nodeId) {
-      dueAll.push({ ...u, nodeId, isNew: false, card: card.card });
-    }
-  }
-  const current = listPieces(pieces, state).find(
+  const statuses = listPieces(pieces, state);
+  const current = statuses.find(
     (s) => s.unlocked && state.pieces[s.piece.id]?.completedAt === undefined,
   );
+  const due: Candidate[] = [];
   const fresh: Candidate[] = [];
-  if (current) {
+  const freshByEar: Candidate[] = [];
+  for (const info of infos) {
+    const nodeId = info.node.id;
+    const dueAll: (Candidate & { card: CardState })[] = [];
+    for (const u of info.universe) {
+      const card = state.cards[u.itemId];
+      if (card?.nodeId === nodeId) {
+        dueAll.push({ ...u, nodeId, isNew: false, card: card.card });
+      }
+    }
+    due.push(...rankDue(dueAll, now));
+
+    // New phrases come from one piece at a time, in phrase order: to read, the current piece; to
+    // play by ear, the first piece whose phrases have all been read and not yet heard.
+    const byEar = info.gens[0] === "pieceEar";
+    const source = byEar
+      ? statuses.find(
+          (s) =>
+            s.unlocked &&
+            phrasesRead(s.piece, state) &&
+            info.universe.some((u) => u.params.piece === s.piece.id && !(u.itemId in state.cards)),
+        )
+      : current;
+    if (source === undefined) continue;
     const unseen = info.universe
-      .filter((u) => u.params.piece === current.piece.id && state.cards[u.itemId] === undefined)
+      .filter((u) => u.params.piece === source.piece.id && state.cards[u.itemId] === undefined)
       .sort((a, b) => Number(a.params.phrase) - Number(b.params.phrase));
-    for (const u of unseen.slice(0, APPLY_NEW_PHRASES_PER_SESSION)) {
-      fresh.push({ ...u, nodeId, isNew: true });
+    const limit = byEar ? APPLY_NEW_EAR_PHRASES_PER_SESSION : APPLY_NEW_PHRASES_PER_SESSION;
+    for (const u of unseen.slice(0, limit)) {
+      (byEar ? freshByEar : fresh).push({ ...u, nodeId, isNew: true });
     }
   }
-  return { due: rankDue(dueAll, now), fresh };
+  // A tune already read comes before the next one: hearing it settles what was just learned.
+  return { due, fresh: [...freshByEar, ...fresh] };
+}
+
+/** True when every phrase of the piece has been played correctly at least once. */
+function phrasesRead(piece: Piece, state: LearnerState): boolean {
+  const record = state.pieces[piece.id];
+  return piece.phrases.every((_, i) => (record?.phrases[String(i + 1)]?.correct ?? 0) > 0);
 }
 
 /**
@@ -303,7 +331,12 @@ export function composePieceRun(input: {
 }): SessionPlan {
   const { state, graph } = input;
   const registry: Registry = input.generators ?? GENERATORS;
-  const node = graph.nodes.find((n) => n.strand === "APPLY" && nodeEnabled(n, graph, registry));
+  const node = graph.nodes.find(
+    (n) =>
+      n.strand === "APPLY" &&
+      n.itemGenerators.includes("pieceLine") &&
+      nodeEnabled(n, graph, registry),
+  );
   const gen = registry.pieceLine;
   if (node === undefined || gen === undefined) {
     throw new RangeError("pieces are not enabled: no APPLY node with a pieceLine generator");
@@ -537,17 +570,15 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const read = candidates("READ");
   const readHasContent = read.due.length > 0 || (read.fresh.length > 0 && newAllowance > 0);
 
-  // Apply: piece phrases (MP). Due phrases first, then the next new phrases of the current piece.
-  const applyInfo =
+  // Apply: piece phrases (MP), read and played by ear. Due phrases first, then the next new ones.
+  const applyInfos =
     input.pieces !== undefined &&
     input.pieces.length > 0 &&
     mode === "instrument" &&
     !input.practice
-      ? [...infos.values()].find((i) => i.node.strand === "APPLY")
-      : undefined;
-  const apply = applyInfo
-    ? applyCandidates(applyInfo, input.pieces ?? [], state, input.now)
-    : { due: [], fresh: [] };
+      ? [...infos.values()].filter((i) => i.node.strand === "APPLY")
+      : [];
+  const apply = applyCandidates(applyInfos, input.pieces ?? [], state, input.now);
   const applyHasContent =
     apply.due.length > 0 || (apply.fresh.length > 0 && Math.round(newAllowance / 3) > 0);
 

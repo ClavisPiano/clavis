@@ -3,6 +3,7 @@ import {
   GENERATORS,
   composePieceRun,
   composeSession,
+  createPieceEar,
   createPieceLine,
   type ComposeInput,
   type GenerateContext,
@@ -13,7 +14,16 @@ import {
 } from "@clavis/core";
 import { describe, expect, it } from "vitest";
 import { SessionMachine, type SessionState } from "./machine";
-import { FakeNotation, makeHarness, noteAt, playCorrect, T0, type Harness } from "./test-harness";
+import {
+  FakeNotation,
+  makeHarness,
+  noteAt,
+  playCorrect,
+  singCorrect,
+  sungFrames,
+  T0,
+  type Harness,
+} from "./test-harness";
 
 /* Piece phrases (MP, TP.4): the Apply block, graded as a line (pitch first, then rhythm), and the
    whole-piece run that writes `piece.completed`. Real graph, real library, real composer and
@@ -31,7 +41,11 @@ const graph: SkillGraph = {
   ),
 };
 const pieces = loadPieces();
-const generators = { ...GENERATORS, pieceLine: createPieceLine(pieces) };
+const generators = {
+  ...GENERATORS,
+  pieceLine: createPieceLine(pieces),
+  pieceEar: createPieceEar(pieces),
+};
 
 const id = (n: number): string => `01JBX0000000000000000${String(n).padStart(5, "0")}`;
 
@@ -360,5 +374,215 @@ describe("a whole-piece run", () => {
     machine.next();
     await until(r, summary);
     expect(h.service.state.pieces[HCB]).toMatchObject({ runs: 2, completedAt });
+  });
+});
+
+describe("play it by ear (TP.6)", () => {
+  const EAR_NODE = "apply.piece-ear";
+
+  /** A learner who has played every phrase of Hot Cross Buns right, a few hours ago. */
+  async function readHistory(): Promise<LearningEvent[]> {
+    const first = await makeRig({ run: HCB });
+    await first.machine.start();
+    await play(first);
+    first.machine.next();
+    await play(first);
+    first.machine.next();
+    await until(first, summary);
+    return [...trebleHistory(), ...(await first.h.log())];
+  }
+
+  async function makeEarRig(): Promise<Rig> {
+    const h = await makeHarness({
+      budgetSec: 600,
+      graph,
+      history: await readHistory(),
+      idSalt: 77,
+    });
+    h.clock.ctxMs += 3 * 3_600_000;
+    const notation = new FakeNotation(h.clock);
+    const machine = new SessionMachine({
+      ...h.deps,
+      notation,
+      compose: (input) => {
+        const plan = composeSession({ ...input, pieces, generators });
+        return {
+          ...plan,
+          orient: null,
+          introductions: [],
+          blocks: {
+            ear: [],
+            read: [],
+            apply: (plan.blocks.apply ?? []).filter((i) => i.generator === "pieceEar"),
+          },
+        };
+      },
+      generate: (item, ctx) => {
+        const node = h.graph.nodes.find((n) => n.id === item.nodeId);
+        const gen = generators[item.generator];
+        if (!node || !gen) throw new Error("cannot generate");
+        return gen.generate(node, item.params, ctx);
+      },
+    });
+    return { h, machine, notation };
+  }
+
+  const phase = (p: "sing" | "play") => (s: SessionState) =>
+    s.kind === "listening" && s.phase === p;
+
+  /** Sing the phrase (right, or with the note at `wrongAt` three semitones up), once the sung phase is open. */
+  async function sing(r: Rig, wrongAt?: number): Promise<void> {
+    await until(r, phase("sing"));
+    const expected = r.machine.debug().expected;
+    const target = expected?.sing;
+    if (target?.kind !== "sungSequence") throw new Error("not a sung sequence");
+    const start = r.h.clock.ctxMs + 200;
+    if (wrongAt === undefined) {
+      singCorrect(r.h.input, expected ?? { responseWindowMs: 1 }, start);
+    } else {
+      target.midi.forEach((m, i) => {
+        for (const f of sungFrames(m + (i === wrongAt ? 3 : 0), start + i * 400)) {
+          r.h.input.emitFrame(f);
+        }
+      });
+    }
+    await until(r, phase("play"));
+  }
+
+  /** Play the phrase right, once the played phase is open, and wait for the feedback. */
+  async function playPhrase(r: Rig): Promise<void> {
+    await until(r, phase("play"));
+    const expected = r.machine.debug().expected;
+    playCorrect(r.h.input, expected ?? { responseWindowMs: 1 }, r.h.clock.ctxMs + 700);
+    await until(r, feedback);
+  }
+
+  it("offers the first phrase of a piece the learner can read, with no score on screen", async () => {
+    const r = await makeEarRig();
+    await r.machine.start();
+    const s = await until(r, phase("sing"));
+    if (s.kind !== "listening") throw new Error("not listening");
+    expect(s.item).toMatchObject({ block: "apply", generator: "pieceEar", nodeId: EAR_NODE });
+    expect(s.item.display).toBeUndefined();
+    expect(s.item.revealed).toBeUndefined();
+    expect(s.prompt).toBe("Sing it");
+    expect(s.phaseCount).toBe(2);
+    expect(r.notation.shows).toHaveLength(0);
+    // The phrase was played: a count-in bar, then the notes.
+    const played = r.h.player.plays.at(-1)?.spec.events ?? [];
+    expect(played.filter((e) => e.role === "count-in")).toHaveLength(4);
+    expect(played.filter((e) => e.role === "target")).toHaveLength(6);
+  });
+
+  it("goes hear, sing, play, reveal: the score appears only after the answer, with the notes marked", async () => {
+    const r = await makeEarRig();
+    await r.machine.start();
+    await sing(r);
+    const s = r.machine.state;
+    if (s.kind !== "listening") throw new Error("not listening");
+    expect(s.prompt).toBe("Now play it");
+    expect(r.notation.shows).toHaveLength(0);
+    await playPhrase(r);
+    await r.machine.settled();
+    const done = r.machine.state;
+    if (done.kind !== "feedback") throw new Error("not feedback");
+    expect(done.feedback.correct).toBe(true);
+    expect(done.feedback.autoAdvance).toBe(false);
+    expect(done.item.revealed).toBe(true);
+    expect(r.notation.shows).toHaveLength(1);
+    expect(r.notation.shows[0]?.staves[0]?.measures).toHaveLength(2);
+    expect(r.notation.marks.at(-1)?.map((m) => m.kind)).toEqual(Array<string>(6).fill("right"));
+  });
+
+  it("records one attempt on the by-ear node with both sub-scores, and leaves reading progress alone", async () => {
+    const r = await makeEarRig();
+    await r.machine.start();
+    await sing(r);
+    await playPhrase(r);
+    const log = await r.h.log();
+    const attempt = ofType(log, "attempt.completed").at(-1);
+    expect(attempt).toMatchObject({
+      nodeId: EAR_NODE,
+      itemId: `${EAR_NODE}|phrase=1|piece=${HCB}`,
+      outcome: { correct: true },
+    });
+    expect(attempt?.subScores?.sing).toBeDefined();
+    expect(attempt?.subScores?.play).toBeDefined();
+    const presented = ofType(log, "item.presented").at(-1);
+    expect(presented).toMatchObject({ generator: "pieceEar", block: "apply", isNew: true });
+    // The reading record is exactly what the earlier run left.
+    expect(r.h.service.state.pieces[HCB]?.phrases["1"]?.attempts).toBe(1);
+    expect(r.h.service.state.cards[`${EAR_NODE}|phrase=1|piece=${HCB}`]?.reps).toBe(1);
+  });
+
+  it("a wrong sung note is not correct, even with the playing right, and says it was the singing", async () => {
+    const r = await makeEarRig();
+    await r.machine.start();
+    await sing(r, 2);
+    await playPhrase(r);
+    await r.machine.settled();
+    const done = r.machine.state;
+    if (done.kind !== "feedback") throw new Error("not feedback");
+    expect(done.feedback.correct).toBe(false);
+    expect(done.item.revealed).toBe(true);
+    const attempt = ofType(await r.h.log(), "attempt.completed").at(-1);
+    expect(attempt?.outcome.correct).toBe(false);
+    expect(attempt?.errors?.length).toBeGreaterThan(0);
+    expect(attempt?.errors?.every((e) => e.detail?.part === "sing")).toBe(true);
+    expect(attempt?.subScores?.play).toBe(1);
+    expect(attempt?.subScores?.sing ?? 1).toBeLessThan(1);
+    expect(done.feedback.lines.join(" ")).toMatch(/sang/i);
+    // The revealed score marks the note that was sung wrong.
+    expect(r.notation.marks.at(-1)?.filter((m) => m.kind === "wrong")).toHaveLength(1);
+  });
+
+  it("moving on clears the revealed score", async () => {
+    const r = await makeEarRig();
+    await r.machine.start();
+    await sing(r);
+    await playPhrase(r);
+    await r.machine.settled();
+    const hides = r.notation.count("hide");
+    r.machine.finish();
+    await until(r, summary);
+    expect(r.notation.count("hide")).toBeGreaterThan(hides);
+  });
+
+  it("without notation the by-ear phrase is dropped with the reading ones", async () => {
+    const h = await makeHarness({
+      budgetSec: 600,
+      graph,
+      history: await readHistory(),
+      idSalt: 78,
+    });
+    h.clock.ctxMs += 3 * 3_600_000;
+    const machine = new SessionMachine({
+      ...h.deps,
+      compose: (input) => {
+        const plan = composeSession({ ...input, pieces, generators });
+        return {
+          ...plan,
+          orient: null,
+          introductions: [],
+          blocks: {
+            ear: [],
+            read: [],
+            apply: (plan.blocks.apply ?? []).filter((i) => i.generator === "pieceEar"),
+          },
+        };
+      },
+      generate: (item, ctx) => {
+        const node = h.graph.nodes.find((n) => n.id === item.nodeId);
+        const gen = generators[item.generator];
+        if (!node || !gen) throw new Error("cannot generate");
+        return gen.generate(node, item.params, ctx);
+      },
+    });
+    await machine.start();
+    await machine.settled();
+    expect(["summary", "nothing"]).toContain(machine.state.kind);
+    expect(
+      ofType(await h.log(), "item.presented").filter((e) => e.generator === "pieceEar"),
+    ).toEqual([]);
   });
 });

@@ -37,13 +37,13 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
     const played = num(detail, "played");
     if (expected !== undefined && played !== undefined) {
       if (code === "pitch.wrong") {
-        return `You played ${names(played)}. This note is ${names(expected)}.`;
+        return `You ${verb(detail)} ${names(played)}. This note is ${names(expected)}.`;
       }
       if (code === "pitch.octave") {
-        return `Right note, wrong octave. You played ${names(played)}. This note is ${names(expected)}.`;
+        return `Right note, wrong octave. You ${verb(detail)} ${names(played)}. This note is ${names(expected)}.`;
       }
       if (code === "sequence.wrong-note") {
-        return `${noteLabel(detail)}: you played ${names(played)}; the target was ${names(expected)}`;
+        return `${noteLabel(detail)}: you ${verb(detail)} ${names(played)}; the target was ${names(expected)}`;
       }
     }
   }

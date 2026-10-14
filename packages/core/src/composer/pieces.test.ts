@@ -2,10 +2,16 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { NodeState } from "../graph/schema.js";
 import { itemId } from "../items/ids.js";
+import { PIECE_EAR_NODE_ID } from "../items/piece-ear.js";
 import { PIECES_NODE_ID } from "../items/piece-line.js";
 import type { LearnerState } from "../state/types.js";
 import { BLOCK_SHARES } from "./budget.js";
-import { APPLY_NEW_PHRASES_PER_SESSION, composePieceRun, composeSession } from "./compose.js";
+import {
+  APPLY_NEW_EAR_PHRASES_PER_SESSION,
+  APPLY_NEW_PHRASES_PER_SESSION,
+  composePieceRun,
+  composeSession,
+} from "./compose.js";
 import { NOW } from "./fixtures/learners.js";
 import {
   ALPHA,
@@ -33,16 +39,28 @@ const phraseId = (piece: string, phrase: number) => itemId(PIECES_NODE_ID, { pie
 
 function learner(
   nodes: Record<string, NodeState>,
-  o: { cards?: [string, number, number][]; completed?: string[]; newToday?: number } = {},
+  o: {
+    cards?: [string, number, number][];
+    earCards?: [string, number, number][];
+    completed?: string[];
+    newToday?: number;
+  } = {},
 ): LearnerState {
   const state = readLearner({
     graph: PIECES_GRAPH,
     nodes,
-    cards: (o.cards ?? []).map(([piece, phrase, dueInDays]) => ({
-      nodeId: PIECES_NODE_ID,
-      params: { piece, phrase },
-      dueInDays,
-    })),
+    cards: [
+      ...(o.cards ?? []).map(([piece, phrase, dueInDays]) => ({
+        nodeId: PIECES_NODE_ID,
+        params: { piece, phrase },
+        dueInDays,
+      })),
+      ...(o.earCards ?? []).map(([piece, phrase, dueInDays]) => ({
+        nodeId: PIECE_EAR_NODE_ID,
+        params: { piece, phrase },
+        dueInDays,
+      })),
+    ],
     ...(o.newToday === undefined ? {} : { newToday: o.newToday }),
   });
   for (const id of o.completed ?? []) {
@@ -383,5 +401,84 @@ describe("composePieceRun", () => {
     expect(() =>
       composePieceRun({ ...input(learner(FLUENT_ALL), ALPHA), graph: piecesGraph(false) }),
     ).toThrow("not enabled");
+  });
+});
+
+describe("Apply block: play it by ear (TP.6)", () => {
+  const earId = (piece: string, phrase: number) => itemId(PIECE_EAR_NODE_ID, { piece, phrase });
+
+  /** Mark phrases 1..n of a piece as read correctly. */
+  function read(state: LearnerState, piece: string, n: number): LearnerState {
+    const phrases: Record<
+      string,
+      { attempts: number; correct: number; lastAt: number; lastCorrect: boolean }
+    > = {};
+    for (let i = 1; i <= n; i++) {
+      phrases[String(i)] = { attempts: 1, correct: 1, lastAt: NOW, lastCorrect: true };
+    }
+    state.pieces[piece] = { phrases, runs: 0 };
+    return state;
+  }
+  const earItems = (plan: SessionPlan) =>
+    (plan.blocks.apply ?? []).filter((i) => i.generator === "pieceEar");
+
+  /** ALPHA's two phrases, read and scheduled for later, as they are once a learner has read them. */
+  const READ_ALPHA: [string, number, number][] = [
+    [ALPHA, 1, 3],
+    [ALPHA, 2, 3],
+  ];
+
+  it("offers nothing by ear until every phrase of a piece has been read", () => {
+    const partly = read(learner(FLUENT_LANDMARKS, { cards: [[ALPHA, 1, 3]] }), ALPHA, 1);
+    expect(earItems(compose(partly))).toEqual([]);
+    expect(earItems(compose(learner(FLUENT_LANDMARKS)))).toEqual([]);
+  });
+
+  it("offers the first phrase of a fully read piece, new, and no more than the per-session limit", () => {
+    const state = read(learner(FLUENT_LANDMARKS, { cards: READ_ALPHA }), ALPHA, 2);
+    const ear = earItems(compose(state));
+    expect(ear).toHaveLength(APPLY_NEW_EAR_PHRASES_PER_SESSION);
+    expect(ear[0]).toMatchObject({
+      itemId: earId(ALPHA, 1),
+      nodeId: PIECE_EAR_NODE_ID,
+      isNew: true,
+      params: { piece: ALPHA, phrase: 1 },
+    });
+  });
+
+  it("brings back a heard phrase when it is due, and moves on to the next phrase", () => {
+    const state = read(
+      learner(FLUENT_LANDMARKS, { cards: READ_ALPHA, earCards: [[ALPHA, 1, -1]] }),
+      ALPHA,
+      2,
+    );
+    const ear = earItems(compose(state));
+    expect(ear.map((i) => `${i.isNew ? "NEW" : "due"} ${JSON.stringify(i.params.phrase)}`)).toEqual(
+      ["due 1", "NEW 2"],
+    );
+  });
+
+  it("is not offered in Away mode, in practice, or without a library", () => {
+    const state = read(learner(FLUENT_LANDMARKS, { cards: READ_ALPHA }), ALPHA, 2);
+    expect(earItems(compose(state, { mode: "away" }))).toEqual([]);
+    expect(earItems(compose(state, { practice: true }))).toEqual([]);
+    expect(earItems(compose(state, { pieces: false }))).toEqual([]);
+  });
+
+  it("is not offered when the by-ear generator is off in the graph or missing from the registry", () => {
+    const state = read(learner(FLUENT_LANDMARKS, { cards: READ_ALPHA }), ALPHA, 2);
+    const off = composeSession({ ...base, graph: piecesGraph(false), state, mode: "instrument" });
+    expect(off.blocks.apply).toBeNull();
+    const rest = { ...generators };
+    delete rest.pieceEar;
+    const missing = composeSession({ ...base, generators: rest, state, mode: "instrument" });
+    expect(earItems(missing)).toEqual([]);
+  });
+
+  it("offers only reading phrases to a learner who has read nothing", () => {
+    const state = learner(FLUENT_LANDMARKS);
+    // Hearing a phrase never records a piece phrase, so the piece is still the current one to read.
+    const plan = compose(state);
+    expect((plan.blocks.apply ?? []).every((i) => i.generator === "pieceLine")).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { seedLearner } from "./read-helpers";
-import { runToSummary } from "./session-helpers";
+import { answerCurrentPhase, runToSummary, singCurrentPhase } from "./session-helpers";
 
 /*
  * Pieces (MP, TP.5): the Home card, learning a piece's phrases in a normal session, and playing it
@@ -161,6 +161,11 @@ test.describe("Pieces", () => {
           .getByTestId("skip")
           .click({ timeout: 1_000 })
           .catch(() => undefined);
+      } else if (state === "orient" || state === "intro") {
+        await page
+          .getByTestId("continue")
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
       } else if (state === "feedback") {
         await page
           .getByTestId("next")
@@ -177,5 +182,108 @@ test.describe("Pieces", () => {
     await page.getByTestId("home").click();
     await expect(page.getByTestId("milestones")).toHaveCount(0);
     await expect(page.getByTestId("play-through")).toBeVisible();
+  });
+
+  /**
+   * Answer items until the by-ear phrase asks for singing (the other items of the session, such as
+   * degree items and due reading phrases, come in a seeded order). Leaves the session in that sung phase.
+   */
+  async function untilSingingPhase(page: Page): Promise<void> {
+    const deadline = Date.now() + 100_000;
+    while (Date.now() < deadline) {
+      const state = await page.getByTestId("session").getAttribute("data-state");
+      const phase = await page.evaluate(() => window.__clavisSession?.phase ?? "");
+      if (state === "listening" && phase === "listening-sing") return;
+      if (state === "listening" && phase === "listening-practice") {
+        // Degree items open with a practice step: nothing is marked until Ready.
+        await page
+          .getByTestId("ready")
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
+      } else if (state === "listening" && phase === "listening-play") {
+        await answerCurrentPhase(page);
+        await page.waitForFunction((before) => window.__clavisSession?.phase !== before, phase, {
+          timeout: 20_000,
+        });
+      } else if (state === "orient" || state === "intro") {
+        await page
+          .getByTestId("continue")
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
+      } else if (state === "feedback") {
+        await page
+          .getByTestId("next")
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
+      } else if (state === "summary" || state === "error") {
+        throw new Error("the session ended before the by-ear phrase");
+      } else {
+        await page.waitForTimeout(100);
+      }
+    }
+    throw new Error("the by-ear phrase never asked for singing");
+  }
+
+  const READ_ALL = [
+    { pieceId: HCB, phrase: 1, correct: true },
+    { pieceId: HCB, phrase: 2, correct: true },
+  ];
+
+  test("a piece you can read is offered by ear: hear, sing, play, then the score is revealed", async ({
+    page,
+  }) => {
+    await seedLearner(page, [], { placedMastered: TREBLE, pieceAttempts: READ_ALL });
+    await page.goto("/session?input=fake&audio=silent&budget=420");
+    await page.getByTestId("start").click();
+    await untilSingingPhase(page);
+
+    // No music is shown while hearing and singing.
+    await expect(page.getByTestId("prompt")).toHaveText("Sing it");
+    await expect(page.getByTestId("notation-slot")).toHaveCount(0);
+    await singCurrentPhase(page);
+
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-play");
+    await expect(page.getByTestId("prompt")).toHaveText("Now play it");
+    await expect(page.getByTestId("notation-slot")).toHaveCount(0);
+    await answerCurrentPhase(page);
+
+    // Both parts were right: the score is revealed and stays up until the learner moves on.
+    // The played phrase lasts several seconds at 60 bpm, so allow for it before the result.
+    await expect(page.getByTestId("result")).toHaveText("Correct", { timeout: 20_000 });
+    await expect(page.getByTestId("notation-slot")).toBeVisible();
+    await expect(page.getByTestId("next")).toBeVisible();
+    expect(await countEvents(page, "", '[data-block="apply"][data-generator="pieceEar"]')).toBe(1);
+  });
+
+  test("a wrong sung note reads Not quite and says you sang, even when the playing is right", async ({
+    page,
+  }) => {
+    await seedLearner(page, [], { placedMastered: TREBLE, pieceAttempts: READ_ALL });
+    await page.goto("/session?input=fake&audio=silent&budget=420");
+    await page.getByTestId("start").click();
+    await untilSingingPhase(page);
+
+    await singCurrentPhase(page, { wrongAt: 2 });
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-play");
+    await answerCurrentPhase(page);
+
+    await expect(page.getByTestId("result")).toHaveText("Not quite", { timeout: 20_000 });
+    await expect(page.getByTestId("issues")).toContainText("you sang");
+    // The score is still revealed, so the learner can see what was written.
+    await expect(page.getByTestId("notation-slot")).toBeVisible();
+  });
+
+  test("nothing is offered by ear until every phrase of the piece has been read", async ({
+    page,
+  }) => {
+    await seedLearner(page, [], {
+      placedMastered: TREBLE,
+      pieceAttempts: [{ pieceId: HCB, phrase: 1, correct: true }],
+    });
+    await page.goto("/session?input=fake&audio=silent&budget=420");
+    await page.getByTestId("start").click();
+    const phases = await runToSummary(page);
+    expect(phases).not.toContain("listening-sing");
+    expect(await countEvents(page, "", '[data-generator="pieceEar"]')).toBe(0);
   });
 });

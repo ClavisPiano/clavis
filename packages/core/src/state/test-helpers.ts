@@ -214,10 +214,13 @@ export class Builder {
       correct?: boolean;
       latencyMs?: number;
       presentation?: Record<string, string | number>;
+      /** A phrase played by ear (TP.6): its own node and generator. */
+      ear?: boolean;
     } = {},
   ): LearningEvent[] {
     const latencyMs = o.latencyMs ?? 8000;
-    const itemId = `apply.pieces|phrase=${String(phrase)}|piece=${pieceId}`;
+    const nodeId = o.ear === true ? "apply.piece-ear" : "apply.pieces";
+    const itemId = `${nodeId}|phrase=${String(phrase)}|piece=${pieceId}`;
     return [
       {
         ...this.base(at),
@@ -225,8 +228,8 @@ export class Builder {
         v: 1,
         sessionId,
         itemId,
-        nodeId: "apply.pieces",
-        generator: "pieceLine",
+        nodeId,
+        generator: o.ear === true ? "pieceEar" : "pieceLine",
         block: "apply",
         isNew: false,
         presentation: o.presentation ?? { piece: pieceId, phrase, tempoBpm: 60 },
@@ -237,7 +240,7 @@ export class Builder {
         v: 1,
         sessionId,
         itemId,
-        nodeId: "apply.pieces",
+        nodeId,
         outcome: { correct: o.correct ?? true, latencyMs, retries: 0 },
         inputSource: "midi",
       },

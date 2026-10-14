@@ -5,6 +5,27 @@ import { expect, type Page } from "@playwright/test";
  * The page exposes window.__clavisSession and window.__clavisFakeInput in fake mode.
  */
 
+/**
+ * Sing the current sung phase through the fake input, one note every 400 ms. With `wrongAt`, that
+ * note is three semitones off. Does nothing when the item expects no singing.
+ */
+export async function singCurrentPhase(page: Page, o: { wrongAt?: number } = {}): Promise<void> {
+  await page.evaluate((wrongAt) => {
+    const session = window.__clavisSession;
+    const fake = window.__clavisFakeInput;
+    const sing = session?.expected?.sing;
+    if (!session || !fake || !sing) return;
+    const base = fake.nowMs() + 300;
+    const midis = sing.kind === "sungPitch" ? [sing.targetMidi] : sing.midi;
+    midis.forEach((midi, i) => {
+      const hz = 440 * 2 ** ((midi + (i === wrongAt ? 3 : 0) - 69) / 12);
+      for (let t = 0; t <= 300; t += 20) {
+        fake.emitFrame({ hz, confidence: 1, atMs: base + i * 400 + t });
+      }
+    });
+  }, o.wrongAt);
+}
+
 /** Answer whatever the current listening phase expects, correctly. */
 export async function answerCurrentPhase(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -68,7 +89,8 @@ export async function runToSummary(page: Page): Promise<string[]> {
         continue;
       }
       answered.push(phase);
-      await answerCurrentPhase(page);
+      if (phase === "listening-sing") await singCurrentPhase(page);
+      else await answerCurrentPhase(page);
       // Leave the phase before looking again (a phase ends once the answer is complete).
       await page.waitForFunction((before) => window.__clavisSession?.phase !== before, phase, {
         timeout: 20_000,

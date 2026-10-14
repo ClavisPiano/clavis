@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.8",
+  "contentVersion": "2026.10.9",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -701,6 +701,21 @@
         "distinctSessions": 2
       },
       "keyDependent": false
+    },
+    {
+      "id": "apply.piece-ear",
+      "strand": "APPLY",
+      "title": "Pieces by ear",
+      "description": "Hear a phrase of a tune you can read, sing it, play it, then check it against the score.",
+      "prerequisites": [],
+      "itemGenerators": ["pieceEar"],
+      "params": {},
+      "mastery": {
+        "minAccuracy": 0.8,
+        "windowAttempts": 5,
+        "distinctSessions": 2
+      },
+      "keyDependent": false
     }
   ],
   "generators": [
@@ -780,6 +795,13 @@
       "seedDurationSec": 25,
       "awayEligible": false,
       "requires": ["keys", "notation"]
+    },
+    {
+      "id": "pieceEar",
+      "implemented": true,
+      "seedDurationSec": 60,
+      "awayEligible": false,
+      "requires": ["mic", "keys", "notation"]
     },
     {
       "id": "bassChordRead",
