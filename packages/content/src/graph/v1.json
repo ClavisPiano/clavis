@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.7",
+  "contentVersion": "2026.10.8",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -776,7 +776,7 @@
     },
     {
       "id": "pieceLine",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 25,
       "awayEligible": false,
       "requires": ["keys", "notation"]

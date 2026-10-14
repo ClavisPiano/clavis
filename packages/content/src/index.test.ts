@@ -95,8 +95,11 @@ describe("v1 skill graph", () => {
   it("lists every generator once and implements exactly the core registry", () => {
     expect(graph.generators).toHaveLength(17);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
-    expect(implemented.sort()).toEqual(Object.keys(GENERATORS).sort());
-    for (const id of implemented) expect(getGenerator(id)).toBeDefined();
+    // `pieceLine` is built over the piece library, so the app injects it; the core registry has the rest.
+    expect(implemented.sort()).toEqual([...Object.keys(GENERATORS), "pieceLine"].sort());
+    for (const id of implemented.filter((i) => i !== "pieceLine")) {
+      expect(getGenerator(id as keyof typeof GENERATORS)).toBeDefined();
+    }
   });
 
   it("enables the ear M2 nodes and the nine reading nodes", () => {
@@ -122,7 +125,13 @@ describe("v1 skill graph", () => {
       "read.treble.skips",
       "read.treble.steps",
     ]);
-    expect(enabled.every((id) => id.startsWith("ear.") || id.startsWith("read."))).toBe(true);
+    // MP: pieces are the one APPLY node.
+    expect(enabled.filter((id) => id.startsWith("apply."))).toEqual(["apply.pieces"]);
+    expect(
+      enabled.every(
+        (id) => id.startsWith("ear.") || id.startsWith("read.") || id.startsWith("apply."),
+      ),
+    ).toBe(true);
   });
 
   it("every enabled node's generators can enumerate and generate items", () => {

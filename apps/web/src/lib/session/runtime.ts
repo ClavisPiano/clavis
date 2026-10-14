@@ -9,10 +9,10 @@ import {
   type TapInputAdapter,
 } from "@clavis/audio";
 import {
+  composePieceRun,
   composeSession,
   createRng,
   createUlidGenerator,
-  getGenerator,
   placementPlan,
   type LearningEvent,
   type StimulusSpec,
@@ -22,6 +22,7 @@ import { effectiveSettings } from "../home";
 import { nextSteps as computeNextSteps, type NextSteps } from "../next-steps";
 import { getLearnerState } from "../learner";
 import { getNotationClient } from "../notation/shared";
+import { appGenerators, appPieces, generatorFor, pieceInputs } from "../pieces";
 import { createNotationViewPort, type NotationViewPort } from "../notation/view-port";
 import { createInput, detachFakeInput } from "../input";
 import { SessionMachine, type SessionDeps } from "./machine";
@@ -140,11 +141,22 @@ export async function createSessionRuntime(
     graph,
     // Placement (R19): the plan replaces the composer and nothing but its result is stored.
     ...(placement ? { placement: { plan: placementPlan(graph, createRng(seed)) } } : {}),
-    compose: composeSession,
+    compose: (input) =>
+      params.run !== undefined && !placement
+        ? composePieceRun({
+            state: input.state,
+            graph: input.graph,
+            pieces: appPieces(),
+            pieceId: params.run,
+            now: input.now,
+            tzOffsetMin: input.tzOffsetMin,
+            generators: appGenerators(),
+          })
+        : composeSession({ ...input, ...pieceInputs() }),
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
       if (!node) throw new Error(`Unknown skill node ${item.nodeId}`);
-      return getGenerator(item.generator).generate(node, item.params, ctx);
+      return generatorFor(item.generator).generate(node, item.params, ctx);
     },
     player: {
       play: (spec) => stimulusPlayer.play(spec),

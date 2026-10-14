@@ -25,6 +25,8 @@ export async function seedLearner(
     newItemsPerDay?: number;
     /** Nodes placed as mastered (a `placement.completed`), so their dependents unlock. */
     placedMastered?: readonly string[];
+    /** Piece phrases already played (MP), each as a presented item and an attempt. */
+    pieceAttempts?: readonly { pieceId: string; phrase: number; correct: boolean }[];
   } = {},
 ): Promise<number> {
   const at = Date.now() - 3 * 86_400_000;
@@ -77,6 +79,36 @@ export async function seedLearner(
             patch: { newItemsPerDay: opts.newItemsPerDay },
           },
         ]),
+    ...(opts.pieceAttempts ?? []).flatMap((a, i) => {
+      const itemId = `apply.pieces|phrase=${String(a.phrase)}|piece=${a.pieceId}`;
+      const when = at + 10_000 + i * 20_000;
+      return [
+        {
+          ...base,
+          id: id(200 + i * 2),
+          at: when,
+          type: "item.presented",
+          sessionId,
+          itemId,
+          nodeId: "apply.pieces",
+          generator: "pieceLine",
+          block: "apply",
+          isNew: true,
+          presentation: { piece: a.pieceId, phrase: a.phrase, tempoBpm: 60 },
+        },
+        {
+          ...base,
+          id: id(201 + i * 2),
+          at: when + 8000,
+          type: "attempt.completed",
+          sessionId,
+          itemId,
+          nodeId: "apply.pieces",
+          outcome: { correct: a.correct, latencyMs: 8000, retries: 0 },
+          inputSource: "mic",
+        },
+      ];
+    }),
     {
       ...base,
       id: id(3 + nodes.length),

@@ -20,6 +20,11 @@ export interface SessionParams {
    * this session only. Nothing is stored. Practice wins when both are set.
    */
   learn: boolean;
+  /**
+   * `?run=piece.<id>`: play that piece through, every phrase in order (MP). Instrument mode only;
+   * anything else is ignored.
+   */
+  run: string | undefined;
 }
 
 export const MIN_BUDGET_SEC = 30;
@@ -30,6 +35,8 @@ export function parseBudget(raw: string | null): number | undefined {
   const n = Number(raw);
   return n >= MIN_BUDGET_SEC && n <= MAX_BUDGET_SEC ? n : undefined;
 }
+
+const PIECE_ID = /^piece\.[a-z0-9-]+$/;
 
 export function parseSessionParams(
   searchParams: { get(name: string): string | null },
@@ -49,6 +56,10 @@ export function parseSessionParams(
     practice: searchParams.get("practice") === "1",
     learn: searchParams.get("practice") !== "1" && searchParams.get("learn") === "1",
     headphones: headphones ?? (inputKind === "fake" ? true : undefined),
+    run:
+      mode === "instrument" && PIECE_ID.test(searchParams.get("run") ?? "")
+        ? (searchParams.get("run") ?? undefined)
+        : undefined,
   };
 }
 

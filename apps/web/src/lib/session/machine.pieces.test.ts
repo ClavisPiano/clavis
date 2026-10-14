@@ -266,6 +266,9 @@ describe("a whole-piece run", () => {
     const piece = r.h.service.state.pieces[HCB];
     expect(piece?.runs).toBe(1);
     expect(piece?.completedAt).toBeDefined();
+    const done = r.machine.state;
+    if (done.kind !== "summary") throw new Error("not a summary");
+    expect(done.summary.run).toEqual({ pieceId: HCB, phrases: 2, correctPhrases: 2 });
   });
 
   it("with a wrong phrase the run is logged but the piece is not played through", async () => {
@@ -279,6 +282,9 @@ describe("a whole-piece run", () => {
     const completed = ofType(await r.h.log(), "piece.completed");
     expect(completed).toHaveLength(1);
     expect(completed[0]).toMatchObject({ phrases: 2, correctPhrases: 1 });
+    const done = r.machine.state;
+    if (done.kind !== "summary") throw new Error("not a summary");
+    expect(done.summary.run).toEqual({ pieceId: HCB, phrases: 2, correctPhrases: 1 });
     const piece = r.h.service.state.pieces[HCB];
     expect(piece?.runs).toBe(1);
     expect(piece?.completedAt).toBeUndefined();
@@ -305,6 +311,8 @@ describe("a whole-piece run", () => {
     await until(r, summary);
     const log = await r.h.log();
     expect(ofType(log, "piece.completed")).toEqual([]);
+    expect(r.machine.state).toMatchObject({ kind: "summary" });
+    expect((r.machine.state as { summary: { run?: unknown } }).summary.run).toBeUndefined();
     expect(ofType(log, "attempt.completed")).toHaveLength(1);
     expect(ofType(log, "session.ended")[0]?.reason).toBe("completed");
     expect(r.h.service.state.pieces[HCB]?.runs ?? 0).toBe(0);

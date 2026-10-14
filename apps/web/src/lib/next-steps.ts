@@ -6,6 +6,7 @@ import {
   type SkillGraph,
 } from "@clavis/core";
 import { effectiveSettings, hasStartedItems } from "./home";
+import { pieceInputs } from "./pieces";
 import { MAX_BUDGET_SEC, MIN_BUDGET_SEC } from "./session/params";
 
 /*
@@ -57,6 +58,7 @@ export function nextSteps(opts: {
       mode: opts.mode,
       batch,
       budgetSec: opts.budgetSec,
+      ...pieceInputs(),
     }),
   };
 }
@@ -73,7 +75,7 @@ export function startWouldBeEmpty(opts: {
   mode: SessionMode;
   budgetSec: number;
 }): boolean {
-  const plan = composeSession({ ...opts, seed: 0 });
+  const plan = composeSession({ ...opts, ...pieceInputs(), seed: 0 });
   return plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0) === 0;
 }
 
