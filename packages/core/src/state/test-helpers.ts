@@ -204,6 +204,65 @@ export class Builder {
     ];
   }
 
+  /** A piece phrase (MP): `item.presented` in the apply block, then the attempt `latencyMs` later. */
+  phrase(
+    at: number,
+    sessionId: string,
+    pieceId: string,
+    phrase: number,
+    o: {
+      correct?: boolean;
+      latencyMs?: number;
+      presentation?: Record<string, string | number>;
+    } = {},
+  ): LearningEvent[] {
+    const latencyMs = o.latencyMs ?? 8000;
+    const itemId = `apply.pieces|phrase=${String(phrase)}|piece=${pieceId}`;
+    return [
+      {
+        ...this.base(at),
+        type: "item.presented",
+        v: 1,
+        sessionId,
+        itemId,
+        nodeId: "apply.pieces",
+        generator: "pieceLine",
+        block: "apply",
+        isNew: false,
+        presentation: o.presentation ?? { piece: pieceId, phrase, tempoBpm: 60 },
+      },
+      {
+        ...this.base(at + latencyMs),
+        type: "attempt.completed",
+        v: 1,
+        sessionId,
+        itemId,
+        nodeId: "apply.pieces",
+        outcome: { correct: o.correct ?? true, latencyMs, retries: 0 },
+        inputSource: "midi",
+      },
+    ];
+  }
+
+  /** A finished whole-piece run. */
+  pieceCompleted(
+    at: number,
+    sessionId: string,
+    pieceId: string,
+    phrases: number,
+    correctPhrases: number,
+  ): LearningEvent {
+    return {
+      ...this.base(at),
+      type: "piece.completed",
+      v: 1,
+      sessionId,
+      pieceId,
+      phrases,
+      correctPhrases,
+    };
+  }
+
   /** One session: start, `count` items on a node, end. Returns events and the end time. */
   session(
     at: number,

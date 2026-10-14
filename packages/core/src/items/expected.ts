@@ -50,6 +50,26 @@ export const RhythmTargetSchema = z.strictObject({
   pitch: midi.optional(),
 });
 
+/**
+ * A short line played from the score (MP, TP.4): exact pitches and the timing of each note.
+ * Graded in two stages, pitch first and then rhythm, from the same performance.
+ */
+export const LineTargetSchema = z
+  .strictObject({
+    kind: z.literal("line"),
+    /** One MIDI number per note, octave exact. */
+    midi: z.array(midi).min(1),
+    /** Onset of each note in beats from the first note (first is 0), one per entry in `midi`. */
+    onsetsBeats: z.array(z.number().min(0)).min(1),
+    tempoBpm: z.number().positive(),
+    beatsPerBar: z.int().positive(),
+  })
+  .refine((l) => l.midi.length === l.onsetsBeats.length, {
+    message: "a line needs one onset per note",
+    path: ["onsetsBeats"],
+  });
+export type LineTarget = z.infer<typeof LineTargetSchema>;
+
 export const ChoiceOptionSchema = z.strictObject({
   /** Stable id, recorded in errors: "major", "minor". */
   id: z.string().min(1),
@@ -82,6 +102,7 @@ export const PlayTargetSchema = z.discriminatedUnion("kind", [
   ExactPitchTargetSchema,
   SequenceTargetSchema,
   RhythmTargetSchema,
+  LineTargetSchema,
   ChoiceTargetSchema,
 ]);
 export type PlayTarget = z.infer<typeof PlayTargetSchema>;

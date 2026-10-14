@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.6",
+  "contentVersion": "2026.10.7",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -686,6 +686,21 @@
         "distinctSessions": 2
       },
       "keyDependent": false
+    },
+    {
+      "id": "apply.pieces",
+      "strand": "APPLY",
+      "title": "Pieces",
+      "description": "Short tunes for one hand, played phrase by phrase from the score.",
+      "prerequisites": [],
+      "itemGenerators": ["pieceLine"],
+      "params": {},
+      "mastery": {
+        "minAccuracy": 0.8,
+        "windowAttempts": 5,
+        "distinctSessions": 2
+      },
+      "keyDependent": false
     }
   ],
   "generators": [
@@ -757,6 +772,13 @@
       "implemented": true,
       "seedDurationSec": 5,
       "awayEligible": true,
+      "requires": ["keys", "notation"]
+    },
+    {
+      "id": "pieceLine",
+      "implemented": false,
+      "seedDurationSec": 25,
+      "awayEligible": false,
       "requires": ["keys", "notation"]
     },
     {

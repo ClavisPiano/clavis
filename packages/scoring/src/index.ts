@@ -3,6 +3,8 @@ export const PACKAGE_NAME = "@clavis/scoring";
 export { combineParts, scoreAttempt } from "./score.js";
 export type { ScoreInput, ScoreResult } from "./score.js";
 export { scoreChoice } from "./choice.js";
+export { LINE_PITCH_WEIGHT, scoreLine } from "./line.js";
+export type { LineInput } from "./line.js";
 export type { ChoiceAnswer, ChoiceInput } from "./choice.js";
 export { scorePitchClass, scoreExactPitch } from "./single.js";
 export type { PartResult, SingleNoteInput } from "./single.js";

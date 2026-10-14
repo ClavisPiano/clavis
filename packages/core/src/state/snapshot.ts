@@ -28,7 +28,11 @@ export function restoreSnapshot(
   const s = snapshot.state;
   if (typeof s !== "object" || s === null) return undefined;
   const o = s as Partial<LearnerState>;
-  if (typeof o.eventCount !== "number" || typeof o.nodes !== "object") {
+  if (
+    typeof o.eventCount !== "number" ||
+    typeof o.nodes !== "object" ||
+    typeof o.pieces !== "object"
+  ) {
     return undefined;
   }
   return cloneJson(s) as LearnerState;

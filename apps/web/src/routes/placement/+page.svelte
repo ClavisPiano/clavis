@@ -79,8 +79,8 @@
     machine?.resume();
   }
 
-  function sectionLabel(block: "ear" | "read"): string {
-    return block === "ear" ? "Ear" : "Reading";
+  function sectionLabel(block: "ear" | "read" | "apply"): string {
+    return block === "ear" ? "Ear" : block === "apply" ? "Pieces" : "Reading";
   }
 </script>
 

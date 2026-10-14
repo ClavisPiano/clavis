@@ -7,6 +7,7 @@ import itemPresented from "./item.presented.json";
 import attemptCompleted from "./attempt.completed.json";
 import nodeIntroduced from "./node.introduced.json";
 import placementCompleted from "./placement.completed.json";
+import pieceCompleted from "./piece.completed.json";
 import sessionEnded from "./session.ended.json";
 
 /** One realistic example of every real event type, keyed by type. Test support only. */
@@ -18,6 +19,7 @@ export const eventFixtures: Readonly<Record<string, unknown>> = {
   "attempt.completed": attemptCompleted,
   "node.introduced": nodeIntroduced,
   "placement.completed": placementCompleted,
+  "piece.completed": pieceCompleted,
   "session.ended": sessionEnded,
 };
 

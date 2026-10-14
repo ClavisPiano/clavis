@@ -48,6 +48,7 @@ export function checkPlayDone(
       return sorted.length >= MAX_WRONG_NOTES ? { done: true } : NOT_DONE;
     }
     case "sequence":
+    case "line":
       if (!last || sorted.length < target.midi.length) return NOT_DONE;
       return quiet(last.onsetMs, nowMs, SEQUENCE_QUIET_MS);
     case "rhythm": {

@@ -1,5 +1,4 @@
-import { PieceSchema, type Piece } from "@clavis/core";
-import { line } from "./line.js";
+import { PieceSchema, line, type Piece } from "@clavis/core";
 
 /*
  * The MP library: nine short public-domain tunes for one hand, easiest first, right hand then left.

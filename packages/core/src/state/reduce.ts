@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 
 /** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
-export const REDUCER_VERSION = 2;
+export const REDUCER_VERSION = 3;
 
 export const DURATION_WINDOW = 20;
 /** Fewer samples than this and the graph seed is used instead of the median. */
@@ -48,6 +48,7 @@ export function initialState(ctx: FoldContext): LearnerState {
     cards: {},
     nodes: {},
     attempts: {},
+    pieces: {},
     sessions: {},
     presented: {},
     durations: {},
@@ -174,6 +175,7 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
         generator: event.generator,
         at: event.at,
         ...keyHints(event.presentation),
+        ...pieceHint(event.generator, event.presentation),
       };
       state.presented[`${event.sessionId}:${event.itemId}`] = rec;
       const s = state.sessions[event.sessionId];
@@ -215,6 +217,15 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
       daily(state, day).nodesIntroduced++;
       reevaluate(state, node);
       recomputeAvailability(state, ctx.graph);
+      return;
+    }
+    case "piece.completed": {
+      const rec = (state.pieces[event.pieceId] ??= { phrases: {}, runs: 0 });
+      rec.runs++;
+      rec.lastRunAt = Math.max(rec.lastRunAt ?? event.at, event.at);
+      if (event.correctPhrases === event.phrases) {
+        rec.completedAt = Math.min(rec.completedAt ?? event.at, event.at);
+      }
       return;
     }
     case "placement.completed": {
@@ -301,6 +312,21 @@ function reduceAttempt(
   }
   (state.attempts[event.nodeId] ??= []).push(attempt);
 
+  if (pres.piece) {
+    const piece = (state.pieces[pres.piece.id] ??= { phrases: {}, runs: 0 });
+    const key = String(pres.piece.phrase);
+    const phrase = (piece.phrases[key] ??= {
+      attempts: 0,
+      correct: 0,
+      lastAt: 0,
+      lastCorrect: false,
+    });
+    phrase.attempts++;
+    if (event.outcome.correct) phrase.correct++;
+    phrase.lastAt = event.at;
+    phrase.lastCorrect = event.outcome.correct;
+  }
+
   const secs = Math.max(0, event.at - pres.at) / 1000;
   const list = (state.durations[pres.generator] ??= []);
   list.push(secs);
@@ -308,6 +334,22 @@ function reduceAttempt(
 
   reevaluate(state, node);
   recomputeAvailability(state, ctx.graph);
+}
+
+/** The piece phrase a `pieceLine` presentation shows, when it names one. */
+function pieceHint(generator: GeneratorId, p: JsonObject): Pick<PresentationRecord, "piece"> {
+  if (generator !== "pieceLine") return {};
+  const id = p.piece;
+  const phrase = p.phrase;
+  if (
+    typeof id !== "string" ||
+    typeof phrase !== "number" ||
+    !Number.isInteger(phrase) ||
+    phrase < 1
+  ) {
+    return {};
+  }
+  return { piece: { id, phrase } };
 }
 
 function keyHints(p: JsonObject): Pick<PresentationRecord, "tonic" | "mode"> {

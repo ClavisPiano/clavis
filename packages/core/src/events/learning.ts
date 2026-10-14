@@ -106,6 +106,27 @@ export const PlacementCompletedV1 = z.strictObject({
   results: z.record(z.string().min(1), PlacementResultSchema),
 });
 
+/**
+ * A whole-piece run finished (MP, TP.4): the learner played every phrase of a piece one after
+ * another. Each phrase is also an ordinary `item.presented` and `attempt.completed` pair, so this
+ * event only records the run itself. The piece counts as played through when every phrase was
+ * correct (`correctPhrases === phrases`).
+ */
+export const PieceCompletedV1 = z
+  .strictObject({
+    ...envelopeShape,
+    type: z.literal("piece.completed"),
+    v: z.literal(1),
+    sessionId: ulid,
+    pieceId: z.string().regex(/^piece\.[a-z0-9-]+$/),
+    phrases: z.int().min(1),
+    correctPhrases: z.int().min(0),
+  })
+  .refine((e) => e.correctPhrases <= e.phrases, {
+    message: "correctPhrases cannot exceed phrases",
+    path: ["correctPhrases"],
+  });
+
 export const SessionEndedV1 = z.strictObject({
   ...envelopeShape,
   type: z.literal("session.ended"),

@@ -48,6 +48,8 @@ const SPEC_IDS = [
   "byear.melody.simple",
   "byear.harmonise",
   "byear.full.phrase",
+  // APPLY (MP)
+  "apply.pieces",
 ];
 
 describe("v1 skill graph", () => {
@@ -59,14 +61,16 @@ describe("v1 skill graph", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("has 34 nodes with exactly the spec ids and the treble nodes", () => {
-    expect(graph.nodes).toHaveLength(34);
+  it("has 35 nodes with exactly the spec ids, the treble nodes and the pieces node", () => {
+    expect(graph.nodes).toHaveLength(35);
     expect(graph.nodes.map((n) => n.id).sort()).toEqual([...SPEC_IDS].sort());
   });
 
   it("has the expected strand counts", () => {
     const count = (s: string) => graph.nodes.filter((n) => n.strand === s).length;
-    expect([count("EAR"), count("READ"), count("HANDS"), count("BYEAR")]).toEqual([12, 12, 7, 3]);
+    expect([count("EAR"), count("READ"), count("HANDS"), count("BYEAR"), count("APPLY")]).toEqual([
+      12, 12, 7, 3, 1,
+    ]);
   });
 
   it("encodes the R10 prerequisites", () => {
@@ -89,7 +93,7 @@ describe("v1 skill graph", () => {
   });
 
   it("lists every generator once and implements exactly the core registry", () => {
-    expect(graph.generators).toHaveLength(16);
+    expect(graph.generators).toHaveLength(17);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
     expect(implemented.sort()).toEqual(Object.keys(GENERATORS).sort());
     for (const id of implemented) expect(getGenerator(id)).toBeDefined();
