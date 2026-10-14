@@ -31,6 +31,7 @@ export const GENERATOR_IDS = [
   "chordQuality",
   "progressionId",
   "bassNoteRead",
+  "trebleNoteRead",
   "bassChordRead",
   "sightLine",
   "lhPattern",

@@ -148,7 +148,10 @@ export async function skipToReadItem(page: Page): Promise<void> {
  * The target midi of the newest reading item, read from the event log on a second page of the
  * same browser context (the session UI never shows it).
  */
-export async function presentedReadTarget(page: Page): Promise<number> {
+export async function presentedReadTarget(
+  page: Page,
+  generator: "bassNoteRead" | "trebleNoteRead" = "bassNoteRead",
+): Promise<number> {
   const log = await page.context().newPage();
   try {
     let midi = Number.NaN;
@@ -156,7 +159,7 @@ export async function presentedReadTarget(page: Page): Promise<number> {
       await log.goto("/dev/events");
       await expect(log.getByTestId("events")).toBeVisible();
       const raw = await log
-        .locator('[data-testid="event"][data-generator="bassNoteRead"]')
+        .locator(`[data-testid="event"][data-generator="${generator}"]`)
         .first()
         .getAttribute("data-midi", { timeout: 1_000 });
       midi = Number(raw);

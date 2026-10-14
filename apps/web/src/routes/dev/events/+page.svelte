@@ -13,7 +13,9 @@
    * tool, so it can show what the session UI never reveals.
    */
   function presentedMidi(event: LearningEvent): number | undefined {
-    if (event.type !== "item.presented" || event.generator !== "bassNoteRead") return undefined;
+    if (event.type !== "item.presented") return undefined;
+    if (event.generator !== "bassNoteRead" && event.generator !== "trebleNoteRead")
+      return undefined;
     const midi = event.presentation.midi;
     return typeof midi === "number" ? midi : undefined;
   }

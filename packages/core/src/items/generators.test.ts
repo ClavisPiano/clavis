@@ -108,6 +108,7 @@ describe("registry and universes", () => {
         "degreeSing",
         "rhythmEcho",
         "rhythmRead",
+        "trebleNoteRead",
       ].sort(),
     );
   });

@@ -15,6 +15,9 @@ export const READ_CARD_NODE_IDS = [
   "read.bass.intervals",
   "read.minor.accidentals",
   "read.rhythm.basic",
+  "read.treble.landmarks",
+  "read.treble.steps",
+  "read.treble.skips",
 ] as const;
 
 export const READ_CARDS_V1: unknown[] = [
@@ -232,5 +235,117 @@ export const READ_CARDS_V1: unknown[] = [
       { label: "Note duration (musictheory.net)", url: `${MT}/11` },
       { label: "Dots and ties (musictheory.net)", url: `${MT}/14` },
     ],
+  },
+  {
+    id: "concept.read.treble.landmarks",
+    nodeIds: ["read.treble.landmarks"],
+    title: "Treble clef landmarks",
+    body: [
+      "The treble clef writes the higher notes, the ones your right hand usually plays and most tunes are written in. Notes sit on five lines or in the spaces between them, and the higher the note on the staff, the higher it sounds.",
+      "As in the bass clef, you learn a few landmarks and count from them. The curl of the treble clef wraps round the second line from the bottom. That line is G, the G above middle C. Middle C hangs below the staff on a ledger line of its own. The C an octave above middle C sits in the third space.",
+      "Learn those three well and every other note is a short count away.",
+    ],
+    howTo: [
+      "A treble staff appears with one note on it. There is no sound first.",
+      "Find the note on your piano and play it. It must be in exactly the right octave: the same letter in another octave does not count.",
+      "In Away mode, tap the note on the on-screen keyboard, which shows the treble register.",
+      "After you answer, the note is played back so you can hear what it was.",
+      "Quick answers count for more, but get it right first. Reading starts in C major.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "Middle C, the clef's G and the C above",
+        clef: "treble",
+        positions: ["C4", "G4", "C5"],
+      },
+      {
+        kind: "staff",
+        label: "G, the line the clef curls round",
+        clef: "treble",
+        positions: ["G4"],
+      },
+      {
+        kind: "staff",
+        label: "Middle C, on a ledger line below the staff",
+        clef: "treble",
+        positions: ["C4"],
+      },
+    ],
+    links: [{ label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` }],
+  },
+  {
+    id: "concept.read.treble.steps",
+    nodeIds: ["read.treble.steps"],
+    title: "Reading steps on the treble staff",
+    body: [
+      "A step is the move from one line to the very next space, or from a space to the very next line. On the page the two notes sit side by side, one just above or below the other. Their letter names are neighbours: after G comes A, before G comes F.",
+      "Steps let you read from a landmark without counting lines. A note just above the G line is A. A note just below it is F. A note just above middle C is D, and the note just below the high C is B.",
+      "Look at where the note sits compared with the landmark, then move one letter.",
+    ],
+    howTo: [
+      "A treble staff appears with one note on it, next to a landmark. There is no sound first.",
+      "Name the landmark, move one step, then play the note on your piano. It must be in exactly the right octave.",
+      "In Away mode, tap the note on the on-screen keyboard, which shows the treble register.",
+      "After you answer, the note is played back.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "G, then a step up to A and down to F",
+        clef: "treble",
+        positions: ["G4", "A4", "F4"],
+      },
+      {
+        kind: "staff",
+        label: "Steps up from middle C: C, D, E",
+        clef: "treble",
+        positions: ["C4", "D4", "E4"],
+      },
+      {
+        kind: "staff",
+        label: "Steps around the high C: B, C, D",
+        clef: "treble",
+        positions: ["B4", "C5", "D5"],
+      },
+    ],
+    links: [{ label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` }],
+  },
+  {
+    id: "concept.read.treble.skips",
+    nodeIds: ["read.treble.skips"],
+    title: "Reading skips on the treble staff",
+    body: [
+      "A skip jumps over one note: line to the next line, or space to the next space. The notes are a third apart, so you skip a letter. From G, a skip up lands on B and a skip down lands on E.",
+      "On the staff a skip looks like two notes with one line or space between them. When both are on lines, or both are in spaces, you are looking at a skip.",
+      "Once you can read steps and skips from the landmarks, you can place any note from middle C up to the A above the staff. Count from the nearest landmark and choose the shorter way.",
+    ],
+    howTo: [
+      "A treble staff appears with one note on it, one or two places from a landmark, or anywhere in the treble range. There is no sound first.",
+      "Work out the note, then play it on your piano in exactly the right octave.",
+      "In Away mode, tap the note on the on-screen keyboard, which shows the treble register.",
+      "After you answer, the note is played back.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "Skips from G: B above, E below",
+        clef: "treble",
+        positions: ["G4", "B4", "E4"],
+      },
+      {
+        kind: "staff",
+        label: "Skips from middle C: E, then G",
+        clef: "treble",
+        positions: ["C4", "E4", "G4"],
+      },
+      {
+        kind: "staff",
+        label: "Skips around the high C: A, C, E",
+        clef: "treble",
+        positions: ["A4", "C5", "E5"],
+      },
+    ],
+    links: [{ label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` }],
   },
 ];
