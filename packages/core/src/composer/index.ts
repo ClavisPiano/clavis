@@ -1,5 +1,6 @@
 export * from "./types.js";
 export {
+  APPLY_NEW_EAR_PHRASES_PER_SESSION,
   APPLY_NEW_PHRASES_PER_SESSION,
   composePieceRun,
   composeSession,

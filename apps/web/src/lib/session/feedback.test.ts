@@ -189,6 +189,11 @@ describe("describeError on reading items (named notes)", () => {
       { code: "sequence.wrong-note", detail: { index: 1, expected: 43, played: 40 } },
       "Note 2: you played E2; the target was G2",
     ],
+    // A sung note (play it by ear) is named as sung.
+    [
+      { code: "sequence.wrong-note", detail: { index: 2, expected: 43, played: 40, part: "sing" } },
+      "Note 3: you sang E2; the target was G2",
+    ],
     // Without numeric notes, or for other codes, the ear wording stands.
     [{ code: "pitch.wrong" }, "That was not the target note"],
     [{ code: "sequence.missing", detail: { index: 1 } }, "Note 2 was missing"],

@@ -1,5 +1,6 @@
 import type { SkillGraph, SkillNode } from "../../graph/schema.js";
 import { GENERATORS } from "../../items/registry.js";
+import { PIECE_EAR_NODE_ID, createPieceEar } from "../../items/piece-ear.js";
 import { PIECES_NODE_ID, createPieceLine } from "../../items/piece-line.js";
 import type { Generator } from "../../items/types.js";
 import type { GeneratorId } from "../../graph/schema.js";
@@ -75,12 +76,19 @@ const piecesNode: SkillNode = {
   keyDependent: false,
 };
 
-/** The READ fixture graph plus the pieces node, with `pieceLine` implemented. */
+const earNode: SkillNode = {
+  ...piecesNode,
+  id: PIECE_EAR_NODE_ID,
+  title: "Pieces by ear",
+  itemGenerators: ["pieceEar"],
+};
+
+/** The READ fixture graph plus the pieces nodes, with `pieceLine` and `pieceEar` implemented. */
 export function piecesGraph(implemented = true): SkillGraph {
   return {
     ...READ_GRAPH,
     generators: [
-      ...READ_GRAPH.generators.filter((g) => g.id !== "pieceLine"),
+      ...READ_GRAPH.generators.filter((g) => g.id !== "pieceLine" && g.id !== "pieceEar"),
       {
         id: "pieceLine",
         implemented,
@@ -88,8 +96,15 @@ export function piecesGraph(implemented = true): SkillGraph {
         awayEligible: false,
         requires: ["keys", "notation"],
       },
+      {
+        id: "pieceEar",
+        implemented,
+        seedDurationSec: 60,
+        awayEligible: false,
+        requires: ["mic", "keys", "notation"],
+      },
     ],
-    nodes: [...READ_GRAPH.nodes, piecesNode],
+    nodes: [...READ_GRAPH.nodes, piecesNode, earNode],
   };
 }
 
@@ -98,5 +113,10 @@ export const PIECES_GRAPH = piecesGraph();
 export function piecesGenerators(
   pieces: readonly Piece[] = FIXTURE_PIECES,
 ): Partial<Record<GeneratorId, Generator>> {
-  return { ...GENERATORS, ...STUB_READ_GENERATORS, pieceLine: createPieceLine(pieces) };
+  return {
+    ...GENERATORS,
+    ...STUB_READ_GENERATORS,
+    pieceLine: createPieceLine(pieces),
+    pieceEar: createPieceEar(pieces),
+  };
 }

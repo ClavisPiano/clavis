@@ -1,6 +1,7 @@
 import { loadPieces } from "@clavis/content";
 import {
   GENERATORS,
+  createPieceEar,
   createPieceLine,
   type Generator,
   type GeneratorId,
@@ -8,7 +9,7 @@ import {
 } from "@clavis/core";
 
 /*
- * The piece library as the app uses it (MP). `pieceLine` is built over the library, which lives in
+ * The piece library as the app uses it (MP). `pieceLine` and `pieceEar` are built over the library, which lives in
  * `content`, so it cannot be in the core registry: the app builds it once here and hands it, with
  * the pieces, to the composer and the session runtime.
  */
@@ -21,9 +22,13 @@ export function appPieces(): readonly Piece[] {
   return pieces;
 }
 
-/** The core generators plus `pieceLine` over the app's pieces. */
+/** The core generators plus `pieceLine` and `pieceEar` over the app's pieces. */
 export function appGenerators(): Partial<Record<GeneratorId, Generator>> {
-  generators ??= { ...GENERATORS, pieceLine: createPieceLine(appPieces()) };
+  generators ??= {
+    ...GENERATORS,
+    pieceLine: createPieceLine(appPieces()),
+    pieceEar: createPieceEar(appPieces()),
+  };
   return generators;
 }
 
@@ -35,7 +40,7 @@ export function pieceInputs(): {
   return { pieces: appPieces(), generators: appGenerators() };
 }
 
-/** Generate an item with the app's generators (core ones and `pieceLine`). */
+/** Generate an item with the app's generators (core ones and the piece ones). */
 export function generatorFor(id: GeneratorId): Generator {
   const g = appGenerators()[id];
   if (g === undefined) throw new Error(`generator ${id} is not available`);

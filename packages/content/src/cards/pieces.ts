@@ -1,7 +1,7 @@
 /**
- * Concept card for the pieces node (TP.5). Same rules as `v1.ts`: `docs/content/cards.md`.
- * The card test requires a card for every enabled node, and `apply.pieces` is enabled with
- * `pieceLine`.
+ * Concept cards for the pieces nodes (TP.5, TP.6). Same rules as `v1.ts`: `docs/content/cards.md`.
+ * The card test requires a card for every enabled node, and `apply.pieces` and `apply.piece-ear`
+ * are enabled with `pieceLine` and `pieceEar`.
  */
 export const PIECE_CARDS_V1: unknown[] = [
   {
@@ -28,6 +28,24 @@ export const PIECE_CARDS_V1: unknown[] = [
         positions: ["E4", "D4", "C4"],
       },
     ],
+    links: [],
+  },
+  {
+    id: "concept.apply.piece-ear",
+    nodeIds: ["apply.piece-ear"],
+    title: "Playing a tune by ear",
+    body: [
+      "Once you can read every phrase of a tune, you can try it the other way round: listen first, with no music in front of you, then sing it and play it from memory.",
+      "Singing first makes you hear the tune in your head before your fingers move. Both parts count: a wrong sung note is a miss, even if the notes you play are right.",
+      "Afterwards the score appears so you can check what you did against what is written.",
+    ],
+    howTo: [
+      "Four clicks set the pulse, then the phrase plays. Replay it if you need to.",
+      "Sing it back. You can sing in your own octave.",
+      "Now play it on your piano. Every note must be in the exact octave, and your rhythm is judged against your own pace.",
+      "The score is shown with the notes you got right and wrong marked.",
+    ],
+    examples: [],
     links: [],
   },
 ];

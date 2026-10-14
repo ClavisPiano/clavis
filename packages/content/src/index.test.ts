@@ -50,6 +50,7 @@ const SPEC_IDS = [
   "byear.full.phrase",
   // APPLY (MP)
   "apply.pieces",
+  "apply.piece-ear",
 ];
 
 describe("v1 skill graph", () => {
@@ -61,15 +62,15 @@ describe("v1 skill graph", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("has 35 nodes with exactly the spec ids, the treble nodes and the pieces node", () => {
-    expect(graph.nodes).toHaveLength(35);
+  it("has 36 nodes with exactly the spec ids, the treble nodes and the pieces node", () => {
+    expect(graph.nodes).toHaveLength(36);
     expect(graph.nodes.map((n) => n.id).sort()).toEqual([...SPEC_IDS].sort());
   });
 
   it("has the expected strand counts", () => {
     const count = (s: string) => graph.nodes.filter((n) => n.strand === s).length;
     expect([count("EAR"), count("READ"), count("HANDS"), count("BYEAR"), count("APPLY")]).toEqual([
-      12, 12, 7, 3, 1,
+      12, 12, 7, 3, 2,
     ]);
   });
 
@@ -93,12 +94,14 @@ describe("v1 skill graph", () => {
   });
 
   it("lists every generator once and implements exactly the core registry", () => {
-    expect(graph.generators).toHaveLength(17);
+    expect(graph.generators).toHaveLength(18);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
-    // `pieceLine` is built over the piece library, so the app injects it; the core registry has the rest.
-    expect(implemented.sort()).toEqual([...Object.keys(GENERATORS), "pieceLine"].sort());
-    for (const id of implemented.filter((i) => i !== "pieceLine")) {
-      expect(getGenerator(id as keyof typeof GENERATORS)).toBeDefined();
+    // `pieceLine` and `pieceEar` are built over the piece library, so the app injects them; the
+    // core registry has the rest.
+    const injected = ["pieceLine", "pieceEar"];
+    expect(implemented.sort()).toEqual([...Object.keys(GENERATORS), ...injected].sort());
+    for (const id of implemented.filter((i) => !injected.includes(i))) {
+      expect(getGenerator(id)).toBeDefined();
     }
   });
 
@@ -125,8 +128,11 @@ describe("v1 skill graph", () => {
       "read.treble.skips",
       "read.treble.steps",
     ]);
-    // MP: pieces are the one APPLY node.
-    expect(enabled.filter((id) => id.startsWith("apply."))).toEqual(["apply.pieces"]);
+    // MP: pieces, read and by ear, are the APPLY nodes.
+    expect(enabled.filter((id) => id.startsWith("apply."))).toEqual([
+      "apply.pieces",
+      "apply.piece-ear",
+    ]);
     expect(
       enabled.every(
         (id) => id.startsWith("ear.") || id.startsWith("read.") || id.startsWith("apply."),

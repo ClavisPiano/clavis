@@ -47,6 +47,11 @@ export interface ItemInstance {
    * Unlike `display` it does not make the item a reading item: the stimulus plays as usual.
    */
   staff?: ScoreSpec;
+  /**
+   * The answer as a score, shown only after the learner has answered (play it by ear). Unlike
+   * `display` it is not part of the question, so the item is still an ear item.
+   */
+  reveal?: ScoreSpec;
   /** Playable range for the on-screen keyboard or MIDI input, when it differs from the default. */
   inputRange?: VoiceRange;
 }

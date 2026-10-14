@@ -25,10 +25,17 @@ const PIECE_GENERATOR: GeneratorInfo = {
   awayEligible: false,
   requires: ["keys", "notation"],
 };
+const EAR_NODE = {
+  ...PIECES_NODE,
+  id: "apply.piece-ear",
+  title: "Pieces by ear",
+  itemGenerators: ["pieceEar" as const],
+};
+const EAR_GENERATOR: GeneratorInfo = { ...PIECE_GENERATOR, id: "pieceEar", seedDurationSec: 60 };
 const GRAPH: SkillGraph = {
   ...FIXTURE_GRAPH,
-  generators: [...FIXTURE_GRAPH.generators, PIECE_GENERATOR],
-  nodes: [...FIXTURE_GRAPH.nodes, PIECES_NODE],
+  generators: [...FIXTURE_GRAPH.generators, PIECE_GENERATOR, EAR_GENERATOR],
+  nodes: [...FIXTURE_GRAPH.nodes, PIECES_NODE, EAR_NODE],
 };
 const C = ctx(GRAPH);
 const fold = (events: readonly LearningEvent[]) => foldEvents(events, C);
@@ -101,6 +108,20 @@ describe("piece progress (MP)", () => {
     const card = s.cards[`apply.pieces|phrase=1|piece=${HCB}`];
     expect(card?.nodeId).toBe("apply.pieces");
     expect(card?.reps).toBe(1);
+    expect(s.warnings).toBe(0);
+  });
+
+  it("phrases played by ear feed their own node and never count as reading the phrase", () => {
+    const b = new Builder();
+    const sid = b.sessionId(1);
+    const s = fold([
+      b.start(T0, sid),
+      ...b.phrase(T0 + 1000, sid, HCB, 1, { ear: true }),
+      b.end(T0 + 60_000, sid),
+    ]);
+    expect(s.pieces).toEqual({});
+    expect(s.attempts["apply.piece-ear"]).toHaveLength(1);
+    expect(s.cards[`apply.piece-ear|phrase=1|piece=${HCB}`]?.nodeId).toBe("apply.piece-ear");
     expect(s.warnings).toBe(0);
   });
 

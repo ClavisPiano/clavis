@@ -169,6 +169,8 @@ export interface ItemView {
   guide?: KeyboardGuide;
   /** Early stages: the rhythm is drawn on a staff while it sounds. */
   showStaff?: true;
+  /** Feedback of a play-by-ear item: the answer's score is drawn for the learner to check. */
+  revealed?: true;
   /** Buttons to answer with, for choice items (R21). They replace the keyboard. */
   choices?: ChoiceOption[];
 }
@@ -1395,15 +1397,21 @@ export class SessionMachine {
         (this.#priorAttempts[nodeId] ?? 0) + (this.#sessionAttempts[nodeId] ?? 0);
       this.#sessionAttempts[nodeId] = (this.#sessionAttempts[nodeId] ?? 0) + 1;
       const answer = answerLine(cur.instance);
-      const feedback = buildFeedback({
+      // The score being read from, or the one revealed after answering by ear.
+      const written = cur.instance.display ?? cur.instance.reveal;
+      const built = buildFeedback({
         nodeState,
         attemptIndex,
         correct: outcome.correct,
         errors,
         mode: cur.instance.presentation.mode === "minor" ? "minor" : "major",
-        ...(cur.instance.display ? { names: noteNamer(cur.instance.display) } : {}),
+        ...(written ? { names: noteNamer(written) } : {}),
         ...(answer === undefined ? {} : { answer }),
       });
+
+      // Play by ear: stay on the revealed score until the learner moves on.
+      const reveal = cur.instance.reveal !== undefined && d.notation !== undefined;
+      const feedback = reveal ? { ...built, autoAdvance: false } : built;
 
       await d.append([
         {
@@ -1445,7 +1453,8 @@ export class SessionMachine {
         this.#beforePause = shown;
         return;
       }
-      this.#setState(shown);
+      this.#setState(reveal ? { ...shown, item: { ...shown.item, revealed: true } } : shown);
+      if (reveal) this.#revealScore(cur, outcome.correct, errors);
       if (feedback.autoAdvance) {
         this.#schedule(AUTO_ADVANCE_MS, () => {
           this.next();
@@ -1454,6 +1463,23 @@ export class SessionMachine {
     } finally {
       this.#completing = false;
     }
+  }
+
+  /**
+   * Play by ear: draw the answer's score now that the learner has answered, marking what was right
+   * and wrong. Runs in the serialized queue; moving on or pausing first makes it stale.
+   */
+  #revealScore(cur: Current, correct: boolean, errors: readonly AttemptError[]): void {
+    const port = this.#d.notation;
+    const score = cur.instance.reveal;
+    if (port === undefined || score === undefined) return;
+    const token = this.#token;
+    void this.#enqueue(async () => {
+      this.#notationShown = true;
+      await port.show(score);
+      if (token !== this.#token || this.#cur !== cur) return;
+      port.highlight(feedbackMarks(score, correct, errors));
+    });
   }
 
   /** Placement: remember the answer (nothing is stored yet), show a brief tick, then move on. */

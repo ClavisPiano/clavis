@@ -323,7 +323,7 @@
       </header>
     {/if}
 
-    {#if "item" in view && (view.item.display !== undefined || view.item.showStaff === true)}
+    {#if "item" in view && (view.item.display !== undefined || view.item.showStaff === true || view.item.revealed === true)}
       <div class="notation-slot" data-testid="notation-slot" data-block={view.item.block}>
         {#if runtime}
           <NotationView port={runtime.notation} label="Music notation to read" />
