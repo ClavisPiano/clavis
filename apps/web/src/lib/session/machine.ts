@@ -134,6 +134,9 @@ export interface SessionDeps {
   notation?: NotationPort;
 }
 
+/** The session blocks an item can come from. Apply holds piece phrases. */
+export type Block = "ear" | "read" | "apply";
+
 export interface ItemView {
   /** 1-based position among the planned items. */
   position: number;
@@ -142,7 +145,7 @@ export interface ItemView {
   nodeTitle: string;
   generator: string;
   isNew: boolean;
-  block: "ear" | "read";
+  block: Block;
   /** What to draw, for reading items. */
   display?: ScoreSpec;
   /** Playable range for the on-screen keyboard, when the item sets one. */
@@ -215,7 +218,7 @@ interface Current {
   index: number;
   planned: PlannedItem;
   instance: ItemInstance;
-  block: "ear" | "read";
+  block: Block;
   phases: Phase[];
   phaseIdx: number;
   stimulusEndMs: number;
@@ -266,6 +269,7 @@ export function promptFor(
     if (mode === "away") return "Find it on the keyboard";
     if (play.kind === "exactPitch") return "Play this note";
     if (play.kind === "sequence") return "Play these notes";
+    if (play.kind === "line") return "Play this phrase";
   }
   if (play?.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
   return mode === "away" ? "Tap it on the keyboard" : "Play it";
@@ -278,7 +282,7 @@ export class SessionMachine {
 
   #sessionId = "";
   #plan: SessionPlan | undefined;
-  #items: { planned: PlannedItem; block: "ear" | "read" }[] = [];
+  #items: { planned: PlannedItem; block: Block }[] = [];
   #pendingIntros = new Set<string>();
   #introFamilies = new Map<string, KeyFamily>();
   #notes: string[] = [];
@@ -295,6 +299,8 @@ export class SessionMachine {
   /** Placement mode: answers so far, in presentation order. */
   #placementAttempts: PlacementAttempt[] = [];
   #placementSkippedReading = false;
+  /** Whole-piece run (MP): whether each phrase was played correctly, in order. */
+  #runResults: boolean[] = [];
 
   #startedWall = 0;
   #pausedMs = 0;
@@ -603,10 +609,12 @@ export class SessionMachine {
       ...(d.extraNewItems ? { extraNewItems: d.extraNewItems } : {}),
       seed: d.seed,
     });
-    if (d.practice && plan.blocks.ear.length + plan.blocks.read.length === 0) {
+    const planned =
+      plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0);
+    if (d.practice && planned === 0) {
       throw new Error("Nothing to practise yet. Finish a regular session first, then come back.");
     }
-    if (plan.blocks.ear.length + plan.blocks.read.length === 0) {
+    if (planned === 0) {
       // An empty plan is not a session: no events, no inputs, just a screen that says so.
       this.#plan = plan;
       this.#setState({ kind: "nothing" });
@@ -616,6 +624,7 @@ export class SessionMachine {
     this.#items = [
       ...plan.blocks.ear.map((planned) => ({ planned, block: "ear" as const })),
       ...plan.blocks.read.map((planned) => ({ planned, block: "read" as const })),
+      ...(plan.blocks.apply ?? []).map((planned) => ({ planned, block: "apply" as const })),
     ];
     const introductions = introductionsOf(plan);
     for (const intro of introductions) {
@@ -865,7 +874,7 @@ export class SessionMachine {
     this.#loadItem(this.#index, next);
   }
 
-  #loadItem(index: number, entry: { planned: PlannedItem; block: "ear" | "read" }): void {
+  #loadItem(index: number, entry: { planned: PlannedItem; block: Block }): void {
     const d = this.#d;
     const plan = this.#plan;
     if (!plan) return;
@@ -1253,6 +1262,7 @@ export class SessionMachine {
       ]);
       this.#attempts++;
       if (outcome.correct) this.#correct++;
+      if (this.#plan?.run) this.#runResults.push(outcome.correct);
 
       if (this.#hasEnded()) return;
       if (cur.instance.display && this.#notationShown) {
@@ -1341,6 +1351,24 @@ export class SessionMachine {
           ? []
           : [{ nodeId: stage.nodeId, title: this.#nodeTitle(stage.nodeId), state }];
       });
+    }
+    // A whole-piece run that played every phrase (MP). A run left unfinished writes nothing here;
+    // its phrases are still ordinary attempts.
+    const run = this.#plan?.run;
+    if (run && reason === "completed" && this.#sessionId !== "") {
+      const phrases = this.#items.length;
+      if (phrases > 0 && this.#runResults.length === phrases) {
+        await d.append([
+          {
+            ...this.#base(),
+            type: "piece.completed" as const,
+            sessionId: this.#sessionId,
+            pieceId: run.pieceId,
+            phrases,
+            correctPhrases: this.#runResults.filter(Boolean).length,
+          },
+        ]);
+      }
     }
     if (this.#sessionId !== "") {
       await d.append([

@@ -10,49 +10,16 @@ import {
   type ItemInstance,
   type LearningEvent,
   type PlannedItem,
-  type ScoreSpec,
   type StimulusSpec,
 } from "@clavis/core";
 import { describe, expect, it } from "vitest";
-import type { NotationMark, NotationPort } from "../notation/port";
 import { SessionMachine, feedbackMarks, promptFor, type SessionState } from "./machine";
-import { makeHarness, noteAt, type Harness, type TestClock } from "./test-harness";
+import { FakeNotation, makeHarness, noteAt, type Harness } from "./test-harness";
 
 /* Reading items (T3.10): a fake NotationPort with a controllable show delay, stub read items
    (no real read generators are registered), and the real composer for the ear items. */
 
 const READ_NODE = "read.bass.landmarks";
-
-class FakeNotation implements NotationPort {
-  readonly calls: string[] = [];
-  readonly shows: ScoreSpec[] = [];
-  readonly marks: NotationMark[][] = [];
-  preloadError: Error | undefined;
-  showDelayMs = 0;
-  constructor(private readonly clock: TestClock) {}
-  preload(): Promise<void> {
-    this.calls.push("preload");
-    return this.preloadError ? Promise.reject(this.preloadError) : Promise.resolve();
-  }
-  show(score: ScoreSpec): Promise<void> {
-    this.calls.push("show");
-    this.shows.push(score);
-    if (this.showDelayMs <= 0) return Promise.resolve();
-    return new Promise((resolve) => {
-      this.clock.schedule(this.showDelayMs, resolve);
-    });
-  }
-  highlight(marks: NotationMark[]): void {
-    this.calls.push("highlight");
-    this.marks.push(marks);
-  }
-  hide(): void {
-    this.calls.push("hide");
-  }
-  count(name: string): number {
-    return this.calls.filter((c) => c === name).length;
-  }
-}
 
 const COUNT_IN: StimulusSpec = {
   tempoBpm: 60,

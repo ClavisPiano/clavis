@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ScoreSpecSchema, scoreNoteIds, spelledToMidi } from "@clavis/core";
-import { line } from "./line";
+import { ScoreSpecSchema, scoreNoteIds, spelledToMidi } from "../score/schema.js";
+import { line } from "./line.js";
 
 const base = {
   clef: "treble",

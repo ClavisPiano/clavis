@@ -9,6 +9,7 @@ import type {
   PlayTarget,
 } from "@clavis/core";
 import { scoreChoice, type ChoiceAnswer } from "./choice.js";
+import { scoreLine } from "./line.js";
 import { scoreRhythm } from "./rhythm.js";
 import { scoreSequence } from "./sequence.js";
 import { scoreExactPitch, scorePitchClass } from "./single.js";
@@ -69,6 +70,14 @@ function scorePlay(play: PlayTarget, input: ScoreInput): PartResult {
         answer: input.choice,
         stimulusEndMs: input.stimulusEndMs,
         responseWindowMs: input.expected.responseWindowMs,
+      });
+    case "line":
+      return scoreLine({
+        ...base,
+        midi: play.midi,
+        onsetsBeats: play.onsetsBeats,
+        tempoBpm: play.tempoBpm,
+        source: input.source,
       });
     case "rhythm":
       return scoreRhythm({

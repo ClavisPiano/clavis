@@ -74,7 +74,7 @@ export function startWouldBeEmpty(opts: {
   budgetSec: number;
 }): boolean {
   const plan = composeSession({ ...opts, seed: 0 });
-  return plan.blocks.ear.length + plan.blocks.read.length === 0;
+  return plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0) === 0;
 }
 
 /**

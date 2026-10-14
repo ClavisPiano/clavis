@@ -56,6 +56,21 @@ function displayTargetEvents(instance: ItemInstance): StimulusEvent[] {
         velocity: TARGET_VELOCITY,
         role: "target" as const,
       }));
+    case "line": {
+      // A phrase: the count-in, then each note at its place in the bar.
+      const beatSec = 60 / play.tempoBpm;
+      const countInEnd = countIn.reduce((end, e) => Math.max(end, e.atSec + beatSec), 0);
+      return [
+        ...countIn,
+        ...play.midi.map((m, i) => ({
+          atSec: countInEnd + (play.onsetsBeats[i] ?? 0) * beatSec,
+          midi: [m],
+          durationSec: Math.min(TARGET_NOTE_SEC, beatSec * 0.9),
+          velocity: TARGET_VELOCITY,
+          role: "target" as const,
+        })),
+      ];
+    }
     case "rhythm": {
       const beatSec = 60 / play.tempoBpm;
       const countInEnd = countIn.reduce((end, e) => Math.max(end, e.atSec + beatSec), 0);

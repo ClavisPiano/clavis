@@ -11,6 +11,7 @@ export * from "./bass-note-read.js";
 export * from "./bass-motion.js";
 export * from "./chord-quality.js";
 export * from "./treble-note-read.js";
+export * from "./piece-line.js";
 export * from "./registry.js";
 export { createRng, type Rng } from "../random.js";
 export * from "./family.js";

@@ -4,6 +4,7 @@ import {
   AttemptCompletedV1,
   ItemPresentedV1,
   NodeIntroducedV1,
+  PieceCompletedV1,
   PlacementCompletedV1,
   SessionEndedV1,
   SessionStartedV1,
@@ -74,6 +75,7 @@ export const learningEventSchema = z.discriminatedUnion("type", [
   AttemptCompletedV1,
   NodeIntroducedV1,
   PlacementCompletedV1,
+  PieceCompletedV1,
   SessionEndedV1,
 ]);
 export type LearningEvent = z.infer<typeof learningEventSchema>;
@@ -108,6 +110,7 @@ export const eventRegistry: Readonly<Record<LearningEventType, EventRegistryEntr
   "attempt.completed": { versions: { 1: AttemptCompletedV1 }, upcast: identity },
   "node.introduced": { versions: { 1: NodeIntroducedV1 }, upcast: identity },
   "placement.completed": { versions: { 1: PlacementCompletedV1 }, upcast: identity },
+  "piece.completed": { versions: { 1: PieceCompletedV1 }, upcast: identity },
   "session.ended": { versions: { 1: SessionEndedV1 }, upcast: identity },
 };
 

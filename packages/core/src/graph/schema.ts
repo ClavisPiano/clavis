@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Skill strands (spec 3.1). Rhythm is not a strand. */
-export const StrandSchema = z.enum(["EAR", "READ", "HANDS", "BYEAR"]);
+export const StrandSchema = z.enum(["EAR", "READ", "HANDS", "BYEAR", "APPLY"]);
 export type Strand = z.infer<typeof StrandSchema>;
 
 /** Node lifecycle states (spec 3.2). */
@@ -32,6 +32,7 @@ export const GENERATOR_IDS = [
   "progressionId",
   "bassNoteRead",
   "trebleNoteRead",
+  "pieceLine",
   "bassChordRead",
   "sightLine",
   "lhPattern",

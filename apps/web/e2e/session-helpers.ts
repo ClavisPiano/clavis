@@ -32,6 +32,11 @@ export async function answerCurrentPhase(page: Page): Promise<void> {
         fake.emitNote(play.targetMidi, { onsetMs: base });
       } else if (play.kind === "sequence") {
         play.midi.forEach((midi, i) => fake.emitNote(midi, { onsetMs: base + i * 400 }));
+      } else if (play.kind === "line") {
+        const beatMs = 60000 / play.tempoBpm;
+        play.midi.forEach((midi, i) =>
+          fake.emitNote(midi, { onsetMs: base + (play.onsetsBeats[i] ?? 0) * beatMs }),
+        );
       } else {
         const beatMs = 60000 / play.tempoBpm;
         for (const beat of play.onsetsBeats) {

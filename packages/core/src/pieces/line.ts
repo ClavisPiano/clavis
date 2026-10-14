@@ -1,4 +1,4 @@
-import type { Duration, ScoreNote, ScoreRest, ScoreSpec, Step } from "@clavis/core";
+import type { Duration, ScoreNote, ScoreRest, ScoreSpec, Step } from "../score/schema.js";
 
 /*
  * Authoring helper for the piece library: a one-staff line written bar by bar as text, so a melody

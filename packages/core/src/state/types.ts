@@ -64,12 +64,35 @@ export interface PresentationRecord {
   /** Key hints from the presentation params, when present. */
   tonic?: string;
   mode?: "major" | "minor";
+  /** The piece phrase a `pieceLine` item shows (MP). */
+  piece?: { id: string; phrase: number };
+}
+
+/** What the learner has done with one phrase of a piece, from its attempts. */
+export interface PhraseRecord {
+  attempts: number;
+  correct: number;
+  lastAt: number;
+  lastCorrect: boolean;
+}
+
+/** Progress on one piece (MP), derived from phrase attempts and `piece.completed` events. */
+export interface PieceRecord {
+  /** By phrase number, 1-based, as a string key so the state stays plain JSON. */
+  phrases: Record<string, PhraseRecord>;
+  /** Whole-piece runs finished, whatever their result. */
+  runs: number;
+  lastRunAt?: number;
+  /** When a run first had every phrase correct: the piece has been played through. */
+  completedAt?: number;
 }
 
 export interface LearnerState {
   cards: Record<string, CardRecord>;
   nodes: Record<string, NodeRecord>;
   attempts: Record<string, StoredAttempt[]>;
+  /** Piece progress by piece id (MP). */
+  pieces: Record<string, PieceRecord>;
   sessions: Record<string, SessionRecord>;
   /** Key `${sessionId}:${itemId}`. Pruned when the session ends. */
   presented: Record<string, PresentationRecord>;

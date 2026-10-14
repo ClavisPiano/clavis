@@ -145,6 +145,17 @@ describe("learning event negatives", () => {
     expect(code(withField("placement.completed", { results: { n1: "mastered" } }))).toBe("ok");
   });
 
+  it("rejects bad piece.completed values", () => {
+    expect(code(withField("piece.completed", { pieceId: "hot-cross-buns" }))).toBe("invalid");
+    expect(code(withField("piece.completed", { pieceId: "piece.Hot_Cross" }))).toBe("invalid");
+    expect(code(withField("piece.completed", { phrases: 0, correctPhrases: 0 }))).toBe("invalid");
+    expect(code(withField("piece.completed", { phrases: 2, correctPhrases: 3 }))).toBe("invalid");
+    expect(code(withField("piece.completed", { correctPhrases: -1 }))).toBe("invalid");
+    expect(code(withField("piece.completed", { phrases: 2.5 }))).toBe("invalid");
+    expect(code(withField("piece.completed", { phrases: 4, correctPhrases: 3 }))).toBe("ok");
+    expect(code(withField("piece.completed", { extra: true }))).toBe("invalid");
+  });
+
   it("rejects bad node.introduced and session.ended values", () => {
     expect(code(withField("node.introduced", { keyFamily: "D" }))).toBe("invalid");
     expect(code(withField("session.ended", { reason: "crashed" }))).toBe("invalid");

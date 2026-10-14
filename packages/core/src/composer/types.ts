@@ -1,6 +1,7 @@
 import type { GeneratorId, SkillGraph } from "../graph/schema.js";
 import type { SessionMode } from "../learning/rating.js";
 import type { Generator, ItemParams } from "../items/types.js";
+import type { Piece } from "../pieces/schema.js";
 import type { LearnerState } from "../state/types.js";
 import type { Key, KeyFamily } from "../theory/keys.js";
 
@@ -31,6 +32,12 @@ export interface ComposeInput {
    * applies to this plan only. Ignored for practice.
    */
   extraNewItems?: number;
+  /**
+   * The piece library (MP). With it, an enabled `pieceLine` generator in the registry and an
+   * enabled APPLY node in the graph, an instrument session gets an Apply block of piece phrases
+   * after Read. Without any of those the block is `null`.
+   */
+  pieces?: readonly Piece[];
 }
 
 /** One item the session runner will turn into a stimulus via `getGenerator(generator).generate(...)`. */
@@ -60,8 +67,13 @@ export interface SessionPlan {
   estimatedSec: number;
   /** Null in Away mode. */
   orient: { estimatedSec: number; includeScale: boolean } | null;
-  /** Apply is always null until M5. */
-  blocks: { ear: PlannedItem[]; read: PlannedItem[]; apply: null };
+  /**
+   * Apply holds piece phrases (MP) and is `null` when there are none: Away mode, practice, no
+   * piece library or generator, or nothing due and nothing new to learn.
+   */
+  blocks: { ear: PlannedItem[]; read: PlannedItem[]; apply: PlannedItem[] | null };
+  /** Present only for a whole-piece run (`composePieceRun`): the piece being played through. */
+  run?: { pieceId: string };
   /** Node ids to introduce (emit `node.introduced`). At most one. */
   introductions: string[];
   /**

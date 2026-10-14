@@ -6,6 +6,8 @@ import { familyOfParams, keyForFamily, openFamilies } from "../items/family.js";
 import { GENERATORS } from "../items/registry.js";
 import type { Generator, ItemParams } from "../items/types.js";
 import { learnerDay } from "../learning/day.js";
+import { listPieces } from "../pieces/list.js";
+import type { Piece } from "../pieces/schema.js";
 import { createRng, type Rng } from "../random.js";
 import { newItemAllowance } from "../scheduler/new-items.js";
 import { rankDue } from "../scheduler/rank.js";
@@ -47,6 +49,9 @@ const TIER_FLUENT = 1;
 const TIER_MASTERED = 2;
 
 type Registry = Partial<Record<GeneratorId, Generator>>;
+
+/** New piece phrases offered in one session (MP). Later phrases wait for the next one. */
+export const APPLY_NEW_PHRASES_PER_SESSION = 2;
 
 /** The READ node whose fluency ends the C-major-first rule (R15). */
 const LANDMARKS_NODE = "read.bass.landmarks";
@@ -248,6 +253,104 @@ function arrange(fill: Fill, rng: Rng, practice: boolean): PlannedItem[] {
 }
 
 /**
+ * Due and new piece phrases for the Apply block (MP). Phrases with a card are due when FSRS says
+ * so, most overdue first, whatever the state of their piece now. New phrases come from the current
+ * piece only: the first unlocked piece that has not been played through, in phrase order.
+ */
+function applyCandidates(
+  info: NodeInfo,
+  pieces: readonly Piece[],
+  state: LearnerState,
+  now: number,
+): { due: Candidate[]; fresh: Candidate[] } {
+  const nodeId = info.node.id;
+  const dueAll: (Candidate & { card: CardState })[] = [];
+  for (const u of info.universe) {
+    const card = state.cards[u.itemId];
+    if (card?.nodeId === nodeId) {
+      dueAll.push({ ...u, nodeId, isNew: false, card: card.card });
+    }
+  }
+  const current = listPieces(pieces, state).find(
+    (s) => s.unlocked && state.pieces[s.piece.id]?.completedAt === undefined,
+  );
+  const fresh: Candidate[] = [];
+  if (current) {
+    const unseen = info.universe
+      .filter((u) => u.params.piece === current.piece.id && state.cards[u.itemId] === undefined)
+      .sort((a, b) => Number(a.params.phrase) - Number(b.params.phrase));
+    for (const u of unseen.slice(0, APPLY_NEW_PHRASES_PER_SESSION)) {
+      fresh.push({ ...u, nodeId, isNew: true });
+    }
+  }
+  return { due: rankDue(dueAll, now), fresh };
+}
+
+/**
+ * A whole-piece run (MP): every phrase of `pieceId`, in order, as the Apply block of a session
+ * that has nothing else in it. The runner writes `piece.completed` when the last phrase is done.
+ * Throws when the piece is unknown or still locked, or the graph and registry cannot play pieces.
+ * The budget is generous because a run is not a timed session.
+ */
+export function composePieceRun(input: {
+  state: LearnerState;
+  graph: SkillGraph;
+  pieces: readonly Piece[];
+  pieceId: string;
+  now: number;
+  tzOffsetMin: number;
+  generators?: Partial<Record<GeneratorId, Generator>>;
+}): SessionPlan {
+  const { state, graph } = input;
+  const registry: Registry = input.generators ?? GENERATORS;
+  const node = graph.nodes.find((n) => n.strand === "APPLY" && nodeEnabled(n, graph, registry));
+  const gen = registry.pieceLine;
+  if (node === undefined || gen === undefined) {
+    throw new RangeError("pieces are not enabled: no APPLY node with a pieceLine generator");
+  }
+  const status = listPieces(input.pieces, state).find((s) => s.piece.id === input.pieceId);
+  if (status === undefined) throw new RangeError(`unknown piece ${input.pieceId}`);
+  if (!status.unlocked) {
+    throw new RangeError(`piece ${input.pieceId} is locked: ${status.missingNodeIds.join(", ")}`);
+  }
+  const seed = graph.generators.find((g) => g.id === "pieceLine")?.seedDurationSec ?? 25;
+  const estimatedSec = medianDurationSec(state, "pieceLine", seed);
+  const items: PlannedItem[] = gen
+    .listItems(node)
+    .filter((params) => params.piece === input.pieceId)
+    .sort((a, b) => Number(a.phrase) - Number(b.phrase))
+    .map((params) => {
+      const id = makeItemId(node.id, params);
+      return {
+        itemId: id,
+        nodeId: node.id,
+        generator: "pieceLine" as const,
+        params,
+        isNew: state.cards[id] === undefined,
+        estimatedSec,
+      };
+    });
+  const total = items.reduce((sum, i) => sum + i.estimatedSec, 0);
+  return {
+    key: keyOfDay(state, graph, input.now, input.tzOffsetMin),
+    mode: "instrument",
+    budgetSec: Math.max(60, Math.ceil(total * 2)),
+    estimatedSec: total,
+    orient: null,
+    blocks: { ear: [], read: [], apply: items },
+    introductions: [],
+    introductionKeyFamilies: {},
+    run: { pieceId: input.pieceId },
+    diagnostics: {
+      dueCount: 0,
+      newAllowance: 0,
+      reallocatedSec: 0,
+      notes: [`piece run: ${status.piece.title}`],
+    },
+  };
+}
+
+/**
  * Compose a session (spec 6, plan T2.8, T3.9). Pure and deterministic: the same input, including
  * the seed, always gives the same plan. Choices that are not obvious from the spec:
  *
@@ -273,7 +376,10 @@ function arrange(fill: Fill, rng: Rng, practice: boolean): PlannedItem[] {
  * - Away has no Orient, uses only Away-eligible generators, and splits the budget 60/40 between
  *   Ear and Read when Read has content, else all Ear.
  * - Generators come from `input.generators` (default `GENERATORS`).
- * - Apply is always null (M5).
+ * - Apply (MP) holds piece phrases: due ones, then up to `APPLY_NEW_PHRASES_PER_SESSION` new
+ *   phrases of the current piece (the first unlocked piece not yet played through, see
+ *   `listPieces`), when `input.pieces` and an enabled `pieceLine` generator are present. It is null
+ *   in Away mode, in practice, and when it has nothing.
  * - `extraNewItems` raises the new-item allowance for this plan only (Learn something new). The
  *   introduction and strand rules are unchanged.
  * - A practice plan cycles the started items, weakest first, until the block budget is spent.
@@ -299,7 +405,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const notes: string[] = [];
 
   const infos = new Map<string, NodeInfo>();
-  const strands: Strand[] = ["EAR", "READ"];
+  const strands: Strand[] = ["EAR", "READ", "APPLY"];
   for (const node of graph.nodes) {
     if (!strands.includes(node.strand)) continue;
     const info = buildInfo(node, graph, mode, registry);
@@ -431,16 +537,33 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const read = candidates("READ");
   const readHasContent = read.due.length > 0 || (read.fresh.length > 0 && newAllowance > 0);
 
-  const alloc = allocate({ budgetSec, mode, readHasContent, applyHasContent: false });
+  // Apply: piece phrases (MP). Due phrases first, then the next new phrases of the current piece.
+  const applyInfo =
+    input.pieces !== undefined &&
+    input.pieces.length > 0 &&
+    mode === "instrument" &&
+    !input.practice
+      ? [...infos.values()].find((i) => i.node.strand === "APPLY")
+      : undefined;
+  const apply = applyInfo
+    ? applyCandidates(applyInfo, input.pieces ?? [], state, input.now)
+    : { due: [], fresh: [] };
+  const applyHasContent =
+    apply.due.length > 0 || (apply.fresh.length > 0 && Math.round(newAllowance / 3) > 0);
+
+  const alloc = allocate({ budgetSec, mode, readHasContent, applyHasContent });
   notes.push(...alloc.notes);
 
   const readReserve = read.fresh.length > 0 ? Math.floor(newAllowance / 2) : 0;
+  // New piece phrases get a small share of the daily allowance too, or the many new reading items
+  // would always use it up first: about a third, and never more than the phrases on offer.
+  const applyReserve = Math.min(apply.fresh.length, Math.round(newAllowance / 3));
   const taken = new Map<string, number>();
   const earFill = fillBlock({
     blockSec: alloc.earSec,
     due: ear.due,
     fresh: ear.fresh,
-    allowance: newAllowance - readReserve,
+    allowance: newAllowance - readReserve - applyReserve,
     forceFirst: true,
     cycle: input.practice === true,
     infos,
@@ -452,9 +575,21 @@ export function composeSession(input: ComposeInput): SessionPlan {
     blockSec: alloc.readSec,
     due: read.due,
     fresh: read.fresh,
-    allowance: newAllowance - earFill.newCount,
+    allowance: newAllowance - applyReserve - earFill.newCount,
     forceFirst: false,
     cycle: input.practice === true,
+    infos,
+    taken,
+    state,
+    graph,
+  });
+
+  const applyFill = fillBlock({
+    blockSec: alloc.applySec,
+    due: apply.due,
+    fresh: apply.fresh,
+    allowance: newAllowance - earFill.newCount - readFill.newCount,
+    forceFirst: false,
     infos,
     taken,
     state,
@@ -492,7 +627,8 @@ export function composeSession(input: ComposeInput): SessionPlan {
           estimatedSec: alloc.orientSec,
           includeScale: alloc.orientSec >= SCALE_ORIENT_SEC,
         };
-  const estimatedSec = (orient?.estimatedSec ?? 0) + earFill.usedSec + readFill.usedSec;
+  const estimatedSec =
+    (orient?.estimatedSec ?? 0) + earFill.usedSec + readFill.usedSec + applyFill.usedSec;
 
   return {
     key,
@@ -500,12 +636,17 @@ export function composeSession(input: ComposeInput): SessionPlan {
     budgetSec,
     estimatedSec,
     orient,
-    blocks: { ear: earItems, read: readItems, apply: null },
+    // Phrases keep their order: due ones most overdue first, then new ones in the piece's order.
+    blocks: {
+      ear: earItems,
+      read: readItems,
+      apply: applyFill.items.length > 0 ? applyFill.items : null,
+    },
     introductions,
     introductionKeyFamilies,
     ...(input.practice ? { practice: true as const } : {}),
     diagnostics: {
-      dueCount: ear.due.length + read.due.length,
+      dueCount: ear.due.length + read.due.length + apply.due.length,
       newAllowance,
       reallocatedSec: alloc.reallocatedSec,
       notes,

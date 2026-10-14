@@ -14,11 +14,12 @@ import {
   type LearningEvent,
   type NoteEvent,
   type PitchFrame,
+  type ScoreSpec,
   type SkillGraph,
   type StimulusSpec,
 } from "@clavis/core";
 import { scoreAttempt } from "@clavis/scoring";
-import type { NotationPort } from "../notation/port";
+import type { NotationMark, NotationPort } from "../notation/port";
 import { SessionMachine, type SessionDeps, type SessionState } from "./machine";
 
 /* Test-only helpers for the session machine: a manual clock, fake player and a real core stack. */
@@ -87,6 +88,38 @@ export class FakePlayer {
   }
 }
 
+/** A notation port that records what it was asked to do, with a controllable `show` delay. */
+export class FakeNotation implements NotationPort {
+  readonly calls: string[] = [];
+  readonly shows: ScoreSpec[] = [];
+  readonly marks: NotationMark[][] = [];
+  preloadError: Error | undefined;
+  showDelayMs = 0;
+  constructor(private readonly clock: TestClock) {}
+  preload(): Promise<void> {
+    this.calls.push("preload");
+    return this.preloadError ? Promise.reject(this.preloadError) : Promise.resolve();
+  }
+  show(score: ScoreSpec): Promise<void> {
+    this.calls.push("show");
+    this.shows.push(score);
+    if (this.showDelayMs <= 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.clock.schedule(this.showDelayMs, resolve);
+    });
+  }
+  highlight(marks: NotationMark[]): void {
+    this.calls.push("highlight");
+    this.marks.push(marks);
+  }
+  hide(): void {
+    this.calls.push("hide");
+  }
+  count(name: string): number {
+    return this.calls.filter((c) => c === name).length;
+  }
+}
+
 export interface Harness {
   clock: TestClock;
   player: FakePlayer;
@@ -126,10 +159,12 @@ export interface HarnessOptions {
   notation?: NotationPort;
   /** Makes ids differ from another harness that used the same clock. */
   idSalt?: number;
+  /** A graph other than the shipped one, for example with `pieceLine` switched on. */
+  graph?: SkillGraph;
 }
 
 export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
-  const graph = loadGraph();
+  const graph = opts.graph ?? loadGraph();
   const clock = new TestClock();
   const store = new MemoryEventStore();
   const service = new LearnerStateService({
@@ -267,6 +302,14 @@ export function playCorrect(
         adapter.emitNote(noteAt(m, last, source));
       });
       break;
+    case "line": {
+      const beatMs = 60000 / play.tempoBpm;
+      play.midi.forEach((m, i) => {
+        last = startMs + (play.onsetsBeats[i] ?? 0) * beatMs;
+        adapter.emitNote(noteAt(m, last, source));
+      });
+      break;
+    }
     case "rhythm": {
       const beatMs = 60000 / play.tempoBpm;
       for (const b of play.onsetsBeats) {
