@@ -55,12 +55,30 @@
   const keepGoingHref = $derived(resolve("/session") + keepGoingSearch);
   const learnHref = $derived(resolve("/session") + learnSearch);
   const showKeyboard = $derived(
-    params?.mode === "away" && view.kind === "listening" && view.phase === "play",
+    params?.mode === "away" &&
+      view.kind === "listening" &&
+      (view.phase === "play" || view.practice),
   );
   const awayKeys = $derived(
     awayKeyboard(view.kind === "listening" ? view.item.inputRange : undefined),
   );
-  const showPad = $derived(showKeyboard && expected?.play?.kind === "rhythm");
+  const showPad = $derived(
+    showKeyboard &&
+      expected?.play?.kind === "rhythm" &&
+      view.kind === "listening" &&
+      !view.practice,
+  );
+  const practiceHelp = $derived(
+    view.kind === "listening" && view.practice
+      ? view.phase === "sing"
+        ? params?.mode === "away"
+          ? "Try the keyboard below, or hum along. Nothing is marked until you press Ready."
+          : "Hum or sing along to find it. Nothing is marked until you press Ready."
+        : params?.mode === "away"
+          ? "Try notes on the keyboard below. Nothing is marked until you press Ready."
+          : "Try notes on your piano. Nothing is marked until you press Ready."
+      : undefined,
+  );
 
   const orientCard = cardById(ORIENT_CARD_ID);
   /** Show the warm-up card in full the first time; read once so it stays up until Continue. */
@@ -70,6 +88,8 @@
   let pausedForCard = false;
   const introCard = $derived(view.kind === "intro" ? cardForNode(view.nodeId) : undefined);
   const itemCard = $derived("item" in view ? cardForNode(view.item.nodeId) : undefined);
+  /** One line saying what to do, from the skill card's first "What you'll do" step. */
+  const hint = $derived(itemCard?.howTo[0]);
 
   function playExample(spec: StimulusSpec): void {
     runtime?.playExample(spec);
@@ -361,6 +381,7 @@
     {:else if view.kind === "presenting"}
       <section class="card" data-testid="presenting">
         <p class="prompt" aria-live="polite">{view.prompt}</p>
+        {#if hint}<p class="hint" data-testid="hint">{hint}</p>{/if}
         <button type="button" class="secondary" data-testid="skip" onclick={() => machine?.skip()}>
           Skip
         </button>
@@ -397,15 +418,50 @@
             }}>Tap</button
           >
         {/if}
+        {#if hint}<p class="hint" data-testid="hint">{hint}</p>{/if}
+        {#if practiceHelp}<p class="hint" data-testid="practice-help">{practiceHelp}</p>{/if}
+        {#if view.canHear}
+          <div class="row" role="group" aria-label="Hear it again">
+            <button
+              type="button"
+              class="secondary"
+              data-testid="hear-again"
+              onclick={() => machine?.hear("full")}
+            >
+              {view.canHearNote ? "Hear it again" : "Replay"}
+            </button>
+            {#if view.canHearNote}
+              <button
+                type="button"
+                class="secondary"
+                data-testid="hear-note"
+                onclick={() => machine?.hear("note")}
+              >
+                Hear the note
+              </button>
+            {/if}
+          </div>
+        {/if}
         <div class="row">
-          <button
-            type="button"
-            class="primary"
-            data-testid="done"
-            onclick={() => machine?.answerDone()}
-          >
-            Done
-          </button>
+          {#if view.practice}
+            <button
+              type="button"
+              class="primary"
+              data-testid="ready"
+              onclick={() => machine?.ready()}
+            >
+              Ready, mark my answer
+            </button>
+          {:else}
+            <button
+              type="button"
+              class="primary"
+              data-testid="done"
+              onclick={() => machine?.answerDone()}
+            >
+              Done
+            </button>
+          {/if}
           <button
             type="button"
             class="secondary"
@@ -642,6 +698,12 @@
 
   .lead {
     font-size: 1.15rem;
+  }
+
+  .hint {
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    text-align: center;
   }
 
   .notation-slot {

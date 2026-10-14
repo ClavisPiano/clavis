@@ -56,6 +56,28 @@ test.describe("session runner", () => {
     expect(errors).toEqual([]);
   });
 
+  test("degree items: hint, hear again and a practice step before the answer", async ({ page }) => {
+    await page.goto("/session?input=fake&budget=90");
+    await page.getByTestId("start").click();
+    await page.getByTestId("continue").click(); // warm-up
+    await page.getByTestId("continue").click(); // intro card
+
+    await expect(page.getByTestId("session")).toHaveAttribute("data-state", "listening");
+    await expect(page.getByTestId("hint")).toContainText("Listen to the cadence");
+    await expect(page.getByTestId("practice-help")).toContainText("Nothing is marked");
+    await expect(page.getByTestId("done")).toHaveCount(0);
+
+    // Hearing it again plays it once more and returns to the practice step.
+    await page.getByTestId("hear-note").click();
+    await expect(page.getByTestId("session")).toHaveAttribute("data-state", "presenting");
+    await expect(page.getByTestId("hear-again")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("ready")).toBeVisible();
+
+    await page.getByTestId("ready").click();
+    await expect(page.getByTestId("done")).toBeVisible();
+    await expect(page.getByTestId("ready")).toHaveCount(0);
+  });
+
   test("Away mode: no orient block, sung and tapped answers", async ({ page }) => {
     const errors = collectErrors(page);
     await page.goto("/session?mode=away&input=fake&budget=60");

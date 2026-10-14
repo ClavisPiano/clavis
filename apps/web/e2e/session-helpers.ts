@@ -60,6 +60,14 @@ export async function runToSummary(page: Page): Promise<string[]> {
       else await page.waitForTimeout(100);
     } else if (state === "listening") {
       const phase = await page.evaluate(() => window.__clavisSession?.phase ?? "");
+      if (phase === "listening-practice") {
+        // Degree items open with a practice step: nothing is marked until Ready.
+        await page
+          .getByTestId("ready")
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
+        continue;
+      }
       answered.push(phase);
       await answerCurrentPhase(page);
       // Leave the phase before looking again (a phase ends once the answer is complete).

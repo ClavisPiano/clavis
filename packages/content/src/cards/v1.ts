@@ -42,7 +42,7 @@ export const CARDS_V1: unknown[] = [
     nodeIds: ["ear.degrees.major.135"],
     title: "Degrees 1, 3 and 5",
     body: [
-      "Degrees 1, 3 and 5 are the notes of the home chord. In C major they are C, E and G. They are the most stable notes in the key, so melodies tend to rest on them.",
+      "Degrees 1, 3 and 5 are the notes of the home chord. In C major they are C, E and G, in G major they are G, B and D. They are the most stable notes in the key, so melodies tend to rest on them.",
       "Each has its own feel after the cadence. 1 sounds settled and finished. 5 sounds strong and open, but not quite finished. 3 sits between them and gives the key its bright, major colour.",
       "The skill is recognising them by that feel, in any key, rather than working out letter names.",
     ],

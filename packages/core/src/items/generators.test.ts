@@ -208,6 +208,26 @@ describe("item generation", { timeout: 30000 }, () => {
     expect(b.presentation.mode).toBe("minor");
   });
 
+  it("sounds the cadence and the target in the key of the day (G major)", () => {
+    const g: Key = { tonic: "G", mode: "major" };
+    const node = nodeFor("ear.degrees.major.135");
+    for (const gen of ["degreeSing", "degreeId"] as const) {
+      for (const [degree, pc] of [
+        [1, 7],
+        [3, 11],
+        [5, 2],
+      ] as const) {
+        const inst = getGenerator(gen).generate(node, { degree }, ctx(5, { preferredKey: g }));
+        const target = inst.stimulus.events.find((e) => e.role === "target");
+        expect(inst.presentation.tonic).toBe("G");
+        expect((target?.midi[0] ?? -1) % 12).toBe(pc);
+        const lastChord = inst.stimulus.events.filter((e) => e.role === "cadence").at(-1);
+        // The final chord of the cadence is the tonic triad: G, B, D.
+        expect(new Set(lastChord?.midi.map((m) => m % 12))).toEqual(new Set([7, 11, 2]));
+      }
+    }
+  });
+
   it("stimuli start with a cadence in the presentation key (except rhythm)", () => {
     for (const { node, g, params } of ALL) {
       if (g === "rhythmEcho") continue;

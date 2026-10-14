@@ -91,6 +91,10 @@ test.describe("concept tips in feedback", () => {
     await page.getByTestId("continue").click(); // warm-up
     await page.getByTestId("continue").click(); // intro card
 
+    // Degree items open with a practice step; nothing is marked until Ready.
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-practice");
+    await page.getByTestId("ready").click();
+
     // Sing a fourth below the target: always another diatonic degree (1->5, 3->7, 5->2).
     await page.waitForFunction(() => window.__clavisSession?.phase === "listening-sing");
     await page.evaluate(() => {
