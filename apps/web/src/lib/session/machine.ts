@@ -192,6 +192,8 @@ export interface SessionSummary {
   notes?: string[];
   /** Placement only: the node states written by `placement.completed`, in plan order. */
   placed?: PlacedNode[];
+  /** A whole-piece run that was played to the end (MP): what `piece.completed` recorded. */
+  run?: { pieceId: string; phrases: number; correctPhrases: number };
 }
 
 export interface PlacedNode {
@@ -358,6 +360,7 @@ export class SessionMachine {
   #placementSkippedReading = false;
   /** Whole-piece run (MP): whether each phrase was played correctly, in order. */
   #runResults: boolean[] = [];
+  #runSummary: SessionSummary["run"];
 
   #startedWall = 0;
   #pausedMs = 0;
@@ -1521,6 +1524,7 @@ export class SessionMachine {
     if (run && reason === "completed" && this.#sessionId !== "") {
       const phrases = this.#items.length;
       if (phrases > 0 && this.#runResults.length === phrases) {
+        const correctPhrases = this.#runResults.filter(Boolean).length;
         await d.append([
           {
             ...this.#base(),
@@ -1528,9 +1532,10 @@ export class SessionMachine {
             sessionId: this.#sessionId,
             pieceId: run.pieceId,
             phrases,
-            correctPhrases: this.#runResults.filter(Boolean).length,
+            correctPhrases,
           },
         ]);
+        this.#runSummary = { pieceId: run.pieceId, phrases, correctPhrases };
       }
     }
     if (this.#sessionId !== "") {
@@ -1555,6 +1560,7 @@ export class SessionMachine {
         nodeChanges,
         ...(this.#notes.length > 0 ? { notes: [...this.#notes] } : {}),
         ...(placed ? { placed } : {}),
+        ...(this.#runSummary ? { run: this.#runSummary } : {}),
       },
     });
   }

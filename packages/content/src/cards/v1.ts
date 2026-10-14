@@ -6,6 +6,7 @@
  * learner's key of the day.
  */
 
+import { PIECE_CARDS_V1 } from "./pieces.js";
 import { READ_CARDS_V1 } from "./read.js";
 
 const MT = "https://www.musictheory.net/lessons";
@@ -255,4 +256,5 @@ export const CARDS_V1: unknown[] = [
     links: [{ label: "Triads (musictheory.net)", url: `${MT}/40` }],
   },
   ...READ_CARDS_V1,
+  ...PIECE_CARDS_V1,
 ];

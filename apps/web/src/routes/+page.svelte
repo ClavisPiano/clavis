@@ -13,6 +13,9 @@
     weekProgress,
   } from "../lib/home";
   import { nextSteps, startWouldBeEmpty } from "../lib/next-steps";
+  import PieceCard from "../lib/components/PieceCard.svelte";
+  import { appPieces } from "../lib/pieces";
+  import { pieceCard } from "../lib/piece-card";
   import { PLACEMENT_SKIPPED_META_KEY, shouldOfferPlacement } from "../lib/placement";
 
   const learner = useLearner();
@@ -76,6 +79,12 @@
       : undefined,
   );
   const afterSession = $derived(steps !== undefined && (steps.keepGoing || steps.learn));
+  /** Pieces (MP): the current tune, what is played through, and what unlocks the rest. */
+  const pieces = $derived(
+    snap && !firstRun && learner.status === "ready"
+      ? pieceCard(appPieces(), snap, learner.ctx.graph)
+      : undefined,
+  );
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
   const week = $derived(weekProgress(cells, settings.weeklyTargetDays));
 
@@ -185,6 +194,10 @@
     <span>{minutesLabel(settings.awayBudgetSec)}, no piano needed</span>
   </a>
 </div>
+
+{#if pieces}
+  <PieceCard card={pieces} />
+{/if}
 
 {#if snap && today && !firstRun}
   <section class="card" aria-labelledby="today-h">

@@ -16,6 +16,22 @@ describe("parseSessionParams", () => {
     });
   });
 
+  it("?run=piece.<id> plays that piece through, in instrument mode only", () => {
+    expect(parseSessionParams(q("run=piece.hot-cross-buns")).run).toBe("piece.hot-cross-buns");
+    expect(parseSessionParams(q("")).run).toBeUndefined();
+    expect(parseSessionParams(q("run=piece.hot-cross-buns&mode=away")).run).toBeUndefined();
+    for (const raw of [
+      "run=hot-cross-buns",
+      "run=piece.",
+      "run=piece.Hot_Cross",
+      "run=piece.a/../b",
+      "run=",
+      "run=read.bass.landmarks",
+    ]) {
+      expect(parseSessionParams(q(raw)).run, raw).toBeUndefined();
+    }
+  });
+
   it("?practice=1 sets practice, nothing else does", () => {
     expect(parseSessionParams(q("practice=1")).practice).toBe(true);
     expect(parseSessionParams(q("practice=1&mode=away"))).toMatchObject({

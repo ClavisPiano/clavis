@@ -12,5 +12,7 @@ export function hasNewMaterial(
 ): boolean {
   const { batch, ...rest } = input;
   const plan = composeSession({ ...rest, seed: 0, extraNewItems: batch });
-  return [...plan.blocks.ear, ...plan.blocks.read].some((i) => i.isNew);
+  return [...plan.blocks.ear, ...plan.blocks.read, ...(plan.blocks.apply ?? [])].some(
+    (i) => i.isNew,
+  );
 }

@@ -16,6 +16,7 @@
   import { createSessionRuntime, type SessionRuntime } from "../../lib/session/runtime";
   import { followUpSearch } from "../../lib/next-steps";
   import { minutesLabel } from "../../lib/home";
+  import { appPieces } from "../../lib/pieces";
 
   type Phase = "loading" | "failed" | "ready";
 
@@ -39,6 +40,12 @@
   const timeLeft = $derived(
     machine && running ? Math.max(0, Math.round(machine.budgetSec - elapsed)) : undefined,
   );
+  /** The piece a whole-piece run just finished (MP), for the summary. */
+  const runResult = $derived.by(() => {
+    if (view.kind !== "summary" || !view.summary.run) return undefined;
+    const run = view.summary.run;
+    return { ...run, title: appPieces().find((x) => x.id === run.pieceId)?.title ?? "the piece" };
+  });
   /** After the session, or on the Nothing-due screen: what else to offer today. */
   const steps = $derived(
     runtime && view.kind === "summary"
@@ -664,6 +671,26 @@
             <dd data-testid="summary-time">{clock(view.summary.elapsedSec)}</dd>
           </div>
         </dl>
+        {#if runResult}
+          <div
+            class="moment"
+            data-testid="piece-moment"
+            data-complete={runResult.correctPhrases === runResult.phrases}
+          >
+            {#if runResult.correctPhrases === runResult.phrases}
+              <h2>You played {runResult.title} through</h2>
+              <p>Every phrase, start to finish.</p>
+            {:else}
+              <h2>
+                {runResult.title}: {runResult.correctPhrases} of {runResult.phrases} phrases right
+              </h2>
+              <p>
+                The phrases you missed come back in your next sessions. Play it through again when
+                you are ready.
+              </p>
+            {/if}
+          </div>
+        {/if}
         {#if view.summary.nodeChanges.length > 0}
           <h2>Progress</h2>
           <ul class="issues" data-testid="node-changes">
@@ -958,6 +985,26 @@
   .finish {
     margin: 0;
     text-align: center;
+  }
+
+  .moment {
+    padding: var(--space-3) var(--space-4);
+    margin: var(--space-3) 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface));
+  }
+
+  .moment[data-complete="false"] {
+    background: var(--color-surface);
+  }
+
+  .moment h2 {
+    margin: 0 0 var(--space-1);
+  }
+
+  .moment p {
+    margin: 0;
   }
 
   .confirm-actions {
