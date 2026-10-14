@@ -110,7 +110,8 @@
       "itemGenerators": ["chordQuality"],
       "params": {
         "qualities": ["major", "minor"],
-        "laterQualities": ["diminished"]
+        "laterQualities": ["diminished"],
+        "roots": [1, 2, 3, 4, 5, 6]
       },
       "mastery": {
         "minAccuracy": 0.9,
@@ -725,14 +726,14 @@
     },
     {
       "id": "bassMotion",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 15,
       "awayEligible": true,
       "requires": ["keys"]
     },
     {
       "id": "chordQuality",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 8,
       "awayEligible": true,
       "requires": ["keys"]

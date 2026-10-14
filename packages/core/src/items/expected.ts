@@ -50,11 +50,39 @@ export const RhythmTargetSchema = z.strictObject({
   pitch: midi.optional(),
 });
 
+export const ChoiceOptionSchema = z.strictObject({
+  /** Stable id, recorded in errors: "major", "minor". */
+  id: z.string().min(1),
+  /** Button text: "Major". */
+  label: z.string().min(1),
+});
+export type ChoiceOption = z.infer<typeof ChoiceOptionSchema>;
+
+/**
+ * Pick one option (R21). For answers that are not a pitch, such as the quality of a chord, so
+ * there is nothing to play or sing. Answered with on-screen buttons in both modes.
+ */
+export const ChoiceTargetSchema = z
+  .strictObject({
+    kind: z.literal("choice"),
+    options: z.array(ChoiceOptionSchema).min(2).max(6),
+    /** The `id` of the right option. */
+    correct: z.string().min(1),
+  })
+  .refine((c) => new Set(c.options.map((o) => o.id)).size === c.options.length, {
+    message: "choice option ids must be unique",
+  })
+  .refine((c) => c.options.some((o) => o.id === c.correct), {
+    message: "correct must be one of the options",
+  });
+export type ChoiceTarget = z.infer<typeof ChoiceTargetSchema>;
+
 export const PlayTargetSchema = z.discriminatedUnion("kind", [
   PitchClassTargetSchema,
   ExactPitchTargetSchema,
   SequenceTargetSchema,
   RhythmTargetSchema,
+  ChoiceTargetSchema,
 ]);
 export type PlayTarget = z.infer<typeof PlayTargetSchema>;
 

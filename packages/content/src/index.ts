@@ -34,9 +34,10 @@ export function parseGraph(raw: unknown): SkillGraph {
  * snapshots are keyed by it (R8), so a stale version would silently reuse
  * snapshots computed against a different graph.
  *
- * The four ear generators (degreeSing, degreeId, cellEcho, rhythmEcho, T2.6) and the two reading
- * generators (bassNoteRead, rhythmRead, T3.15) and trebleNoteRead (TP.2) are implemented in
- * core/items; the rest ship with `implemented: false`.
+ * The four ear generators (degreeSing, degreeId, cellEcho, rhythmEcho, T2.6), the two reading
+ * generators (bassNoteRead, rhythmRead, T3.15), trebleNoteRead (TP.2) and the two harmonic ear
+ * generators (bassMotion, chordQuality, TP.1) are implemented in core/items; the rest ship with
+ * `implemented: false`.
  */
 export function loadGraph(): SkillGraph {
   return parseGraph(v1);

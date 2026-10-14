@@ -8,6 +8,7 @@ import type {
   PitchFrame,
   PlayTarget,
 } from "@clavis/core";
+import { scoreChoice, type ChoiceAnswer } from "./choice.js";
 import { scoreRhythm } from "./rhythm.js";
 import { scoreSequence } from "./sequence.js";
 import { scoreExactPitch, scorePitchClass } from "./single.js";
@@ -22,6 +23,8 @@ export interface ScoreInput {
   /** Same clock as `onsetMs` and `atMs`. */
   stimulusEndMs: number;
   source: InputSource;
+  /** A picked option, for choice items (R21). Absent when nothing was picked. */
+  choice?: ChoiceAnswer | undefined;
   /** Restrict scoring to one part. Default "both" (whatever the item expects). */
   part?: "sing" | "play" | "both";
 }
@@ -58,6 +61,14 @@ function scorePlay(play: PlayTarget, input: ScoreInput): PartResult {
         midi: play.midi,
         octaveAgnostic: play.octaveAgnostic,
         degreeLabels: play.degreeLabels,
+      });
+    case "choice":
+      return scoreChoice({
+        options: play.options,
+        correct: play.correct,
+        answer: input.choice,
+        stimulusEndMs: input.stimulusEndMs,
+        responseWindowMs: input.expected.responseWindowMs,
       });
     case "rhythm":
       return scoreRhythm({

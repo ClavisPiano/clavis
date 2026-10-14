@@ -49,6 +49,20 @@ const NODES: SkillNode[] = [
     itemGenerators: ["rhythmEcho"],
     params: { bars: [1, 2], meter: "4/4" },
   },
+  {
+    ...base,
+    id: "ear.quality.triad",
+    itemGenerators: ["chordQuality"],
+    params: { qualities: ["major", "minor"], roots: [1, 2, 3, 4, 5, 6] },
+    targetLatencyMs: 2000,
+  },
+  {
+    ...base,
+    id: "ear.bass.I-IV-V-vi",
+    itemGenerators: ["bassMotion"],
+    params: { mode: "major", chords: ["I", "IV", "V", "vi"] },
+    targetLatencyMs: 4000,
+  },
 ];
 const nodeFor = (id: string): SkillNode => {
   const n = NODES.find((x) => x.id === id);
@@ -86,8 +100,10 @@ describe("registry and universes", () => {
   it("registers the ear and reading generators", () => {
     expect(Object.keys(GENERATORS).sort()).toEqual(
       [
+        "bassMotion",
         "bassNoteRead",
         "cellEcho",
+        "chordQuality",
         "degreeId",
         "degreeSing",
         "rhythmEcho",

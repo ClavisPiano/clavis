@@ -54,6 +54,9 @@ export function checkPlayDone(
       if (!last || sorted.length < target.onsetsBeats.length) return NOT_DONE;
       return quiet(last.onsetMs, nowMs, 60000 / target.tempoBpm);
     }
+    case "choice":
+      // Ended by the learner picking a button, or by the response window.
+      return NOT_DONE;
   }
 }
 
