@@ -67,6 +67,11 @@ test.describe("session runner", () => {
     // The notes of the key are named, so the key is not a second puzzle.
     await expect(page.getByTestId("key-notes")).toContainText("C major");
     await expect(page.getByTestId("key-notes")).toContainText(/1\s*C\s*3\s*E\s*5\s*G/);
+    // A read-only keyboard marks the home note and chord, but not the target.
+    const guide = page.getByTestId("guide-keyboard");
+    await expect(guide).toBeVisible();
+    await expect(guide.locator('[data-mark="tonic"]').first()).toBeVisible();
+    await expect(guide.locator('[data-mark="target"]')).toHaveCount(0);
     await expect(page.getByTestId("practice-help")).toContainText("Nothing is marked");
     await expect(page.getByTestId("done")).toHaveCount(0);
 

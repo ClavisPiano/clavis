@@ -72,9 +72,41 @@
   const practiceHelp = $derived(
     view.kind === "listening" && view.practice
       ? params?.mode === "away"
-        ? "Try notes on the keyboard below. Nothing is marked until you press Ready."
-        : "Try notes on your piano. Nothing is marked until you press Ready."
+        ? "Work it out on the keyboard below. Nothing is marked until you press Ready."
+        : "Work it out on your own piano; the app is not listening yet. Nothing is marked until you press Ready."
       : undefined,
+  );
+
+  /** The guide keyboard: home note and chord in the question, the answer after it. */
+  const guideItem = $derived(
+    view.kind === "presenting" || view.kind === "listening" || view.kind === "feedback"
+      ? view.item
+      : undefined,
+  );
+  const guideMarks = $derived.by(() => {
+    const guide = guideItem?.guide;
+    if (!guide) return undefined;
+    const marks: Record<number, "tonic" | "chord" | "target" | "right" | "wrong"> = {};
+    const answer = view.kind === "feedback" ? view.answerKeys : undefined;
+    for (let midi = guide.low; midi <= guide.high; midi++) {
+      const pc = midi % 12;
+      if (answer) {
+        if (answer.targetPcs.includes(pc)) marks[midi] = "target";
+      } else if (pc === guide.tonicPc) {
+        marks[midi] = "tonic";
+      } else if (guide.chordPcs.includes(pc)) {
+        marks[midi] = "chord";
+      }
+    }
+    for (const midi of answer?.played ?? []) {
+      marks[midi] = answer?.targetPcs.includes(midi % 12) ? "right" : "wrong";
+    }
+    return marks;
+  });
+  const guideNote = $derived(
+    view.kind === "feedback"
+      ? "Green: the note you were asked for. Red: a note you played that was not it."
+      : "Gold: the home note, 1. Pale: the rest of the home chord.",
   );
 
   const orientCard = cardById(ORIENT_CARD_ID);
@@ -281,7 +313,7 @@
       </header>
     {/if}
 
-    {#if "item" in view && view.item.display}
+    {#if "item" in view && (view.item.display !== undefined || view.item.showStaff === true)}
       <div class="notation-slot" data-testid="notation-slot" data-block={view.item.block}>
         {#if runtime}
           <NotationView port={runtime.notation} label="Music notation to read" />
@@ -656,10 +688,25 @@
           high={awayKeys.high}
           focusMidi={awayKeys.focus}
           labels="c-only"
+          marks={guideMarks ?? {}}
           playSound={(midi: number) => runtime?.tone(midi)}
           onpress={(midi: number, ts: number) => runtime?.tap?.press(midi, ts)}
           onrelease={(midi: number, ts: number) => runtime?.tap?.release(midi, ts)}
         />
+      </div>
+    {/if}
+
+    {#if !showKeyboard && guideItem?.guide && guideMarks}
+      <div class="keys" data-testid="guide-keyboard">
+        <Keyboard
+          low={guideItem.guide.low}
+          high={guideItem.guide.high}
+          focusMidi={guideItem.guide.focus}
+          labels="c-only"
+          marks={guideMarks}
+          readonly
+        />
+        <p class="hint" data-testid="guide-note">{guideNote}</p>
       </div>
     {/if}
 

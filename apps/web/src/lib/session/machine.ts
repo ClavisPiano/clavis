@@ -34,7 +34,14 @@ import { combineParts, type ScoreInput, type ScoreResult } from "@clavis/scoring
 import { checkPlayDone, checkSingDone, type DoneCheck } from "./completion";
 import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
 import type { NotationMark, NotationPort } from "../notation/port";
-import { answerLine, keyNotes, type KeyNotes } from "./key-notes";
+import {
+  answerLine,
+  keyboardGuide,
+  keyNotes,
+  targetPitchClasses,
+  type KeyboardGuide,
+  type KeyNotes,
+} from "./key-notes";
 import { orientSpec } from "./orient";
 import { buildReplaySpec } from "./replay";
 import { noteNamer } from "./spelling";
@@ -154,6 +161,10 @@ export interface ItemView {
   inputRange?: VoiceRange;
   /** Degree items in the early stages: the notes it may ask for, spelled in the key. */
   keyNotes?: KeyNotes;
+  /** Early stages: a keyboard marking the home note and chord. */
+  guide?: KeyboardGuide;
+  /** Early stages: the rhythm is drawn on a staff while it sounds. */
+  showStaff?: true;
 }
 
 export interface NodeChange {
@@ -207,7 +218,14 @@ export type SessionState =
       /** The target note alone can be heard again (the stimulus also has a cadence). */
       canHearNote: boolean;
     }
-  | { kind: "feedback"; item: ItemView; feedback: FeedbackView; canReplay: boolean }
+  | {
+      kind: "feedback";
+      item: ItemView;
+      feedback: FeedbackView;
+      canReplay: boolean;
+      /** For the guide keyboard: the pitch classes asked for and the notes the learner played. */
+      answerKeys?: { targetPcs: number[]; played: number[] };
+    }
   | { kind: "paused"; resumeTo: SessionState["kind"] }
   | { kind: "summary"; summary: SessionSummary }
   /** The plan has no items (nothing due, nothing new). Nothing was written. */
@@ -262,6 +280,11 @@ const NODE_RANK_ORDER: readonly NodeState[] = [
   "mastered",
 ];
 
+/** Before the skill is fluent: the stage in which hints, guides and practice are offered. */
+function isEarly(stage: NodeState): boolean {
+  return NODE_RANK_ORDER.indexOf(stage) < NODE_RANK_ORDER.indexOf("fluent");
+}
+
 /** The stimulus with only its target notes, moved to the start. Whole when it has none. */
 export function targetOnly(spec: StimulusSpec): StimulusSpec {
   const targets = spec.events.filter((e) => e.role === "target");
@@ -302,6 +325,8 @@ export class SessionMachine {
   #introFamilies = new Map<string, KeyFamily>();
   #notes: string[] = [];
   #notationShown = false;
+  /** The notation engine loaded, so staffs beside the audio can be drawn. */
+  #staffReady = false;
   #nodesBefore: Record<string, NodeState> = {};
   #priorAttempts: Record<string, number> = {};
   #sessionAttempts: Record<string, number> = {};
@@ -834,13 +859,24 @@ export class SessionMachine {
    */
   async #prepareNotation(): Promise<void> {
     const reading = this.#items.filter(({ planned }) => this.#needsNotation(planned));
-    if (reading.length === 0) return;
     const port = this.#d.notation;
+    if (reading.length === 0) {
+      // Rhythm echo draws a staff beside the audio in the early stages. If notation cannot load
+      // the items still play, just without it.
+      if (port && this.#items.some(({ planned }) => planned.generator === "rhythmEcho")) {
+        this.#staffReady = await port.preload().then(
+          () => true,
+          () => false,
+        );
+      }
+      return;
+    }
     let ready = false;
     if (port) {
       try {
         await port.preload();
         ready = true;
+        this.#staffReady = true;
       } catch {
         ready = false;
       }
@@ -974,10 +1010,9 @@ export class SessionMachine {
     const node = this.#d.graph.nodes.find((n) => n.id === cur.planned.nodeId);
     const stage = this.#d.getState().nodes[cur.planned.nodeId]?.state ?? "locked";
     // The early stages name the notes of the key, so the key is not a second puzzle.
-    const notes =
-      NODE_RANK_ORDER.indexOf(stage) < NODE_RANK_ORDER.indexOf("fluent")
-        ? keyNotes(cur.instance, node)
-        : undefined;
+    const early = isEarly(stage);
+    const notes = early ? keyNotes(cur.instance, node) : undefined;
+    const guide = early ? keyboardGuide(cur.instance) : undefined;
     return {
       position: cur.index + 1,
       // Placement stops early, so it has no fixed total.
@@ -990,6 +1025,8 @@ export class SessionMachine {
       ...(cur.instance.display ? { display: cur.instance.display } : {}),
       ...(cur.instance.inputRange ? { inputRange: cur.instance.inputRange } : {}),
       ...(notes ? { keyNotes: notes } : {}),
+      ...(guide ? { guide } : {}),
+      ...(this.#staffFor(cur) ? { showStaff: true as const } : {}),
     };
   }
 
@@ -1018,7 +1055,7 @@ export class SessionMachine {
     this.#cancelTimers();
     d.input.pause();
     this.#singInput?.pause();
-    const display = cur.instance.display;
+    const display = cur.instance.display ?? this.#staffFor(cur);
     if (display && d.notation) {
       this.#presentNotation(cur, display, d.notation);
       return;
@@ -1050,7 +1087,7 @@ export class SessionMachine {
     this.#setState({
       kind: "presenting",
       item: this.#itemView(cur),
-      prompt: this.#promptFor(cur, cur.phases[0] ?? "play"),
+      prompt: cur.instance.display ? this.#promptFor(cur, cur.phases[0] ?? "play") : "Listen",
     });
     void this.#enqueue(async () => {
       this.#notationShown = true;
@@ -1102,7 +1139,15 @@ export class SessionMachine {
     const g = cur.instance.generator;
     if (g !== "degreeSing" && g !== "degreeId") return false;
     const state = d.getState().nodes[cur.planned.nodeId]?.state ?? "locked";
-    return NODE_RANK_ORDER.indexOf(state) < NODE_RANK_ORDER.indexOf("fluent");
+    return isEarly(state);
+  }
+
+  /** The staff drawn beside the audio (not a reading item): early stages, once notation loaded. */
+  #staffFor(cur: Current): ScoreSpec | undefined {
+    const staff = cur.instance.staff;
+    if (!staff || !this.#staffReady || !this.#d.notation) return undefined;
+    const stage = this.#d.getState().nodes[cur.planned.nodeId]?.state ?? "locked";
+    return isEarly(stage) ? staff : undefined;
   }
 
   #listeningState(cur: Current, index: number, practice: boolean): SessionState {
@@ -1343,6 +1388,14 @@ export class SessionMachine {
         item: this.#itemView(cur),
         feedback,
         canReplay: !feedback.autoAdvance,
+        ...(this.#itemView(cur).guide
+          ? {
+              answerKeys: {
+                targetPcs: targetPitchClasses(cur.instance),
+                played: cur.playNotes.map((n) => n.pitch).slice(-8),
+              },
+            }
+          : {}),
       };
       if (this.#state.kind === "paused") {
         // Backgrounded while saving: show the feedback when the learner comes back.

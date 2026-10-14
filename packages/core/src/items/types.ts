@@ -42,6 +42,11 @@ export interface ItemInstance {
    * events; `presentation` still carries the replay params (R2).
    */
   display?: ScoreSpec;
+  /**
+   * A score to draw beside the audio while the skill is new (the audio is still the question).
+   * Unlike `display` it does not make the item a reading item: the stimulus plays as usual.
+   */
+  staff?: ScoreSpec;
   /** Playable range for the on-screen keyboard or MIDI input, when it differs from the default. */
   inputRange?: VoiceRange;
 }
