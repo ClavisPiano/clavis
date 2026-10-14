@@ -126,9 +126,12 @@ export function issueLines(
 
 /**
  * Fading (spec 8.3). `attemptIndex` is how many attempts this node has had before this one.
- * learning: every attempt. fluent: every second attempt. mastered: only when something was wrong.
+ * learning: every attempt. fluent: every second correct attempt. mastered: only when something was
+ * wrong. A wrong answer always gets the detail.
  */
 export function showDetail(state: NodeState, attemptIndex: number, correct: boolean): boolean {
+  // A wrong answer always says what was wrong; fading only thins out the praise.
+  if (!correct) return true;
   switch (state) {
     case "fluent":
       return attemptIndex % 2 === 0;
@@ -153,6 +156,8 @@ export interface FeedbackView {
    * overall and still carry an issue (a wrong sung note before a right played one).
    */
   tip?: string;
+  /** After a miss: the right answer in words, such as "The note was 3, which is B in G major." */
+  answer?: string;
 }
 
 export function buildFeedback(opts: {
@@ -164,6 +169,8 @@ export function buildFeedback(opts: {
   mode?: TipMode;
   /** Reading items: names the notes in pitch errors. */
   names?: NoteNamer;
+  /** The right answer in words, shown after a miss. */
+  answer?: string;
 }): FeedbackView {
   const detailed = showDetail(opts.nodeState, opts.attemptIndex, opts.correct);
   const tip =
@@ -176,6 +183,7 @@ export function buildFeedback(opts: {
     lines: detailed ? issueLines(opts.errors, MAX_ISSUES, opts.names) : [],
     autoAdvance: !detailed && opts.correct,
     ...(tip ? { tip: tip.text } : {}),
+    ...(!opts.correct && opts.answer !== undefined ? { answer: opts.answer } : {}),
   };
 }
 

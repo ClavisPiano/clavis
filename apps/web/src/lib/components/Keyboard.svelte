@@ -15,6 +15,10 @@
     /** Highest MIDI note. Widened so the keyboard spans at least two octaves. Default C5. */
     high?: number;
     highlight?: readonly number[];
+    /** Coloured keys by MIDI note, for a guide: the home note, the home chord, the answer. */
+    marks?: Readonly<Record<number, "tonic" | "chord" | "target" | "right" | "wrong">>;
+    /** Display only: the keys do nothing when pressed. */
+    readonly?: boolean;
     labels?: "none" | "c-only" | "all";
     disabled?: boolean;
     /** Scrolled into view (centered) whenever it changes. */
@@ -29,6 +33,8 @@
     low = DEFAULT_LOW,
     high = DEFAULT_HIGH,
     highlight = [],
+    marks = {},
+    readonly = false,
     labels = "c-only",
     disabled = false,
     focusMidi,
@@ -54,7 +60,7 @@
   }
 
   function down(event: PointerEvent, midi: number): void {
-    if (disabled || active.has(event.pointerId)) return;
+    if (disabled || readonly || active.has(event.pointerId)) return;
     event.preventDefault();
     try {
       (event.currentTarget as Element).setPointerCapture(event.pointerId);
@@ -100,7 +106,14 @@
   });
 </script>
 
-<div class="keyboard" class:disabled bind:this={scroller} role="group" aria-label="Piano keyboard">
+<div
+  class="keyboard"
+  class:disabled
+  class:readonly
+  bind:this={scroller}
+  role="group"
+  aria-label={readonly ? "Piano keyboard guide" : "Piano keyboard"}
+>
   <div class="keys">
     {#each slots as slot (slot.white)}
       <div class="slot">
@@ -109,6 +122,7 @@
           class="key white"
           class:pressed={(pressedCount.get(slot.white) ?? 0) > 0}
           class:highlight={highlighted.has(slot.white)}
+          data-mark={marks[slot.white]}
           data-midi={slot.white}
           aria-label={spokenNoteName(slot.white)}
           aria-pressed={(pressedCount.get(slot.white) ?? 0) > 0}
@@ -130,6 +144,7 @@
             class="key black"
             class:pressed={(pressedCount.get(black) ?? 0) > 0}
             class:highlight={highlighted.has(black)}
+            data-mark={marks[black]}
             data-midi={black}
             aria-label={spokenNoteName(black)}
             aria-pressed={(pressedCount.get(black) ?? 0) > 0}
@@ -221,6 +236,35 @@
   }
   .black.pressed {
     background: #1f6fd1;
+  }
+  .readonly .key {
+    cursor: default;
+  }
+  .white[data-mark="tonic"] {
+    background: #f6b73c;
+  }
+  .black[data-mark="tonic"] {
+    background: #c07d00;
+  }
+  .white[data-mark="chord"] {
+    background: #ffe9a8;
+  }
+  .black[data-mark="chord"] {
+    background: #b8860b;
+  }
+  .white[data-mark="target"],
+  .white[data-mark="right"] {
+    background: #8fd9a0;
+  }
+  .black[data-mark="target"],
+  .black[data-mark="right"] {
+    background: #1d8a3b;
+  }
+  .white[data-mark="wrong"] {
+    background: #f19999;
+  }
+  .black[data-mark="wrong"] {
+    background: #b52a2a;
   }
   .disabled .key {
     opacity: 0.5;

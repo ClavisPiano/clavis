@@ -30,9 +30,9 @@ test.describe("session runner", () => {
     await expect(page.getByTestId("key")).toContainText("C major");
 
     const answered = await runToSummary(page);
-    // Degree items are sung and then played at the instrument.
-    expect(answered).toContain("listening-sing");
+    // Degree items are played at the instrument; nothing is sung.
     expect(answered).toContain("listening-play");
+    expect(answered).not.toContain("listening-sing");
 
     await expect(page.getByTestId("summary")).toBeVisible();
     await expect(page.getByTestId("summary-items")).toHaveText("3");
@@ -56,7 +56,37 @@ test.describe("session runner", () => {
     expect(errors).toEqual([]);
   });
 
-  test("Away mode: no orient block, sung and tapped answers", async ({ page }) => {
+  test("degree items: hint, hear again and a practice step before the answer", async ({ page }) => {
+    await page.goto("/session?input=fake&budget=90");
+    await page.getByTestId("start").click();
+    await page.getByTestId("continue").click(); // warm-up
+    await page.getByTestId("continue").click(); // intro card
+
+    await expect(page.getByTestId("session")).toHaveAttribute("data-state", "listening");
+    await expect(page.getByTestId("hint")).toContainText("Listen to the cadence");
+    // The notes of the key are named, so the key is not a second puzzle.
+    await expect(page.getByTestId("key-notes")).toContainText("C major");
+    await expect(page.getByTestId("key-notes")).toContainText(/1\s*C\s*3\s*E\s*5\s*G/);
+    // A read-only keyboard marks the home note and chord, but not the target.
+    const guide = page.getByTestId("guide-keyboard");
+    await expect(guide).toBeVisible();
+    await expect(guide.locator('[data-mark="tonic"]').first()).toBeVisible();
+    await expect(guide.locator('[data-mark="target"]')).toHaveCount(0);
+    await expect(page.getByTestId("practice-help")).toContainText("Nothing is marked");
+    await expect(page.getByTestId("done")).toHaveCount(0);
+
+    // Hearing it again plays it once more and returns to the practice step.
+    await page.getByTestId("hear-note").click();
+    await expect(page.getByTestId("session")).toHaveAttribute("data-state", "presenting");
+    await expect(page.getByTestId("hear-again")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("ready")).toBeVisible();
+
+    await page.getByTestId("ready").click();
+    await expect(page.getByTestId("done")).toBeVisible();
+    await expect(page.getByTestId("ready")).toHaveCount(0);
+  });
+
+  test("Away mode: no orient block, tapped answers", async ({ page }) => {
     const errors = collectErrors(page);
     await page.goto("/session?mode=away&input=fake&budget=60");
     await page.getByTestId("start").click();

@@ -14,16 +14,7 @@ export async function answerCurrentPhase(page: Page): Promise<void> {
     if (!session || !fake || !expected) return;
     // Answers start after the gate (stimulus end plus tail, or phase start plus tail).
     const base = fake.nowMs() + 300;
-    if (session.phase === "listening-sing" && expected.sing) {
-      const sing = expected.sing;
-      const midis = sing.kind === "sungPitch" ? [sing.targetMidi] : sing.midi;
-      midis.forEach((midi, i) => {
-        const hz = 440 * 2 ** ((midi - 69) / 12);
-        for (let t = 0; t <= 300; t += 20) {
-          fake.emitFrame({ hz, confidence: 1, atMs: base + i * 400 + t });
-        }
-      });
-    } else if (session.phase === "listening-play" && expected.play) {
+    if (session.phase === "listening-play" && expected.play) {
       const play = expected.play;
       if (play.kind === "choice") {
         // Choice items are answered with buttons, not notes.
@@ -63,6 +54,14 @@ export async function runToSummary(page: Page): Promise<string[]> {
       else await page.waitForTimeout(100);
     } else if (state === "listening") {
       const phase = await page.evaluate(() => window.__clavisSession?.phase ?? "");
+      if (phase === "listening-practice") {
+        // Degree items open with a practice step: nothing is marked until Ready.
+        await page
+          .getByTestId("ready")
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
+        continue;
+      }
       answered.push(phase);
       await answerCurrentPhase(page);
       // Leave the phase before looking again (a phase ends once the answer is complete).

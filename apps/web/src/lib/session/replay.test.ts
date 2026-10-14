@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { REPLAY_GAP_SEC, attemptEvents, buildReplaySpec } from "./replay";
 
 const instance = {
+  presentation: {},
   stimulus: {
     tempoBpm: 90,
     events: [
@@ -33,6 +34,28 @@ describe("buildReplaySpec", () => {
     expect(b?.atSec).toBeCloseTo(1.3 + REPLAY_GAP_SEC + 0.5, 5);
     expect(b?.midi).toEqual([67]);
     expect(spec.events.some((e) => e.role === "cadence")).toBe(false);
+  });
+
+  it("leads with the tonic, in the target's register, when the item has one", () => {
+    const withTonic = {
+      ...instance,
+      presentation: { tonicMidi: 60 },
+    } as unknown as ItemInstance;
+    const spec = buildReplaySpec(withTonic, { notes: [note(65, 0)], frames: [] });
+    const [tonic, target, mine] = spec.events;
+    expect(tonic).toMatchObject({ atSec: 0, midi: [60] });
+    expect(target).toMatchObject({ midi: [64], role: "target" });
+    expect(target?.atSec).toBeGreaterThan(tonic?.durationSec ?? 0);
+    expect(mine?.midi).toEqual([65]);
+    expect(mine?.atSec).toBeGreaterThan((target?.atSec ?? 0) + 1.3);
+  });
+
+  it("does not repeat the tonic when the target is the tonic", () => {
+    const one = {
+      presentation: { tonicMidi: 64 },
+      stimulus: instance.stimulus,
+    } as unknown as ItemInstance;
+    expect(buildReplaySpec(one, { notes: [], frames: [] }).events).toHaveLength(1);
   });
 
   it("falls back to the reference alone when nothing was played or sung", () => {

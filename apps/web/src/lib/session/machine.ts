@@ -35,6 +35,14 @@ import { combineParts, type ScoreInput, type ScoreResult } from "@clavis/scoring
 import { checkPlayDone, checkSingDone, type DoneCheck } from "./completion";
 import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
 import type { NotationMark, NotationPort } from "../notation/port";
+import {
+  answerLine,
+  keyboardGuide,
+  keyNotes,
+  targetPitchClasses,
+  type KeyboardGuide,
+  type KeyNotes,
+} from "./key-notes";
 import { orientSpec } from "./orient";
 import { buildReplaySpec } from "./replay";
 import { noteNamer } from "./spelling";
@@ -132,6 +140,11 @@ export interface SessionDeps {
    * from the plan and the summary says so.
    */
   notation?: NotationPort;
+  /**
+   * Offer a practice step before the answer for scale degree items the learner has not yet made
+   * fluent: nothing is scored until `ready()`. Default false.
+   */
+  practiceStep?: boolean;
 }
 
 export interface ItemView {
@@ -147,6 +160,12 @@ export interface ItemView {
   display?: ScoreSpec;
   /** Playable range for the on-screen keyboard, when the item sets one. */
   inputRange?: VoiceRange;
+  /** Degree items in the early stages: the notes it may ask for, spelled in the key. */
+  keyNotes?: KeyNotes;
+  /** Early stages: a keyboard marking the home note and chord. */
+  guide?: KeyboardGuide;
+  /** Early stages: the rhythm is drawn on a staff while it sounds. */
+  showStaff?: true;
   /** Buttons to answer with, for choice items (R21). They replace the keyboard. */
   choices?: ChoiceOption[];
 }
@@ -195,8 +214,21 @@ export type SessionState =
       phaseIndex: number;
       phaseCount: number;
       prompt: string;
+      /** Practice step: input is not scored until `ready()`, and the response window has not started. */
+      practice: boolean;
+      /** The stimulus can be heard again (not for reading items). */
+      canHear: boolean;
+      /** The target note alone can be heard again (the stimulus also has a cadence). */
+      canHearNote: boolean;
     }
-  | { kind: "feedback"; item: ItemView; feedback: FeedbackView; canReplay: boolean }
+  | {
+      kind: "feedback";
+      item: ItemView;
+      feedback: FeedbackView;
+      canReplay: boolean;
+      /** For the guide keyboard: the pitch classes asked for and the notes the learner played. */
+      answerKeys?: { targetPcs: number[]; played: number[] };
+    }
   | { kind: "paused"; resumeTo: SessionState["kind"] }
   | { kind: "summary"; summary: SessionSummary }
   /** The plan has no items (nothing due, nothing new). Nothing was written. */
@@ -222,6 +254,8 @@ interface Current {
   /** Reference time per phase for scoring (stimulus end for the first, phase start after). */
   refMs: Partial<Record<Phase, number>>;
   phaseStartMs: number;
+  /** In the practice step: the first phase is open for trying, not yet for answering. */
+  practicing: boolean;
   gateMs: number;
   /** Quiet time after the stimulus before answers count. Zero when nothing was played. */
   tailMs: number;
@@ -241,6 +275,27 @@ export function phasesFor(expected: ExpectedResponse, mode: SessionMode): Phase[
   if (mode === "away") return sing ? ["sing"] : ["play"];
   if (sing && play) return ["sing", "play"];
   return play ? ["play"] : ["sing"];
+}
+
+const NODE_RANK_ORDER: readonly NodeState[] = [
+  "locked",
+  "available",
+  "learning",
+  "fluent",
+  "mastered",
+];
+
+/** Before the skill is fluent: the stage in which hints, guides and practice are offered. */
+function isEarly(stage: NodeState): boolean {
+  return NODE_RANK_ORDER.indexOf(stage) < NODE_RANK_ORDER.indexOf("fluent");
+}
+
+/** The stimulus with only its target notes, moved to the start. Whole when it has none. */
+export function targetOnly(spec: StimulusSpec): StimulusSpec {
+  const targets = spec.events.filter((e) => e.role === "target");
+  if (targets.length === 0) return spec;
+  const first = Math.min(...targets.map((e) => e.atSec));
+  return { ...spec, events: targets.map((e) => ({ ...e, atSec: e.atSec - first })) };
 }
 
 /** "Major or minor?" or "Major, minor or diminished?" from the option labels. */
@@ -283,6 +338,8 @@ export class SessionMachine {
   #introFamilies = new Map<string, KeyFamily>();
   #notes: string[] = [];
   #notationShown = false;
+  /** The notation engine loaded, so staffs beside the audio can be drawn. */
+  #staffReady = false;
   #nodesBefore: Record<string, NodeState> = {};
   #priorAttempts: Record<string, number> = {};
   #sessionAttempts: Record<string, number> = {};
@@ -357,7 +414,12 @@ export class SessionMachine {
     const cur = this.#cur;
     const s = this.#state;
     return {
-      phase: s.kind === "listening" ? `listening-${s.phase}` : s.kind,
+      phase:
+        s.kind === "listening"
+          ? s.practice
+            ? "listening-practice"
+            : `listening-${s.phase}`
+          : s.kind,
       expected:
         s.kind === "listening" || s.kind === "presenting" ? cur?.instance.expected : undefined,
       stimulusEndMs: cur?.stimulusEndMs,
@@ -416,7 +478,28 @@ export class SessionMachine {
 
   /** End the listening phase now and score what was heard. */
   answerDone(): void {
-    if (this.#state.kind === "listening") this.#endPhase();
+    if (this.#state.kind === "listening" && !this.#cur?.practicing) this.#endPhase();
+  }
+
+  /** Practice step: stop practising and open the answer. Timing starts now. */
+  ready(): void {
+    const cur = this.#cur;
+    if (this.#state.kind !== "listening" || !cur?.practicing) return;
+    cur.practicing = false;
+    this.#openPhase(cur.phaseIdx, true);
+  }
+
+  /**
+   * Hear the item again while listening: the cadence and note (`full`) or the target note alone
+   * (`note`). Anything played so far is discarded, and the answer window restarts afterwards.
+   */
+  hear(what: "full" | "note"): void {
+    const s = this.#state;
+    const cur = this.#cur;
+    if (s.kind !== "listening" || !cur || !s.canHear) return;
+    if (what === "note" && !s.canHearNote) return;
+    this.#d.player.stop();
+    this.#playStimulus(what === "note" ? targetOnly(cur.instance.stimulus) : undefined);
   }
 
   /** Choice items (R21): the learner picked an option. The first pick is the answer. */
@@ -772,6 +855,7 @@ export class SessionMachine {
       stimulusEndMs: 0,
       refMs: {},
       phaseStartMs: 0,
+      practicing: false,
       gateMs: 0,
       tailMs: 0,
       playNotes: [],
@@ -798,13 +882,24 @@ export class SessionMachine {
    */
   async #prepareNotation(): Promise<void> {
     const reading = this.#items.filter(({ planned }) => this.#needsNotation(planned));
-    if (reading.length === 0) return;
     const port = this.#d.notation;
+    if (reading.length === 0) {
+      // Rhythm echo draws a staff beside the audio in the early stages. If notation cannot load
+      // the items still play, just without it.
+      if (port && this.#items.some(({ planned }) => planned.generator === "rhythmEcho")) {
+        this.#staffReady = await port.preload().then(
+          () => true,
+          () => false,
+        );
+      }
+      return;
+    }
     let ready = false;
     if (port) {
       try {
         await port.preload();
         ready = true;
+        this.#staffReady = true;
       } catch {
         ready = false;
       }
@@ -891,6 +986,7 @@ export class SessionMachine {
       stimulusEndMs: 0,
       refMs: {},
       phaseStartMs: 0,
+      practicing: false,
       gateMs: 0,
       tailMs: 0,
       playNotes: [],
@@ -934,6 +1030,12 @@ export class SessionMachine {
   }
 
   #itemView(cur: Current): ItemView {
+    const node = this.#d.graph.nodes.find((n) => n.id === cur.planned.nodeId);
+    const stage = this.#d.getState().nodes[cur.planned.nodeId]?.state ?? "locked";
+    // The early stages name the notes of the key, so the key is not a second puzzle.
+    const early = isEarly(stage);
+    const notes = early ? keyNotes(cur.instance, node) : undefined;
+    const guide = early ? keyboardGuide(cur.instance) : undefined;
     return {
       position: cur.index + 1,
       // Placement stops early, so it has no fixed total.
@@ -945,6 +1047,9 @@ export class SessionMachine {
       block: cur.block,
       ...(cur.instance.display ? { display: cur.instance.display } : {}),
       ...(cur.instance.inputRange ? { inputRange: cur.instance.inputRange } : {}),
+      ...(notes ? { keyNotes: notes } : {}),
+      ...(guide ? { guide } : {}),
+      ...(this.#staffFor(cur) ? { showStaff: true as const } : {}),
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
@@ -963,11 +1068,12 @@ export class SessionMachine {
   }
 
   /** Play the stimulus with the input gated shut, then open it after the tail (T1.6). */
-  #playStimulus(): void {
+  #playStimulus(spec?: StimulusSpec): void {
     const cur = this.#cur;
     if (!cur) return;
     const d = this.#d;
     cur.phaseIdx = 0;
+    cur.practicing = false;
     cur.playNotes = [];
     cur.singFrames = [];
     cur.refMs = {};
@@ -975,13 +1081,13 @@ export class SessionMachine {
     this.#cancelTimers();
     d.input.pause();
     this.#singInput?.pause();
-    const display = cur.instance.display;
+    const display = cur.instance.display ?? this.#staffFor(cur);
     if (display && d.notation) {
       this.#presentNotation(cur, display, d.notation);
       return;
     }
     this.#hideNotation();
-    const { endAt } = d.player.play(cur.instance.stimulus);
+    const { endAt } = d.player.play(spec ?? cur.instance.stimulus);
     cur.stimulusEndMs = endAt * 1000;
     cur.tailMs = this.#tailMs();
     this.#setState({
@@ -1007,7 +1113,7 @@ export class SessionMachine {
     this.#setState({
       kind: "presenting",
       item: this.#itemView(cur),
-      prompt: this.#promptFor(cur, cur.phases[0] ?? "play"),
+      prompt: cur.instance.display ? this.#promptFor(cur, cur.phases[0] ?? "play") : "Listen",
     });
     void this.#enqueue(async () => {
       this.#notationShown = true;
@@ -1042,16 +1148,68 @@ export class SessionMachine {
   #beginPhase(index: number): void {
     const cur = this.#cur;
     if (!cur) return;
+    if (index === 0 && this.#wantsPractice(cur)) {
+      // Nothing listens and no clock runs until the learner is ready (`ready()`).
+      cur.practicing = true;
+      cur.phaseIdx = 0;
+      this.#setState(this.#listeningState(cur, 0, true));
+      return;
+    }
+    this.#openPhase(index, false);
+  }
+
+  /** Practice before answering: scale degree items, until the skill is fluent. Not in placement. */
+  #wantsPractice(cur: Current): boolean {
+    const d = this.#d;
+    if (d.practiceStep !== true || d.placement) return false;
+    const g = cur.instance.generator;
+    if (g !== "degreeSing" && g !== "degreeId") return false;
+    const state = d.getState().nodes[cur.planned.nodeId]?.state ?? "locked";
+    return isEarly(state);
+  }
+
+  /** The staff drawn beside the audio (not a reading item): early stages, once notation loaded. */
+  #staffFor(cur: Current): ScoreSpec | undefined {
+    const staff = cur.instance.staff;
+    if (!staff || !this.#staffReady || !this.#d.notation) return undefined;
+    const stage = this.#d.getState().nodes[cur.planned.nodeId]?.state ?? "locked";
+    return isEarly(stage) ? staff : undefined;
+  }
+
+  #listeningState(cur: Current, index: number, practice: boolean): SessionState {
+    const phase = cur.phases[index] ?? "play";
+    const events = cur.instance.stimulus.events;
+    const canHear = cur.instance.display === undefined && events.length > 0;
+    const canHearNote =
+      canHear && events.some((e) => e.role === "target") && events.some((e) => e.role !== "target");
+    return {
+      kind: "listening",
+      item: this.#itemView(cur),
+      phase,
+      phaseIndex: index,
+      phaseCount: cur.phases.length,
+      prompt: practice ? "Find the note" : this.#promptFor(cur, phase),
+      practice,
+      canHear,
+      canHearNote,
+    };
+  }
+
+  /** Open a phase for answers. After practice the reference time is now, not the stimulus end. */
+  #openPhase(index: number, afterPractice: boolean): void {
+    const cur = this.#cur;
+    if (!cur) return;
     const d = this.#d;
     const phase = cur.phases[index];
     if (!phase) return;
     cur.phaseIdx = index;
     const now = d.clock.contextNowMs();
-    const ref = index === 0 ? cur.stimulusEndMs : now;
+    const ref = index === 0 && !afterPractice ? cur.stimulusEndMs : now;
     cur.refMs[phase] = ref;
     cur.phaseStartMs = ref;
     // Events before this time are the stimulus (or the voice that just stopped), never answers.
-    cur.gateMs = index === 0 ? cur.stimulusEndMs + cur.tailMs : now + this.#tailMs();
+    cur.gateMs =
+      index === 0 && !afterPractice ? cur.stimulusEndMs + cur.tailMs : now + this.#tailMs();
     const adapter = this.#adapterFor(phase);
     this.#unsubs.push(
       adapter.onNote((n) => {
@@ -1065,14 +1223,7 @@ export class SessionMachine {
       adapter.setExpectedRange?.(cur.instance.inputRange);
     }
     adapter.resume();
-    this.#setState({
-      kind: "listening",
-      item: this.#itemView(cur),
-      phase,
-      phaseIndex: index,
-      phaseCount: cur.phases.length,
-      prompt: this.#promptFor(cur, phase),
-    });
+    this.#setState(this.#listeningState(cur, index, false));
     const deadline = ref + cur.instance.expected.responseWindowMs;
     this.#schedule(deadline - now, () => {
       this.#endPhase();
@@ -1088,6 +1239,7 @@ export class SessionMachine {
   #onNote(raw: NoteEvent, phase: Phase): void {
     const cur = this.#cur;
     if (this.#state.kind !== "listening" || cur?.phases[cur.phaseIdx] !== phase) return;
+    if (cur.practicing) return;
     const note: NoteEvent = { ...raw, onsetMs: raw.onsetMs - this.#offset(raw.source) };
     if (note.offsetMs !== undefined) note.offsetMs -= this.#offset(raw.source);
     if (note.onsetMs < cur.gateMs) return;
@@ -1100,6 +1252,7 @@ export class SessionMachine {
   #onFrame(raw: PitchFrame, phase: Phase): void {
     const cur = this.#cur;
     if (this.#state.kind !== "listening" || cur?.phases[cur.phaseIdx] !== phase) return;
+    if (cur.practicing) return;
     const frame: PitchFrame = { ...raw, atMs: raw.atMs - this.#offset("mic") };
     if (frame.atMs < cur.gateMs) return;
     if (phase === "sing") cur.singFrames.push(frame);
@@ -1229,6 +1382,7 @@ export class SessionMachine {
       const attemptIndex =
         (this.#priorAttempts[nodeId] ?? 0) + (this.#sessionAttempts[nodeId] ?? 0);
       this.#sessionAttempts[nodeId] = (this.#sessionAttempts[nodeId] ?? 0) + 1;
+      const answer = answerLine(cur.instance);
       const feedback = buildFeedback({
         nodeState,
         attemptIndex,
@@ -1236,6 +1390,7 @@ export class SessionMachine {
         errors,
         mode: cur.instance.presentation.mode === "minor" ? "minor" : "major",
         ...(cur.instance.display ? { names: noteNamer(cur.instance.display) } : {}),
+        ...(answer === undefined ? {} : { answer }),
       });
 
       await d.append([
@@ -1263,6 +1418,14 @@ export class SessionMachine {
         item: this.#itemView(cur),
         feedback,
         canReplay: !feedback.autoAdvance,
+        ...(this.#itemView(cur).guide
+          ? {
+              answerKeys: {
+                targetPcs: targetPitchClasses(cur.instance),
+                played: cur.playNotes.map((n) => n.pitch).slice(-8),
+              },
+            }
+          : {}),
       };
       if (this.#state.kind === "paused") {
         // Backgrounded while saving: show the feedback when the learner comes back.
