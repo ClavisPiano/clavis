@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { at } from "./util.js";
 import {
   ALL_KEYS,
+  MAJOR_ROMANS,
   MAX_VOICE_LEAP,
   cadence,
   canonicalKey,
@@ -15,6 +16,7 @@ import {
   keysInFamilies,
   makeKey,
   midiToDegree,
+  progression,
   relativeMajor,
   relativeMinor,
   scaleMidi,
@@ -379,5 +381,72 @@ describe("cadence", () => {
     expect(() => cadence(k, { upperRange: { low: 60, high: 64 } })).toThrow(RangeError);
     expect(() => cadence(k, { bassRange: { low: 36, high: 40 } })).toThrow(RangeError);
     expect(() => cadence(k, { bassRange: { low: 60, high: 72 } })).toThrow(RangeError);
+  });
+});
+
+describe("progression", () => {
+  const MAJOR_KEYS = ALL_KEYS.filter((k) => k.mode === "major");
+  /** Distinct pitch classes, ascending (the bass doubles a chord tone). */
+  const pcs = (m: number[]): number[] => [...new Set(m.map((x) => x % 12))].sort((a, b) => a - b);
+
+  it("voices I-IV-V-I exactly as cadence does", () => {
+    for (const key of MAJOR_KEYS) {
+      expect(progression(key, ["I", "IV", "V", "I"])).toEqual(cadence(key).chords);
+    }
+  });
+
+  it("builds each diatonic triad on its scale degree, root in the bass", () => {
+    const key = makeKey("C", "major");
+    const triads: Record<string, number[]> = {
+      I: [0, 4, 7],
+      ii: [2, 5, 9],
+      iii: [4, 7, 11],
+      IV: [0, 5, 9],
+      V: [2, 7, 11],
+      vi: [0, 4, 9],
+    };
+    for (const roman of MAJOR_ROMANS) {
+      const [chord] = progression(key, [roman]);
+      expect(chord?.roman).toBe(roman);
+      expect(pcs([chord?.bass ?? 0, ...(chord?.upper ?? [])])).toEqual(triads[roman]);
+    }
+    const roots = progression(key, MAJOR_ROMANS).map((c) => c.bass % 12);
+    expect(roots).toEqual([0, 2, 4, 5, 7, 9]);
+  });
+
+  it("voices every four-chord progression from I, IV, V and vi in every major key", () => {
+    const chords = ["I", "IV", "V", "vi"];
+    for (const key of MAJOR_KEYS) {
+      for (const a of chords) {
+        for (const b of chords) {
+          for (const c of chords) {
+            const out = progression(key, ["I", a, b, c]);
+            out.forEach((ch, i) => {
+              expect(ch.bass).toBeLessThan(ch.upper[0] ?? 0);
+              expect(ch.upper).toEqual([...ch.upper].sort((x, y) => x - y));
+              const prev = out[i - 1];
+              if (prev) {
+                ch.upper.forEach((n, v) => {
+                  expect(Math.abs(n - (prev.upper[v] ?? 0))).toBeLessThanOrEqual(MAX_VOICE_LEAP);
+                });
+              }
+            });
+          }
+        }
+      }
+    }
+  });
+
+  it("is deterministic", () => {
+    const key = makeKey("Eb", "major");
+    expect(progression(key, ["I", "vi", "IV", "V"])).toEqual(
+      progression(key, ["I", "vi", "IV", "V"]),
+    );
+  });
+
+  it("rejects minor keys, unknown numerals and an empty list", () => {
+    expect(() => progression(makeKey("A", "minor"), ["i"])).toThrow(RangeError);
+    expect(() => progression(makeKey("C", "major"), ["I", "bVII"])).toThrow(RangeError);
+    expect(() => progression(makeKey("C", "major"), [])).toThrow(RangeError);
   });
 });

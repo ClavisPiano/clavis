@@ -3,6 +3,7 @@ import { cadenceStimulus } from "../items/build.js";
 import { COUNT_IN_PITCH, COUNT_IN_VELOCITY, RHYTHM_PITCH } from "../items/rhythm.js";
 import type { StimulusEvent, StimulusSpec } from "../stimulus/types.js";
 import { spelledToMidi, type ScoreSpec, type SpelledPitch, type Step } from "../score/schema.js";
+import { MAJOR_ROMANS, progression } from "../theory/cadence.js";
 import { degreeToMidi } from "../theory/degrees.js";
 import { ALL_KEYS, tonicChroma, type Key, type MinorVariant } from "../theory/keys.js";
 import { majorSignature, minorSignature } from "../theory/tonal.js";
@@ -28,6 +29,20 @@ export const CardExampleSchema = z.discriminatedUnion("kind", [
     kind: z.literal("degrees"),
     ...tonal,
     degrees: z.array(z.int().min(1).max(15)).min(1).max(8),
+    afterCadence: z.boolean(),
+  }),
+  /**
+   * A major-key chord progression from Roman numerals (I, ii, iii, IV, V, vi), one chord per
+   * beat, optionally after the cadence. Always major: a minor key of the day plays the parallel
+   * major.
+   */
+  z.strictObject({
+    kind: z.literal("progression"),
+    label: z.string().min(1),
+    romans: z
+      .array(z.string().refine((r) => MAJOR_ROMANS.includes(r), "unknown major Roman numeral"))
+      .min(2)
+      .max(8),
     afterCadence: z.boolean(),
   }),
   /** A rhythm on one pitch, after four count-in clicks. Onsets in beats from the downbeat. */
@@ -96,11 +111,14 @@ export function cardExampleStimulus(example: CardExample, keyOfDay: Key): Stimul
   const key =
     example.kind === "rhythm" || example.kind === "staff"
       ? keyOfDay
-      : parallelKey(keyOfDay, example.mode ?? keyOfDay.mode);
+      : example.kind === "progression"
+        ? parallelKey(keyOfDay, "major")
+        : parallelKey(keyOfDay, example.mode ?? keyOfDay.mode);
   const tonicMidi = 60 + tonicChroma(key);
   const variant: { minorVariant: MinorVariant } | undefined =
     example.kind !== "rhythm" &&
     example.kind !== "staff" &&
+    example.kind !== "progression" &&
     example.minorVariant !== undefined &&
     key.mode === "minor"
       ? { minorVariant: example.minorVariant }
@@ -136,6 +154,24 @@ export function cardExampleStimulus(example: CardExample, keyOfDay: Key): Stimul
           ...example.degrees.map((d, i) =>
             note(start + i * beat, degreeToMidi(key, d, tonicMidi, variant), beat * 0.9),
           ),
+        ],
+        tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
+      };
+    }
+    case "progression": {
+      const cad = example.afterCadence
+        ? cadenceStimulus(key, { tempoBpm: CARD_EXAMPLE_TEMPO_BPM })
+        : undefined;
+      const start = cad?.targetStartSec ?? 0;
+      return {
+        events: [
+          ...(cad?.events ?? []),
+          ...progression(key, example.romans).map((c, i): StimulusEvent => ({
+            atSec: start + i * beat,
+            midi: [c.bass, ...c.upper],
+            durationSec: beat,
+            velocity: 0.8,
+          })),
         ],
         tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
       };
