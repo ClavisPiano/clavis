@@ -30,9 +30,9 @@ test.describe("session runner", () => {
     await expect(page.getByTestId("key")).toContainText("C major");
 
     const answered = await runToSummary(page);
-    // Degree items are sung and then played at the instrument.
-    expect(answered).toContain("listening-sing");
+    // Degree items are played at the instrument; nothing is sung.
     expect(answered).toContain("listening-play");
+    expect(answered).not.toContain("listening-sing");
 
     await expect(page.getByTestId("summary")).toBeVisible();
     await expect(page.getByTestId("summary-items")).toHaveText("3");
@@ -64,6 +64,9 @@ test.describe("session runner", () => {
 
     await expect(page.getByTestId("session")).toHaveAttribute("data-state", "listening");
     await expect(page.getByTestId("hint")).toContainText("Listen to the cadence");
+    // The notes of the key are named, so the key is not a second puzzle.
+    await expect(page.getByTestId("key-notes")).toContainText("C major");
+    await expect(page.getByTestId("key-notes")).toContainText(/1\s*C\s*3\s*E\s*5\s*G/);
     await expect(page.getByTestId("practice-help")).toContainText("Nothing is marked");
     await expect(page.getByTestId("done")).toHaveCount(0);
 
@@ -78,7 +81,7 @@ test.describe("session runner", () => {
     await expect(page.getByTestId("ready")).toHaveCount(0);
   });
 
-  test("Away mode: no orient block, sung and tapped answers", async ({ page }) => {
+  test("Away mode: no orient block, tapped answers", async ({ page }) => {
     const errors = collectErrors(page);
     await page.goto("/session?mode=away&input=fake&budget=60");
     await page.getByTestId("start").click();

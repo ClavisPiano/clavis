@@ -11,6 +11,7 @@
   import { INPUT_STORAGE_KEY } from "../../lib/input";
   import { updateState } from "../../lib/pwa/update-state.svelte";
   import type { SessionState } from "../../lib/session/machine";
+  import type { KeyNotes } from "../../lib/session/key-notes";
   import { parseSessionParams, type SessionParams } from "../../lib/session/params";
   import { createSessionRuntime, type SessionRuntime } from "../../lib/session/runtime";
   import { followUpSearch } from "../../lib/next-steps";
@@ -70,13 +71,9 @@
   );
   const practiceHelp = $derived(
     view.kind === "listening" && view.practice
-      ? view.phase === "sing"
-        ? params?.mode === "away"
-          ? "Try the keyboard below, or hum along. Nothing is marked until you press Ready."
-          : "Hum or sing along to find it. Nothing is marked until you press Ready."
-        : params?.mode === "away"
-          ? "Try notes on the keyboard below. Nothing is marked until you press Ready."
-          : "Try notes on your piano. Nothing is marked until you press Ready."
+      ? params?.mode === "away"
+        ? "Try notes on the keyboard below. Nothing is marked until you press Ready."
+        : "Try notes on your piano. Nothing is marked until you press Ready."
       : undefined,
   );
 
@@ -221,6 +218,15 @@
 </script>
 
 <svelte:head><title>Session</title></svelte:head>
+
+{#snippet keyNotesLine(notes: KeyNotes)}
+  <p class="key-notes" data-testid="key-notes">
+    <strong>{notes.key}</strong>
+    {#each notes.notes as n (n.label)}
+      <span class="key-note"><span class="deg">{n.label}</span> {n.note}</span>
+    {/each}
+  </p>
+{/snippet}
 
 {#snippet nextStepLinks()}
   {#if steps && (steps.keepGoing || steps.learn)}
@@ -381,6 +387,10 @@
     {:else if view.kind === "presenting"}
       <section class="card" data-testid="presenting">
         <p class="prompt" aria-live="polite">{view.prompt}</p>
+        {#if view.item.keyNotes}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render keyNotesLine(view.item.keyNotes)}
+        {/if}
         {#if hint}<p class="hint" data-testid="hint">{hint}</p>{/if}
         <button type="button" class="secondary" data-testid="skip" onclick={() => machine?.skip()}>
           Skip
@@ -417,6 +427,10 @@
               );
             }}>Tap</button
           >
+        {/if}
+        {#if view.item.keyNotes}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render keyNotesLine(view.item.keyNotes)}
         {/if}
         {#if hint}<p class="hint" data-testid="hint">{hint}</p>{/if}
         {#if practiceHelp}<p class="hint" data-testid="practice-help">{practiceHelp}</p>{/if}
@@ -489,6 +503,9 @@
         <p class="result" class:good={view.feedback.correct} data-testid="result">
           {view.feedback.correct ? "Correct" : "Not quite"}
         </p>
+        {#if view.feedback.answer}
+          <p class="answer" data-testid="answer">{view.feedback.answer}</p>
+        {/if}
         {#if view.feedback.lines.length > 0}
           <ul class="issues" data-testid="issues">
             {#each view.feedback.lines as line (line)}<li>{line}</li>{/each}
@@ -698,6 +715,24 @@
 
   .lead {
     font-size: 1.15rem;
+  }
+
+  .key-notes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-2) var(--space-4);
+    font-size: 1.15rem;
+  }
+
+  .key-note .deg {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  .answer {
+    font-size: 1.15rem;
+    text-align: center;
   }
 
   .hint {

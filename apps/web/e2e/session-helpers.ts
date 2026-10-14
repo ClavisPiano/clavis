@@ -14,16 +14,7 @@ export async function answerCurrentPhase(page: Page): Promise<void> {
     if (!session || !fake || !expected) return;
     // Answers start after the gate (stimulus end plus tail, or phase start plus tail).
     const base = fake.nowMs() + 300;
-    if (session.phase === "listening-sing" && expected.sing) {
-      const sing = expected.sing;
-      const midis = sing.kind === "sungPitch" ? [sing.targetMidi] : sing.midi;
-      midis.forEach((midi, i) => {
-        const hz = 440 * 2 ** ((midi - 69) / 12);
-        for (let t = 0; t <= 300; t += 20) {
-          fake.emitFrame({ hz, confidence: 1, atMs: base + i * 400 + t });
-        }
-      });
-    } else if (session.phase === "listening-play" && expected.play) {
+    if (session.phase === "listening-play" && expected.play) {
       const play = expected.play;
       if (play.kind === "pitchClass" || play.kind === "exactPitch") {
         fake.emitNote(play.targetMidi, { onsetMs: base });

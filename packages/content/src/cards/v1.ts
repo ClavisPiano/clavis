@@ -24,7 +24,7 @@ export const CARDS_V1: unknown[] = [
     ],
     howTo: [
       "Just listen. Nothing in the warm-up is marked.",
-      "As the last chord rings, try humming its lowest note. That is 1, the note everything else is measured from.",
+      "As the last chord rings, listen for its lowest note. That is 1, the note everything else is measured from.",
       "Tap Continue when you are ready for the first item.",
     ],
     examples: [
@@ -48,9 +48,8 @@ export const CARDS_V1: unknown[] = [
     ],
     howTo: [
       "Listen to the cadence, then one note. Work out whether it is 1, 3 or 5.",
-      "When asked to sing, sing it back on any vowel, in any octave. Within a quarter of a tone counts.",
       "When asked to play, press that note on your piano. Any octave counts.",
-      "In Away mode you sing, or tap the note on the on-screen keyboard.",
+      "In Away mode, tap the note on the on-screen keyboard.",
       "Quick answers count for more than slow ones, but get it right first.",
     ],
     examples: [
@@ -72,10 +71,9 @@ export const CARDS_V1: unknown[] = [
     ],
     howTo: [
       "Listen to the cadence, then one note. Work out which degree it is, 1 to 7.",
-      "If you are unsure, sing up or down to the nearest 1, 3 or 5 in your head and count the steps.",
-      "When asked to sing, sing it back on any vowel, in any octave.",
+      "If you are unsure, step up or down to the nearest 1, 3 or 5 in your head and count the steps.",
       "When asked to play, press that note on your piano. Any octave counts.",
-      "In Away mode you sing, or tap the note on the on-screen keyboard.",
+      "In Away mode, tap the note on the on-screen keyboard.",
     ],
     examples: [
       { kind: "scale", label: "The scale, 1 to 8" },
@@ -100,9 +98,8 @@ export const CARDS_V1: unknown[] = [
     howTo: [
       "Listen to the minor cadence, then one note. Work out which degree it is, 1 to 7.",
       "Use 1, 3 and 5 of the minor home chord as anchors, as you did in major.",
-      "When asked to sing, sing it back on any vowel, in any octave.",
       "When asked to play, press that note on your piano. Any octave counts.",
-      "In Away mode you sing, or tap the note on the on-screen keyboard.",
+      "In Away mode, tap the note on the on-screen keyboard.",
     ],
     examples: [
       { kind: "scale", label: "Major scale on the same tonic", mode: "major" },
@@ -131,14 +128,13 @@ export const CARDS_V1: unknown[] = [
     title: "Melodic cells",
     body: [
       "A melodic cell is a short group of two to four notes from the scale. Cells are the building blocks of tunes. Most move by step, to the next note of the scale, or leap between 1, 3 and 5.",
-      "Hear a cell as a shape relative to home rather than as separate notes: up a step, down to 1, a leap from 5 down to 3. Once you hear the shape, singing and playing it back gets much easier.",
+      "Hear a cell as a shape relative to home rather than as separate notes: up a step, down to 1, a leap from 5 down to 3. Once you hear the shape, playing it back gets much easier.",
     ],
     howTo: [
       "Listen to the cadence, then two to four notes.",
-      "When asked to sing, sing them back in order, on any vowel, in any octave.",
       "Then play them in order on your piano. The octave does not matter, the order does.",
       "A missing or wrong note costs part of the score, not the whole item.",
-      "In Away mode you sing, or tap the notes on the on-screen keyboard.",
+      "In Away mode, tap the notes on the on-screen keyboard.",
     ],
     examples: [
       { kind: "degrees", label: "Up by step: 1 2 3", degrees: [1, 2, 3], afterCadence: true },

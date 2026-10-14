@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.2",
+  "contentVersion": "2026.10.3",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -630,7 +630,7 @@
       "implemented": true,
       "seedDurationSec": 8,
       "awayEligible": true,
-      "requires": ["mic", "keys"]
+      "requires": ["keys"]
     },
     {
       "id": "degreeId",
@@ -644,7 +644,7 @@
       "implemented": true,
       "seedDurationSec": 12,
       "awayEligible": true,
-      "requires": ["mic", "keys"]
+      "requires": ["keys"]
     },
     {
       "id": "rhythmEcho",

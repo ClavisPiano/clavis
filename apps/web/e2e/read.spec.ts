@@ -183,7 +183,7 @@ test.describe("reading is enabled", () => {
     const realCount = await page.getByTestId("event-count").textContent();
     expect(Number(realCount)).toBeGreaterThan(1);
     const current = (await page.getByTestId("content-version").textContent()) ?? "";
-    expect(current).toBe("2026.10.2");
+    expect(current).toBe("2026.10.3");
 
     // Control: a snapshot for the current content version is trusted.
     await writeSnapshot(current);

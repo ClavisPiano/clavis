@@ -261,61 +261,53 @@ describe("item generation", { timeout: 30000 }, () => {
     }
   });
 
-  it("sung targets are in voice range, played targets in keyboard range, cells diatonic", () => {
-    const voices: VoiceRange[] = [VOICE, { low: 55, high: 74 }, { low: 40, high: 64 }];
+  it("nothing is sung: targets are in the keyboard range and cells are diatonic", () => {
     for (const { node, g, params } of ALL) {
       if (g === "rhythmEcho") continue;
-      for (const voiceRange of voices) {
-        for (let s = 0; s < 6; s++) {
-          const c = ctx(s, { voiceRange, keyboardRange: KEYBOARD });
-          const inst = getGenerator(g).generate(node, params, c);
-          const { sing, play } = inst.expected;
-          if (sing?.kind === "sungPitch") {
-            expect(sing.targetMidi).toBeGreaterThanOrEqual(voiceRange.low);
-            expect(sing.targetMidi).toBeLessThanOrEqual(voiceRange.high);
-          }
-          if (sing?.kind === "sungSequence") {
-            for (const m of sing.midi) {
-              expect(m).toBeGreaterThanOrEqual(voiceRange.low);
-              expect(m).toBeLessThanOrEqual(voiceRange.high);
-            }
-          }
-          const played =
-            play?.kind === "pitchClass"
-              ? [play.targetMidi]
-              : play?.kind === "sequence"
-                ? play.midi
-                : [];
-          for (const m of played) {
-            expect(m).toBeGreaterThanOrEqual(KEYBOARD.low);
-            expect(m).toBeLessThanOrEqual(KEYBOARD.high);
-          }
-          if (g === "cellEcho") {
-            const key = { tonic: inst.presentation.tonic, mode: inst.presentation.mode } as Key;
-            const tonicMidi = inst.presentation.tonicMidi as number;
-            const cell = (params as { cell: number[] }).cell;
-            expect(sing?.kind === "sungSequence" ? sing.midi : []).toEqual(
-              cell.map((d) => degreeToMidi(key, d, tonicMidi)),
-            );
-            expect(inst.stimulus.events.filter((e) => e.role === "target")).toHaveLength(
-              cell.length,
-            );
-          }
+      for (let s = 0; s < 6; s++) {
+        const inst = getGenerator(g).generate(node, params, ctx(s, { keyboardRange: KEYBOARD }));
+        const { sing, play } = inst.expected;
+        expect(sing).toBeUndefined();
+        const played =
+          play?.kind === "pitchClass"
+            ? [play.targetMidi]
+            : play?.kind === "sequence"
+              ? play.midi
+              : [];
+        for (const m of played) {
+          expect(m).toBeGreaterThanOrEqual(KEYBOARD.low);
+          expect(m).toBeLessThanOrEqual(KEYBOARD.high);
+        }
+        // What is heard is what is expected: the target events are the played notes.
+        if (played.length > 0) {
+          const heard = inst.stimulus.events
+            .filter((e) => e.role === "target")
+            .flatMap((e) => e.midi);
+          expect(heard).toEqual(played);
+        }
+        if (g === "cellEcho") {
+          const key = { tonic: inst.presentation.tonic, mode: inst.presentation.mode } as Key;
+          const tonicMidi = inst.presentation.tonicMidi as number;
+          const cell = (params as { cell: number[] }).cell;
+          expect(played).toEqual(cell.map((d) => degreeToMidi(key, d, tonicMidi)));
         }
       }
     }
   });
 
-  it("default keyboard range is C3..C6 and sing/play expectations match the spec", () => {
+  it("degree and cell items are played answers with the spec windows", () => {
     const n = nodeFor("ear.degrees.major.135");
-    const sing = getGenerator("degreeSing").generate(n, { degree: 5 }, ctx(1));
-    expect(sing.expected.sing).toMatchObject({ kind: "sungPitch", toleranceCents: 50 });
-    expect(sing.expected.play?.kind).toBe("pitchClass");
-    expect(sing.expected.responseWindowMs).toBe(10000);
-    expect(sing.targetLatencyMs).toBe(1500);
-    const id = getGenerator("degreeId").generate(n, { degree: 5 }, ctx(1));
-    expect(id.expected.sing).toBeUndefined();
-    expect(id.expected.responseWindowMs).toBe(8000);
+    for (const g of ["degreeSing", "degreeId"] as const) {
+      const inst = getGenerator(g).generate(n, { degree: 5 }, ctx(1));
+      expect(inst.expected.sing).toBeUndefined();
+      expect(inst.expected.play?.kind).toBe("pitchClass");
+      expect(inst.expected.responseWindowMs).toBe(8000);
+      expect(inst.targetLatencyMs).toBe(1500);
+    }
+    // degreeSing is kept as an id for old events and plans, and matches degreeId.
+    const a = getGenerator("degreeSing").generate(n, { degree: 5 }, ctx(7));
+    const b = getGenerator("degreeId").generate(n, { degree: 5 }, ctx(7));
+    expect({ ...a, generator: "x" }).toEqual({ ...b, generator: "x" });
     const cell = getGenerator("cellEcho").generate(
       nodeFor("ear.cells.major.2-4"),
       { cell: [1, 2, 3] },
@@ -323,7 +315,7 @@ describe("item generation", { timeout: 30000 }, () => {
     );
     expect(cell.itemId).toBe("ear.cells.major.2-4|cell=1-2-3");
     expect(cell.expected.play).toMatchObject({ kind: "sequence", octaveAgnostic: true });
-    expect(cell.expected.sing?.kind).toBe("sungSequence");
+    expect(cell.expected.sing).toBeUndefined();
   });
 
   it("rejects params outside the node's universe", () => {

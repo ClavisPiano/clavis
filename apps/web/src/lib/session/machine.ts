@@ -34,6 +34,7 @@ import { combineParts, type ScoreInput, type ScoreResult } from "@clavis/scoring
 import { checkPlayDone, checkSingDone, type DoneCheck } from "./completion";
 import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
 import type { NotationMark, NotationPort } from "../notation/port";
+import { answerLine, keyNotes, type KeyNotes } from "./key-notes";
 import { orientSpec } from "./orient";
 import { buildReplaySpec } from "./replay";
 import { noteNamer } from "./spelling";
@@ -151,6 +152,8 @@ export interface ItemView {
   display?: ScoreSpec;
   /** Playable range for the on-screen keyboard, when the item sets one. */
   inputRange?: VoiceRange;
+  /** Degree items in the early stages: the notes it may ask for, spelled in the key. */
+  keyNotes?: KeyNotes;
 }
 
 export interface NodeChange {
@@ -968,6 +971,13 @@ export class SessionMachine {
   }
 
   #itemView(cur: Current): ItemView {
+    const node = this.#d.graph.nodes.find((n) => n.id === cur.planned.nodeId);
+    const stage = this.#d.getState().nodes[cur.planned.nodeId]?.state ?? "locked";
+    // The early stages name the notes of the key, so the key is not a second puzzle.
+    const notes =
+      NODE_RANK_ORDER.indexOf(stage) < NODE_RANK_ORDER.indexOf("fluent")
+        ? keyNotes(cur.instance, node)
+        : undefined;
     return {
       position: cur.index + 1,
       // Placement stops early, so it has no fixed total.
@@ -979,6 +989,7 @@ export class SessionMachine {
       block: cur.block,
       ...(cur.instance.display ? { display: cur.instance.display } : {}),
       ...(cur.instance.inputRange ? { inputRange: cur.instance.inputRange } : {}),
+      ...(notes ? { keyNotes: notes } : {}),
     };
   }
 
@@ -1296,6 +1307,7 @@ export class SessionMachine {
       const attemptIndex =
         (this.#priorAttempts[nodeId] ?? 0) + (this.#sessionAttempts[nodeId] ?? 0);
       this.#sessionAttempts[nodeId] = (this.#sessionAttempts[nodeId] ?? 0) + 1;
+      const answer = answerLine(cur.instance);
       const feedback = buildFeedback({
         nodeState,
         attemptIndex,
@@ -1303,6 +1315,7 @@ export class SessionMachine {
         errors,
         mode: cur.instance.presentation.mode === "minor" ? "minor" : "major",
         ...(cur.instance.display ? { names: noteNamer(cur.instance.display) } : {}),
+        ...(answer === undefined ? {} : { answer }),
       });
 
       await d.append([

@@ -85,7 +85,9 @@ test.describe("concept cards", () => {
 test.describe("concept tips in feedback", () => {
   test.setTimeout(90_000);
 
-  test("a wrong sung degree shows a tip whose link opens the card", async ({ page }) => {
+  test("a wrong played degree shows the answer and a tip whose link opens the card", async ({
+    page,
+  }) => {
     await page.goto("/session?input=fake&budget=90");
     await page.getByTestId("start").click();
     await page.getByTestId("continue").click(); // warm-up
@@ -95,30 +97,21 @@ test.describe("concept tips in feedback", () => {
     await page.waitForFunction(() => window.__clavisSession?.phase === "listening-practice");
     await page.getByTestId("ready").click();
 
-    // Sing a fourth below the target: always another diatonic degree (1->5, 3->7, 5->2).
-    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-sing");
-    await page.evaluate(() => {
-      const session = window.__clavisSession;
-      const fake = window.__clavisFakeInput;
-      const sing = session?.expected?.sing;
-      if (!fake || sing?.kind !== "sungPitch") throw new Error("expected a sung degree");
-      const hz = 440 * 2 ** ((sing.targetMidi - 5 - 69) / 12);
-      const base = fake.nowMs() + 300;
-      for (let t = 0; t <= 400; t += 20) fake.emitFrame({ hz, confidence: 1, atMs: base + t });
-    });
-    // Then play the right note so the attempt completes.
+    // Play a fourth below the target: always another diatonic degree (1->5, 3->7, 5->2).
     await page.waitForFunction(() => window.__clavisSession?.phase === "listening-play");
     await page.evaluate(() => {
       const play = window.__clavisSession?.expected?.play;
       const fake = window.__clavisFakeInput;
       if (!fake || play?.kind !== "pitchClass") throw new Error("expected a played degree");
-      fake.emitNote(play.targetMidi, { onsetMs: fake.nowMs() + 300 });
+      fake.emitNote(play.targetMidi - 5, { onsetMs: fake.nowMs() + 300 });
     });
+    // One wrong note does not end the answer (the learner may try again); Done does.
+    await page.getByTestId("done").click();
 
-    // Both parts must be right (R12), so a wrong sung note makes the attempt incorrect.
     const feedback = page.getByTestId("feedback");
     await expect(feedback).toHaveAttribute("data-correct", "false");
-    await expect(feedback.getByTestId("issues")).toContainText(/You sang \d; the target was/);
+    await expect(feedback.getByTestId("issues")).toContainText(/You played \d; the target was/);
+    await expect(feedback.getByTestId("answer")).toContainText(/^The note was \d, which is [A-G]/);
     const tip = feedback.getByTestId("tip");
     await expect(tip).toContainText(/ while /);
     await tip.getByTestId("tip-more").click();
