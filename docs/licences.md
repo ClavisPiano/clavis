@@ -56,3 +56,25 @@
   notation pages, and the source stays available upstream. Before release, show the licence and
   a link to the Verovio source in the app's About or licences screen. If Verovio is dropped for
   the fallback renderer, this entry can go with it (or stay if M7 imports keep it).
+
+## Piece library (MP, TP.3)
+
+The tunes in `packages/content/src/pieces/library.ts`. Each is typed in by hand as a bare melody
+(pitches and note values, one staff). No engraving, edition, arrangement or fingering is copied from
+any publication. The tunes themselves are in the public domain: the traditional ones have no known
+author and a long history in print, and Beethoven died in 1827. The left-hand versions are the same
+melodies an octave lower.
+
+| Piece | Source | Status |
+|---|---|---|
+| Hot Cross Buns | Traditional (English street cry) | Public domain |
+| Ode to Joy | Ludwig van Beethoven, Symphony No. 9 (1824), main theme | Public domain (composer died 1827) |
+| Mary Had a Little Lamb | Traditional nursery song | Public domain |
+| Au clair de la lune | Traditional French song | Public domain |
+| Twinkle, Twinkle, Little Star | Traditional French tune ("Ah! vous dirai-je, maman") | Public domain |
+| Mary Had a Little Lamb (left hand) | As above, an octave lower | Public domain |
+| Ode to Joy (left hand) | As above, an octave lower | Public domain |
+| Twinkle, Twinkle, Little Star (left hand) | As above, an octave lower | Public domain |
+| Frère Jacques (left hand) | Traditional French round | Public domain |
+
+New pieces need a row here before they are added to the library (a test checks every title).

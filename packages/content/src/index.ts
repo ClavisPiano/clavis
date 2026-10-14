@@ -7,6 +7,8 @@ import {
 import { CARDS_V1, ORIENT_CARD_ID } from "./cards/v1.js";
 
 export { conceptTip, type ConceptTip, type TipMode } from "./tips.js";
+export { loadPieces } from "./pieces/library.js";
+export { line, type LineSpec } from "./pieces/line.js";
 import v1 from "./graph/v1.json";
 
 export const PACKAGE_NAME = "@clavis/content";
