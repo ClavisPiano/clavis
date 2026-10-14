@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GeneratorId, SkillNode } from "../graph/schema.js";
 import { degreeToMidi, tonicMidiForRange } from "../theory/degrees.js";
-import type { Key, MinorVariant, VoiceRange } from "../theory/keys.js";
+import type { MinorVariant } from "../theory/keys.js";
 import { tonicChroma } from "../theory/keys.js";
 import type { ExpectedResponse } from "./expected.js";
 import { cadenceStimulus, chooseKey, degreeLabels, keyToJson, latencyField } from "./build.js";
@@ -21,8 +21,6 @@ const DegreeNodeParams = z.object({
 });
 const DegreeItemParams = z.object({ degree: z.int() });
 
-export const SING_TOLERANCE_CENTS = 50;
-export const DEGREE_SING_WINDOW_MS = 10000;
 export const DEGREE_ID_WINDOW_MS = 8000;
 
 /** Item universe shared by degreeSing and degreeId: one item per node degree (R14). */
@@ -31,20 +29,11 @@ function listDegreeItems(node: SkillNode): ItemParams[] {
   return p.degrees.map((degree) => ({ degree }));
 }
 
-function singable(range: VoiceRange, key: Key, degree: number, v?: MinorVariant): number {
-  return degreeToMidi(
-    key,
-    degree,
-    tonicMidiForRange(key, range, { low: degree, high: degree }, opt(v)).tonicMidi,
-    opt(v),
-  );
-}
-
 function opt(v: MinorVariant | undefined): { minorVariant: MinorVariant } | undefined {
   return v === undefined ? undefined : { minorVariant: v };
 }
 
-function make(id: GeneratorId, sung: boolean): Generator {
+function make(id: GeneratorId): Generator {
   return {
     id,
     listItems: listDegreeItems,
@@ -61,10 +50,9 @@ function make(id: GeneratorId, sung: boolean): Generator {
           : undefined;
       const seed = rng.int(0, 0x7fffffff);
 
-      const heardRange = sung ? ctx.voiceRange : (ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE);
       const tonicMidi = tonicMidiForRange(
         key,
-        heardRange,
+        ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE,
         { low: degree, high: degree },
         opt(variant),
       ).tonicMidi;
@@ -86,30 +74,10 @@ function make(id: GeneratorId, sung: boolean): Generator {
         tempoBpm: cad.tempoBpm,
       };
 
-      const expected: ExpectedResponse = sung
-        ? {
-            sing: {
-              kind: "sungPitch",
-              targetMidi,
-              toleranceCents: SING_TOLERANCE_CENTS,
-              degreeLabels: labels,
-            },
-            play: {
-              kind: "pitchClass",
-              targetMidi: singable(
-                ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE,
-                key,
-                degree,
-                variant,
-              ),
-              degreeLabels: labels,
-            },
-            responseWindowMs: DEGREE_SING_WINDOW_MS,
-          }
-        : {
-            play: { kind: "pitchClass", targetMidi, degreeLabels: labels },
-            responseWindowMs: DEGREE_ID_WINDOW_MS,
-          };
+      const expected: ExpectedResponse = {
+        play: { kind: "pitchClass", targetMidi, degreeLabels: labels },
+        responseWindowMs: DEGREE_ID_WINDOW_MS,
+      };
 
       return {
         itemId: itemId(node.id, { degree }),
@@ -136,7 +104,10 @@ function make(id: GeneratorId, sung: boolean): Generator {
   };
 }
 
-/** Sing the degree, then play it (spec 7). Target in the voice range. */
-export const degreeSing: Generator = make("degreeSing", true);
-/** Play-only (and Away tap) variant. Same item universe and ids as degreeSing (R14). */
-export const degreeId: Generator = make("degreeId", false);
+/**
+ * Play the degree by ear (the Away tap variant too). The learner no longer sings: the answer is
+ * played on the keyboard. `degreeSing` is kept as an id so earlier events and plans still resolve,
+ * and behaves exactly like `degreeId` (R14: same item universe and ids).
+ */
+export const degreeSing: Generator = make("degreeSing");
+export const degreeId: Generator = make("degreeId");

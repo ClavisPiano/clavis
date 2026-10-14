@@ -133,6 +133,7 @@ export async function createSessionRuntime(
     deviceId,
     mode: placement ? "instrument" : params.mode,
     ...(params.practice ? { practice: true } : {}),
+    practiceStep: !placement,
     ...(params.learn && !placement
       ? { extraNewItems: effectiveSettings(service.state.settings).newItemsPerDay }
       : {}),

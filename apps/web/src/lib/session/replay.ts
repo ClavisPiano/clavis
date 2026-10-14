@@ -27,6 +27,7 @@ const TARGET_VELOCITY = 0.8;
 const TARGET_NOTE_SEC = 0.8;
 const TARGET_GAP_SEC = 0.6;
 const RHYTHM_NOTE_SEC = 0.25;
+const TONIC_GAP_SEC = 0.3;
 
 /**
  * Reading items show their target and play no audio before the answer (R17), so the stimulus
@@ -96,7 +97,28 @@ function referenceEvents(instance: ItemInstance): StimulusEvent[] {
     : instance.stimulus.events.filter((e) => e.role === "target" || e.role === "count-in");
   const start = events.reduce((min, e) => Math.min(min, e.atSec), Infinity);
   const shift = Number.isFinite(start) ? start : 0;
-  return events.map((e) => ({ ...e, atSec: e.atSec - shift }));
+  const shifted = events.map((e) => ({ ...e, atSec: e.atSec - shift }));
+  const tonic = tonicEvent(instance, shifted);
+  if (!tonic) return shifted;
+  const lead = tonic.durationSec + TONIC_GAP_SEC;
+  return [tonic, ...shifted.map((e) => ({ ...e, atSec: e.atSec + lead }))];
+}
+
+/**
+ * Items heard against a key (no cadence in the replay) start with the tonic, in the register of
+ * the target, so the learner hears the target against home. Skipped when the target is the tonic.
+ */
+function tonicEvent(instance: ItemInstance, reference: StimulusEvent[]): StimulusEvent | undefined {
+  const tonicMidi = instance.presentation.tonicMidi;
+  if (instance.display || typeof tonicMidi !== "number") return undefined;
+  const first = reference.find((e) => e.role === "target")?.midi[0];
+  if (first === undefined || first === tonicMidi) return undefined;
+  return {
+    atSec: 0,
+    midi: [tonicMidi],
+    durationSec: TARGET_NOTE_SEC,
+    velocity: TARGET_VELOCITY,
+  };
 }
 
 /** Attempt notes as stimulus events starting at 0 (relative timing kept). */

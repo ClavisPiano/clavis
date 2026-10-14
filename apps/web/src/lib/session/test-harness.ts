@@ -157,6 +157,8 @@ export interface HarnessOptions {
   placement?: boolean;
   /** Draws reading items. Without it, reading items are unavailable. */
   notation?: NotationPort;
+  /** Offer the practice step before degree answers. */
+  practiceStep?: boolean;
   /** Makes ids differ from another harness that used the same clock. */
   idSalt?: number;
   /** A graph other than the shipped one, for example with `pieceLine` switched on. */
@@ -199,6 +201,7 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
       ? { placement: { plan: placementPlan(graph, createRng(opts.seed ?? 1234)) } }
       : {}),
     ...(opts.notation ? { notation: opts.notation } : {}),
+    ...(opts.practiceStep ? { practiceStep: true } : {}),
     compose: composeSession,
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);

@@ -12,7 +12,6 @@ import {
   type ItemInstance,
   type ItemParams,
 } from "./types.js";
-import { SING_TOLERANCE_CENTS } from "./degree.js";
 
 const CellNodeParams = z.object({
   mode: z.literal("major"),
@@ -21,7 +20,7 @@ const CellNodeParams = z.object({
 });
 const CellItemParams = z.object({ cell: z.array(z.int()).min(2) });
 
-export const CELL_SING_WINDOW_MS = 15000;
+export const CELL_WINDOW_MS = 15000;
 const CELL_STARTS = [1, 3, 5] as const;
 const CELL_DEGREE_MIN = -3;
 const CELL_DEGREE_MAX = 10;
@@ -42,8 +41,8 @@ const MAX_SPAN_LONG = 3;
  *   previous note (no A-B-A). 2-note cells may span up to a fifth.
  *
  * Order is depth-first by start, then by move size; this is stable across runs.
- * Register note: the tonic can only move by octaves, so a sung cell is guaranteed to fit only
- * when the voice range spans at least 19 semitones (an octave plus the widest cell).
+ * Register note: the tonic can only move by octaves, so a cell is guaranteed to fit only
+ * when the playable range spans at least 19 semitones (an octave plus the widest cell).
  */
 export function enumerateCells(minNotes = 2, maxNotes = 4): number[][] {
   const out: number[][] = [];
@@ -96,14 +95,13 @@ export const cellEcho: Generator = {
     const key = chooseKey(np.mode, ctx.preferredKey, rng);
     const seed = rng.int(0, 0x7fffffff);
 
-    const sung = fitRegister(key, ctx.voiceRange, cell);
     const played = fitRegister(key, ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE, cell);
 
     const cad = cadenceStimulus(key);
     const stimulus = {
       events: [
         ...cad.events,
-        ...sung.midi.map((m, i) => ({
+        ...played.midi.map((m, i) => ({
           atSec: cad.targetStartSec + i * cad.beatSec,
           midi: [m],
           durationSec: cad.beatSec * 0.9,
@@ -124,28 +122,22 @@ export const cellEcho: Generator = {
         key: keyToJson(key),
         tonic: key.tonic,
         mode: key.mode,
-        tonicMidi: sung.tonicMidi,
+        tonicMidi: played.tonicMidi,
         tonicChroma: tonicChroma(key),
         cell,
-        targetMidi: sung.midi,
+        targetMidi: played.midi,
         tempoBpm: cad.tempoBpm,
         seed,
       },
       stimulus,
       expected: {
-        sing: {
-          kind: "sungSequence",
-          midi: sung.midi,
-          toleranceCents: SING_TOLERANCE_CENTS,
-          degreeLabels: labels,
-        },
         play: {
           kind: "sequence",
           midi: played.midi,
           octaveAgnostic: true,
           degreeLabels: labels,
         },
-        responseWindowMs: CELL_SING_WINDOW_MS,
+        responseWindowMs: CELL_WINDOW_MS,
       },
       ...latencyField(node),
     };

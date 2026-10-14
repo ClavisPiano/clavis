@@ -84,7 +84,7 @@ describe("fading by node state", () => {
     ["fluent", 0, true, true],
     ["fluent", 1, true, false],
     ["fluent", 2, true, true],
-    ["fluent", 3, false, false],
+    ["fluent", 3, false, true],
     ["mastered", 0, true, false],
     ["mastered", 5, true, false],
     ["mastered", 5, false, true],
@@ -111,7 +111,32 @@ describe("fading by node state", () => {
     });
     expect(
       buildFeedback({ nodeState: "fluent", attemptIndex: 1, correct: false, errors: err }),
-    ).toEqual({ correct: false, detailed: false, lines: [], autoAdvance: false });
+    ).toEqual({
+      correct: false,
+      detailed: true,
+      lines: ["That was not the target note"],
+      autoAdvance: false,
+    });
+  });
+
+  it("adds the right answer in words after a miss only", () => {
+    const answer = "The note was 3, which is B in G major.";
+    const wrong = buildFeedback({
+      nodeState: "fluent",
+      attemptIndex: 1,
+      correct: false,
+      errors: [{ code: "pitch.wrong" }],
+      answer,
+    });
+    expect(wrong.answer).toBe(answer);
+    const right = buildFeedback({
+      nodeState: "learning",
+      attemptIndex: 0,
+      correct: true,
+      errors: [],
+      answer,
+    });
+    expect(right.answer).toBeUndefined();
   });
 });
 
@@ -123,7 +148,7 @@ describe("concept tips in feedback", () => {
   it.each([
     ["learning, wrong", "learning", 0, false, tip],
     ["fluent, wrong, detail shown", "fluent", 2, false, tip],
-    ["fluent, wrong, detail faded", "fluent", 1, false, undefined],
+    ["fluent, wrong, odd attempt", "fluent", 1, false, tip],
     ["mastered, wrong", "mastered", 5, false, undefined],
     ["learning, right overall with a wrong sung part", "learning", 0, true, tip],
   ] as const)("%s", (_name, nodeState, attemptIndex, correct, expected) => {

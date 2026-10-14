@@ -11,6 +11,7 @@
   import { INPUT_STORAGE_KEY } from "../../lib/input";
   import { updateState } from "../../lib/pwa/update-state.svelte";
   import type { SessionState } from "../../lib/session/machine";
+  import type { KeyNotes } from "../../lib/session/key-notes";
   import { parseSessionParams, type SessionParams } from "../../lib/session/params";
   import { createSessionRuntime, type SessionRuntime } from "../../lib/session/runtime";
   import { followUpSearch } from "../../lib/next-steps";
@@ -57,12 +58,59 @@
   /** Buttons to answer a choice item (R21), in both modes. They replace the keyboard. */
   const choices = $derived(view.kind === "listening" ? view.item.choices : undefined);
   const showKeyboard = $derived(
-    params?.mode === "away" && view.kind === "listening" && view.phase === "play" && !choices,
+    params?.mode === "away" &&
+      view.kind === "listening" &&
+      (view.phase === "play" || view.practice) &&
+      !choices,
   );
   const awayKeys = $derived(
     awayKeyboard(view.kind === "listening" ? view.item.inputRange : undefined),
   );
-  const showPad = $derived(showKeyboard && expected?.play?.kind === "rhythm");
+  const showPad = $derived(
+    showKeyboard &&
+      expected?.play?.kind === "rhythm" &&
+      view.kind === "listening" &&
+      !view.practice,
+  );
+  const practiceHelp = $derived(
+    view.kind === "listening" && view.practice
+      ? params?.mode === "away"
+        ? "Work it out on the keyboard below. Nothing is marked until you press Ready."
+        : "Work it out on your own piano; the app is not listening yet. Nothing is marked until you press Ready."
+      : undefined,
+  );
+
+  /** The guide keyboard: home note and chord in the question, the answer after it. */
+  const guideItem = $derived(
+    view.kind === "presenting" || view.kind === "listening" || view.kind === "feedback"
+      ? view.item
+      : undefined,
+  );
+  const guideMarks = $derived.by(() => {
+    const guide = guideItem?.guide;
+    if (!guide) return undefined;
+    const marks: Record<number, "tonic" | "chord" | "target" | "right" | "wrong"> = {};
+    const answer = view.kind === "feedback" ? view.answerKeys : undefined;
+    for (let midi = guide.low; midi <= guide.high; midi++) {
+      const pc = midi % 12;
+      if (answer) {
+        if (answer.targetPcs.includes(pc)) marks[midi] = "target";
+      } else if (pc === guide.tonicPc) {
+        marks[midi] = "tonic";
+      } else if (guide.chordPcs.includes(pc)) {
+        marks[midi] = "chord";
+      }
+    }
+    for (const midi of answer?.played ?? []) {
+      marks[midi] = answer?.targetPcs.includes(midi % 12) ? "right" : "wrong";
+    }
+    return marks;
+  });
+  const guideNote = $derived(
+    view.kind === "feedback"
+      ? "Green: the note you were asked for. Red: a note you played that was not it."
+      : "Gold: the home note, 1. Pale: the rest of the home chord.",
+  );
 
   const orientCard = cardById(ORIENT_CARD_ID);
   /** Show the warm-up card in full the first time; read once so it stays up until Continue. */
@@ -72,6 +120,8 @@
   let pausedForCard = false;
   const introCard = $derived(view.kind === "intro" ? cardForNode(view.nodeId) : undefined);
   const itemCard = $derived("item" in view ? cardForNode(view.item.nodeId) : undefined);
+  /** One line saying what to do, from the skill card's first "What you'll do" step. */
+  const hint = $derived(itemCard?.howTo[0]);
 
   function playExample(spec: StimulusSpec): void {
     runtime?.playExample(spec);
@@ -204,6 +254,15 @@
 
 <svelte:head><title>Session</title></svelte:head>
 
+{#snippet keyNotesLine(notes: KeyNotes)}
+  <p class="key-notes" data-testid="key-notes">
+    <strong>{notes.key}</strong>
+    {#each notes.notes as n (n.label)}
+      <span class="key-note"><span class="deg">{n.label}</span> {n.note}</span>
+    {/each}
+  </p>
+{/snippet}
+
 {#snippet nextStepLinks()}
   {#if steps && (steps.keepGoing || steps.learn)}
     <h2>Keep going?</h2>
@@ -257,7 +316,7 @@
       </header>
     {/if}
 
-    {#if "item" in view && view.item.display}
+    {#if "item" in view && (view.item.display !== undefined || view.item.showStaff === true)}
       <div class="notation-slot" data-testid="notation-slot" data-block={view.item.block}>
         {#if runtime}
           <NotationView port={runtime.notation} label="Music notation to read" />
@@ -363,6 +422,11 @@
     {:else if view.kind === "presenting"}
       <section class="card" data-testid="presenting">
         <p class="prompt" aria-live="polite">{view.prompt}</p>
+        {#if view.item.keyNotes}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render keyNotesLine(view.item.keyNotes)}
+        {/if}
+        {#if hint}<p class="hint" data-testid="hint">{hint}</p>{/if}
         <button type="button" class="secondary" data-testid="skip" onclick={() => machine?.skip()}>
           Skip
         </button>
@@ -399,6 +463,34 @@
             }}>Tap</button
           >
         {/if}
+        {#if view.item.keyNotes}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render keyNotesLine(view.item.keyNotes)}
+        {/if}
+        {#if hint}<p class="hint" data-testid="hint">{hint}</p>{/if}
+        {#if practiceHelp}<p class="hint" data-testid="practice-help">{practiceHelp}</p>{/if}
+        {#if view.canHear}
+          <div class="row" role="group" aria-label="Hear it again">
+            <button
+              type="button"
+              class="secondary"
+              data-testid="hear-again"
+              onclick={() => machine?.hear("full")}
+            >
+              {view.canHearNote ? "Hear it again" : "Replay"}
+            </button>
+            {#if view.canHearNote}
+              <button
+                type="button"
+                class="secondary"
+                data-testid="hear-note"
+                onclick={() => machine?.hear("note")}
+              >
+                Hear the note
+              </button>
+            {/if}
+          </div>
+        {/if}
         {#if choices}
           <div class="choices" role="group" aria-label="Your answer">
             {#each choices as option (option.id)}
@@ -414,7 +506,16 @@
           </div>
         {/if}
         <div class="row">
-          {#if !choices}
+          {#if view.practice}
+            <button
+              type="button"
+              class="primary"
+              data-testid="ready"
+              onclick={() => machine?.ready()}
+            >
+              Ready, mark my answer
+            </button>
+          {:else if !choices}
             <button
               type="button"
               class="primary"
@@ -451,6 +552,9 @@
         <p class="result" class:good={view.feedback.correct} data-testid="result">
           {view.feedback.correct ? "Correct" : "Not quite"}
         </p>
+        {#if view.feedback.answer}
+          <p class="answer" data-testid="answer">{view.feedback.answer}</p>
+        {/if}
         {#if view.feedback.lines.length > 0}
           <ul class="issues" data-testid="issues">
             {#each view.feedback.lines as line (line)}<li>{line}</li>{/each}
@@ -601,10 +705,25 @@
           high={awayKeys.high}
           focusMidi={awayKeys.focus}
           labels="c-only"
+          marks={guideMarks ?? {}}
           playSound={(midi: number) => runtime?.tone(midi)}
           onpress={(midi: number, ts: number) => runtime?.tap?.press(midi, ts)}
           onrelease={(midi: number, ts: number) => runtime?.tap?.release(midi, ts)}
         />
+      </div>
+    {/if}
+
+    {#if !showKeyboard && guideItem?.guide && guideMarks}
+      <div class="keys" data-testid="guide-keyboard">
+        <Keyboard
+          low={guideItem.guide.low}
+          high={guideItem.guide.high}
+          focusMidi={guideItem.guide.focus}
+          labels="c-only"
+          marks={guideMarks}
+          readonly
+        />
+        <p class="hint" data-testid="guide-note">{guideNote}</p>
       </div>
     {/if}
 
@@ -669,6 +788,30 @@
 
   .lead {
     font-size: 1.15rem;
+  }
+
+  .key-notes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-2) var(--space-4);
+    font-size: 1.15rem;
+  }
+
+  .key-note .deg {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  .answer {
+    font-size: 1.15rem;
+    text-align: center;
+  }
+
+  .hint {
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    text-align: center;
   }
 
   .notation-slot {

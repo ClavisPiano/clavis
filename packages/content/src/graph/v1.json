@@ -709,7 +709,7 @@
       "implemented": true,
       "seedDurationSec": 8,
       "awayEligible": true,
-      "requires": ["mic", "keys"]
+      "requires": ["keys"]
     },
     {
       "id": "degreeId",
@@ -723,7 +723,7 @@
       "implemented": true,
       "seedDurationSec": 12,
       "awayEligible": true,
-      "requires": ["mic", "keys"]
+      "requires": ["keys"]
     },
     {
       "id": "rhythmEcho",

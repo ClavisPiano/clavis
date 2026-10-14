@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SkillNode } from "../graph/schema.js";
+import type { Duration, ScoreNote, ScoreSpec } from "../score/schema.js";
 import type { StimulusEvent } from "../stimulus/types.js";
 import { latencyField } from "./build.js";
 import { itemId } from "./ids.js";
@@ -51,6 +52,46 @@ export const RHYTHM_PATTERNS: readonly RhythmPattern[] = [
   p("r21", 2, 5, [0, 1, 2, 2.5, 3, 4, 5, 6, 6.5, 7]),
   p("r22", 2, 5, [0, 0.5, 1, 1.5, 2, 3, 4, 4.5, 5, 6]),
 ];
+
+/** Note value for a gap between onsets, in beats. Other gaps cannot be written without ties. */
+const GAP_DURATION: Record<string, Duration> = {
+  "0.5": { value: 8, dots: 0 },
+  "1": { value: 4, dots: 0 },
+  "1.5": { value: 4, dots: 1 },
+  "2": { value: 2, dots: 0 },
+  "3": { value: 2, dots: 1 },
+  "4": { value: 1, dots: 0 },
+};
+
+/**
+ * Write an onsets-only pattern as notes: each note lasts until the next onset (the last until the
+ * end of the bar). Undefined when a gap has no single written value or a note would cross a barline.
+ */
+export function rhythmStaff(
+  pat: Pick<RhythmPattern, "bars" | "onsetsBeats">,
+): ScoreSpec | undefined {
+  const total = pat.bars * BEATS_PER_BAR;
+  const measures: ScoreNote[][] = Array.from({ length: pat.bars }, () => []);
+  let n = 0;
+  for (const [i, onset] of pat.onsetsBeats.entries()) {
+    const gap = (pat.onsetsBeats[i + 1] ?? total) - onset;
+    const duration = GAP_DURATION[String(gap)];
+    const bar = Math.floor(onset / BEATS_PER_BAR);
+    if (duration === undefined || onset + gap > (bar + 1) * BEATS_PER_BAR) return undefined;
+    measures[bar]?.push({
+      kind: "note",
+      id: "n" + String(++n),
+      pitches: [{ step: "B", alter: 0, octave: 4 }],
+      duration: { ...duration },
+    });
+  }
+  if (pat.onsetsBeats[0] !== 0 || measures.some((m) => m.length === 0)) return undefined;
+  return {
+    staves: [{ clef: "percussion", lines: 1, measures }],
+    key: null,
+    meter: { beats: BEATS_PER_BAR, beatValue: 4 },
+  };
+}
 
 const RhythmNodeParams = z.object({
   bars: z.array(z.int().min(1).max(2)).min(1),
@@ -109,6 +150,7 @@ export const rhythmEcho: Generator = {
       });
     }
 
+    const staff = rhythmStaff(pat);
     return {
       itemId: itemId(node.id, { pattern: pat.id }),
       nodeId: node.id,
@@ -133,6 +175,7 @@ export const rhythmEcho: Generator = {
         },
         responseWindowMs: 12000,
       },
+      ...(staff ? { staff } : {}),
       ...latencyField(node),
     };
   },
