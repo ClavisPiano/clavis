@@ -25,13 +25,15 @@ export interface Allocation {
 /**
  * Split a budget over the blocks (spec 6.1, 6.2). Away mode has no orient and is 60% ear and 40% read when read has content, else all ear. Blocks without content
  * give their share to ear. At 300 s or less apply is dropped first, then read is halved, and
- * orient is held to 30 s. All values are whole seconds that add up to the budget.
+ * orient is held to 30 s. Without orient (`orient: false`) its share goes to ear. All values are whole seconds that add up to the budget.
  */
 export function allocate(opts: {
   budgetSec: number;
   mode: SessionMode;
   readHasContent: boolean;
   applyHasContent: boolean;
+  /** False when the key-of-the-day warm-up is skipped (later sessions of the day, practice). */
+  orient?: boolean;
 }): Allocation {
   const { budgetSec: b, mode } = opts;
   const notes: string[] = [];
@@ -67,6 +69,10 @@ export function allocate(opts: {
   if (pressure) {
     const trimmed = Math.min(MIN_ORIENT_SEC, Math.floor(b / 3));
     orient = trimmed;
+  }
+  if (opts.orient === false) {
+    notes.push("orient skipped: not the first session of the day");
+    orient = 0;
   }
   const orientSec = Math.round(orient);
   const readSec = Math.round(read);

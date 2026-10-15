@@ -1,13 +1,14 @@
-import { AUTO_CONTINUE_META_KEY, parseAutoContinueSec } from "../auto-continue";
 import { asset } from "$app/paths";
 import {
+  CompositeInputAdapter,
   FakeInstrument,
   SmplrPianoInstrument,
   StimulusPlayer,
+  TapInputAdapter,
   getAudioContextManager,
   type FakeClock,
+  type InputAdapter,
   type Instrument,
-  type TapInputAdapter,
 } from "@clavis/audio";
 import {
   composePieceRun,
@@ -19,6 +20,7 @@ import {
   type StimulusSpec,
 } from "@clavis/core";
 import { scoreAttempt } from "@clavis/scoring";
+import { AUTO_CONTINUE_META_KEY, parseAutoContinueSec } from "../auto-continue";
 import { effectiveSettings } from "../home";
 import { nextSteps as computeNextSteps, type NextSteps } from "../next-steps";
 import { getLearnerState } from "../learner";
@@ -37,7 +39,7 @@ export const ORIENT_CARD_META_KEY = "seen.orient-card";
 
 export interface SessionRuntime {
   machine: SessionMachine;
-  /** The on-screen keyboard feeds this in Away mode. */
+  /** The on-screen keyboard feeds this: the only input in Away mode, an extra one at the piano. */
   tap: TapInputAdapter | undefined;
   /** What to offer after the session (Keep going, Learn something new), from the current state. */
   nextSteps(elapsedSec: number): NextSteps;
@@ -107,7 +109,20 @@ export async function createSessionRuntime(
     clock: { now: contextNowMs, schedule },
     ...(performanceClock ? { tapClockMs: contextNowMs } : {}),
   });
-  const tap = handle.tap;
+  // At the piano the on-screen keys answer too, so the learner can practise anywhere. Away mode's
+  // main input already is the keyboard, and placement is for the instrument alone.
+  const keys =
+    handle.kind === "tap" || placement
+      ? undefined
+      : new TapInputAdapter({
+          getContext: performanceClock
+            ? () => ({ currentTime: contextNowMs() / 1000 })
+            : () => audio.getContext(),
+        });
+  const input: InputAdapter = keys
+    ? new CompositeInputAdapter(handle.adapter, keys)
+    : handle.adapter;
+  const tap = handle.tap ?? keys;
 
   const newId = createUlidGenerator({
     now: () => Date.now(),
@@ -136,6 +151,7 @@ export async function createSessionRuntime(
     deviceId,
     mode: placement ? "instrument" : params.mode,
     ...(params.practice ? { practice: true } : {}),
+    ...(params.practice && params.skills ? { skills: params.skills } : {}),
     practiceStep: !placement,
     autoContinueMs: autoContinueSec * 1000,
     ...(params.learn && !placement
@@ -168,7 +184,7 @@ export async function createSessionRuntime(
       },
       load: () => stimulusPlayer.load(),
     },
-    input: handle.adapter,
+    input,
     notation,
     createSingInput: () => createInput("mic").adapter,
     score: scoreAttempt,
@@ -275,7 +291,7 @@ export async function createSessionRuntime(
         // Leaving mid-session closes it now; a killed tab is cleaned up by the next start.
         machine.finish();
         notation.hide();
-        handle.adapter.stop();
+        input.stop();
         if (fake) {
           detachFakeInput();
           Reflect.deleteProperty(window, "__clavisSession");

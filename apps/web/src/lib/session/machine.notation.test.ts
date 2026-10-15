@@ -14,19 +14,12 @@ import {
 } from "@clavis/core";
 import { describe, expect, it } from "vitest";
 import { SessionMachine, feedbackMarks, promptFor, type SessionState } from "./machine";
-import { FakeNotation, makeHarness, noteAt, type Harness } from "./test-harness";
+import { FakeNotation, logOf, makeHarness, noteAt, type Harness } from "./test-harness";
 
 /* Reading items (T3.10): a fake NotationPort with a controllable show delay, stub read items
    (no real read generators are registered), and the real composer for the ear items. */
 
 const READ_NODE = "read.bass.landmarks";
-
-/** The event log after the held-back attempt has been written, as it is on moving on. */
-async function logOf(r: { machine: SessionMachine; h: Harness }): Promise<LearningEvent[]> {
-  r.machine.commit();
-  await r.machine.settled();
-  return r.h.log();
-}
 
 const COUNT_IN: StimulusSpec = {
   tempoBpm: 60,

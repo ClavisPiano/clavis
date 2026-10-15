@@ -38,6 +38,35 @@ describe("rhythmStaff", () => {
   });
 });
 
+describe("rhythmEcho pitch", () => {
+  const make = (preferredKey?: { tonic: string; mode: "major" | "minor" }) =>
+    rhythmEcho.generate(
+      node,
+      { pattern: "r01" },
+      {
+        rng: createRng(1),
+        voiceRange: { low: 48, high: 72 },
+        mode: "instrument",
+        ...(preferredKey ? { preferredKey } : {}),
+      },
+    );
+
+  it.each([
+    [undefined, 60],
+    [{ tonic: "C", mode: "major" as const }, 60],
+    [{ tonic: "G", mode: "major" as const }, 67],
+    [{ tonic: "Bb", mode: "major" as const }, 70],
+    [{ tonic: "A", mode: "minor" as const }, 69],
+  ])("on the tonic of %j (MIDI %d)", (key, midi) => {
+    const inst = make(key);
+    const targets = inst.stimulus.events.filter((e) => e.role === "target");
+    expect(targets.length).toBeGreaterThan(0);
+    expect(targets.every((e) => e.midi[0] === midi)).toBe(true);
+    expect(inst.expected.play).toMatchObject({ kind: "rhythm", pitch: midi });
+    expect(inst.presentation.pitch).toBe(midi);
+  });
+});
+
 describe("rhythmEcho staff", () => {
   it("carries a staff beside the audio and no reading display", () => {
     const inst = rhythmEcho.generate(

@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { SessionMachine, type SessionState } from "./machine";
 import {
   FakeNotation,
+  logOf,
   makeHarness,
   noteAt,
   playCorrect,
@@ -30,13 +31,6 @@ import {
    generator; only the notation port is a fake. */
 
 const HCB = "piece.hot-cross-buns";
-
-/** The event log after the held-back attempt has been written, as it is on moving on. */
-async function logOf(r: { machine: SessionMachine; h: Harness }): Promise<LearningEvent[]> {
-  r.machine.commit();
-  await r.machine.settled();
-  return r.h.log();
-}
 
 const NODE = "apply.pieces";
 

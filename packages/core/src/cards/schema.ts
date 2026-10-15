@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { cadenceStimulus } from "../items/build.js";
-import { COUNT_IN_PITCH, COUNT_IN_VELOCITY, RHYTHM_PITCH } from "../items/rhythm.js";
+import { COUNT_IN_PITCH, COUNT_IN_VELOCITY, rhythmPitch } from "../items/rhythm.js";
 import type { StimulusEvent, StimulusSpec } from "../stimulus/types.js";
 import { spelledToMidi, type ScoreSpec, type SpelledPitch, type Step } from "../score/schema.js";
 import { MAJOR_ROMANS, progression } from "../theory/cadence.js";
@@ -196,7 +196,7 @@ export function cardExampleStimulus(example: CardExample, keyOfDay: Key): Stimul
       return {
         events: [
           ...clicks,
-          ...example.onsetsBeats.map((b) => note((4 + b) * beat, RHYTHM_PITCH, beat * 0.5)),
+          ...example.onsetsBeats.map((b) => note((4 + b) * beat, rhythmPitch(key), beat * 0.5)),
         ],
         tempoBpm: CARD_EXAMPLE_TEMPO_BPM,
       };

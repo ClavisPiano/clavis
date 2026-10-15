@@ -67,8 +67,8 @@ test.describe("session runner", () => {
     // The notes of the key are named, so the key is not a second puzzle.
     await expect(page.getByTestId("key-notes")).toContainText("C major");
     await expect(page.getByTestId("key-notes")).toContainText(/1\s*C\s*3\s*E\s*5\s*G/);
-    // A read-only keyboard marks the home note and chord, but not the target.
-    const guide = page.getByTestId("guide-keyboard");
+    // The keyboard (live while answering) marks the home note and chord, but not the target.
+    const guide = page.getByTestId("live-keyboard");
     await expect(guide).toBeVisible();
     await expect(guide.locator('[data-mark="tonic"]').first()).toBeVisible();
     await expect(guide.locator('[data-mark="target"]')).toHaveCount(0);
@@ -124,6 +124,26 @@ test.describe("session runner", () => {
     const types = await storedEventTypes(page);
     const session = types.slice(types.indexOf("session.started"));
     expect(session.filter((t) => t === "attempt.completed")).toHaveLength(1);
+  });
+
+  test("the on-screen keyboard answers at the piano like the external one", async ({ page }) => {
+    await page.goto("/session?input=fake&budget=90");
+    await page.getByTestId("start").click();
+    await page.getByTestId("continue").click(); // warm-up
+    await page.getByTestId("continue").click(); // intro card
+
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-practice");
+    await page.getByTestId("ready").click();
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-play");
+    // Wait out the short gate after the example, then press the key that was asked for.
+    await page.waitForTimeout(400);
+    const target = await page.evaluate(() => {
+      const play = window.__clavisSession?.expected?.play;
+      if (play?.kind !== "pitchClass") throw new Error("expected a played degree");
+      return play.targetMidi;
+    });
+    await page.locator(`[data-testid="session"] [data-midi="${String(target)}"]`).click();
+    await expect(page.getByTestId("feedback")).toHaveAttribute("data-correct", "true");
   });
 
   test("Away mode: no orient block, tapped answers", async ({ page }) => {

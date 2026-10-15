@@ -444,12 +444,13 @@ export function composeSession(input: ComposeInput): SessionPlan {
     : newItemAllowance({ introducedToday, cap: state.settings.newItemsPerDay }) + extraNew;
   const notes: string[] = [];
 
+  const skillSet = input.skills === undefined ? undefined : new Set(input.skills);
   const infos = new Map<string, NodeInfo>();
   const strands: Strand[] = ["EAR", "READ", "APPLY"];
   for (const node of graph.nodes) {
     if (!strands.includes(node.strand)) continue;
     const info = buildInfo(node, graph, mode, registry);
-    if (info) infos.set(node.id, info);
+    if (info && (skillSet === undefined || skillSet.has(node.id))) infos.set(node.id, info);
   }
   const stateOf = (id: string) => NODE_RANK[state.nodes[id]?.state ?? "locked"];
 
@@ -594,7 +595,22 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const applyHasContent =
     apply.due.length > 0 || (apply.fresh.length > 0 && Math.round(newAllowance / 3) > 0);
 
-  const alloc = allocate({ budgetSec, mode, readHasContent, applyHasContent });
+  // The warm-up that sets the key of the day plays once: before the first session of the day that
+  // got as far as an exercise. Later sessions and practice rounds go straight to the items, which
+  // carry their own cadence. A session closed before its first exercise does not count.
+  const orientNeeded =
+    input.practice !== true &&
+    !Object.values(state.sessions).some(
+      (x) =>
+        x.day === today && x.endedAt !== undefined && x.practice !== true && x.itemsPresented > 0,
+    );
+  const alloc = allocate({
+    budgetSec,
+    mode,
+    readHasContent,
+    applyHasContent,
+    orient: orientNeeded,
+  });
   notes.push(...alloc.notes);
 
   const readReserve = read.fresh.length > 0 ? Math.floor(newAllowance / 2) : 0;
@@ -664,7 +680,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
   );
 
   const orient =
-    mode === "away"
+    mode === "away" || !orientNeeded
       ? null
       : {
           estimatedSec: alloc.orientSec,

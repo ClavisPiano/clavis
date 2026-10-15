@@ -93,6 +93,8 @@ export function followUpSearch(
   const wasPractice = q.get("practice") === "1";
   q.delete("practice");
   q.delete("learn");
+  // The chosen skills belong to a practice round: a follow-up practice keeps them, learning does not.
+  if (kind === "learn") q.delete("skills");
   if (budgetSec !== undefined) q.set("budget", String(budgetSec));
   else if (wasPractice) q.delete("budget");
   q.set(kind, "1");

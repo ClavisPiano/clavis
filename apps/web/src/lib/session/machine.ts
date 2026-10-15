@@ -100,6 +100,8 @@ export interface SessionDeps {
   mode: SessionMode;
   /** Extra practice (T2.15): compose with `practice` and write `session.started` with it. */
   practice?: boolean;
+  /** Practice only these skills (node ids). Absent means every started skill. */
+  skills?: readonly string[];
   /** Learn something new: extra new items for this session on top of the daily allowance. */
   extraNewItems?: number;
   graph: SkillGraph;
@@ -741,6 +743,7 @@ export class SessionMachine {
       mode: d.mode,
       ...(d.budgetSec === undefined ? {} : { budgetSec: d.budgetSec }),
       ...(d.practice ? { practice: true } : {}),
+      ...(d.practice && d.skills ? { skills: d.skills } : {}),
       ...(d.extraNewItems ? { extraNewItems: d.extraNewItems } : {}),
       seed: d.seed,
     });
@@ -1388,7 +1391,7 @@ export class SessionMachine {
         frames: [],
         ...(cur.choice ? { choice: cur.choice } : {}),
         stimulusEndMs: cur.refMs.play ?? cur.stimulusEndMs,
-        source: isChoice ? "tap" : d.input.source,
+        source: isChoice ? "tap" : this.#playSource(cur),
         part: "play",
       });
     }
@@ -1402,8 +1405,19 @@ export class SessionMachine {
       outcome: combined.outcome,
       subScores,
       errors: combined.errors,
-      source: play ? (isChoice ? "tap" : d.input.source) : this.#adapterFor("sing").source,
+      source: play ? (isChoice ? "tap" : this.#playSource(cur)) : this.#adapterFor("sing").source,
     };
+  }
+
+  /**
+   * Where the played answer came from. The input can be the mic and the on-screen keys together;
+   * an answer made only on the keys is graded as tapped (exact keys, no octave guessing).
+   */
+  #playSource(cur: Current): InputSource {
+    const notes = cur.playNotes;
+    return notes.length > 0 && notes.every((n) => n.source === "tap")
+      ? "tap"
+      : this.#d.input.source;
   }
 
   async #completeItem(skipped: boolean): Promise<void> {
@@ -1479,6 +1493,7 @@ export class SessionMachine {
         ...(errors.length > 0 ? { errors } : {}),
       };
       // Piece runs and revealed scores write at once; everything else waits so it can be retried.
+      // Placement returned above, so it never gets here: Try again cannot reach its attempts.
       const retryable = !this.#plan?.run && !reveal;
       if (retryable) {
         this.#pending = { events: [attemptEvent], correct: outcome.correct, nodeId };

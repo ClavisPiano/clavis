@@ -332,3 +332,13 @@ export function playCorrect(
   }
   return last;
 }
+
+/**
+ * The event log of a machine built by hand (not the harness's own), after its held-back attempt
+ * has been written, as it is on moving on.
+ */
+export async function logOf(r: { machine: SessionMachine; h: Harness }): Promise<LearningEvent[]> {
+  r.machine.commit();
+  await r.machine.settled();
+  return r.h.log();
+}
