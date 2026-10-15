@@ -1,9 +1,26 @@
 import adapter from "@sveltejs/adapter-static";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { execSync } from "node:child_process";
 import { defineConfig } from "vitest/config";
+
+/** Short commit and build day. Workers Builds and Actions set the sha; locally git supplies it. */
+function buildId(): string {
+  let sha = process.env.WORKERS_CI_COMMIT_SHA ?? process.env.GITHUB_SHA ?? "";
+  if (sha === "") {
+    try {
+      sha = execSync("git rev-parse HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+        .toString()
+        .trim();
+    } catch {
+      sha = "";
+    }
+  }
+  return `${sha === "" ? "dev" : sha.slice(0, 7)} (${new Date().toISOString().slice(0, 10)})`;
+}
 
 // SvelteKit 3 reads its configuration from the plugin options (no svelte.config.js).
 export default defineConfig({
+  define: { __BUILD_ID__: JSON.stringify(buildId()) },
   plugins: [
     sveltekit({
       adapter: adapter({ pages: "build", assets: "build", fallback: "index.html", strict: false }),

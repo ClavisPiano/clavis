@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { runToSummary, storedEventTypes } from "./session-helpers";
+import { answerCurrentPhase, runToSummary, storedEventTypes } from "./session-helpers";
 
 /*
  * Full sessions with fake input and a silent instrument (?input=fake implies ?audio=silent).
@@ -84,6 +84,46 @@ test.describe("session runner", () => {
     await page.getByTestId("ready").click();
     await expect(page.getByTestId("done")).toBeVisible();
     await expect(page.getByTestId("ready")).toHaveCount(0);
+  });
+
+  test("a wrong answer can be tried again, and the discarded go is not logged", async ({
+    page,
+  }) => {
+    await page.goto("/session?input=fake&budget=90");
+    await page.getByTestId("start").click();
+    await page.getByTestId("continue").click(); // warm-up
+    await page.getByTestId("continue").click(); // intro card
+
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-practice");
+    await page.getByTestId("ready").click();
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-play");
+    // A wrong note, then Done.
+    await page.evaluate(() => {
+      const play = window.__clavisSession?.expected?.play;
+      const fake = window.__clavisFakeInput;
+      if (!fake || play?.kind !== "pitchClass") throw new Error("expected a played degree");
+      fake.emitNote(play.targetMidi + 1, { onsetMs: fake.nowMs() + 300 });
+    });
+    await page.getByTestId("done").click();
+    await expect(page.getByTestId("feedback")).toHaveAttribute("data-correct", "false");
+    await expect(page.getByTestId("answer")).toBeVisible();
+
+    // Try again asks the same item again; this time the answer is heard.
+    await page.getByTestId("retry").click();
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-practice");
+    await page.getByTestId("ready").click();
+    await page.waitForFunction(() => window.__clavisSession?.phase === "listening-play");
+    await answerCurrentPhase(page);
+    await expect(page.getByTestId("feedback")).toHaveAttribute("data-correct", "true");
+    // A correct answer moves on by itself after the default 3 seconds.
+    await expect(page.getByTestId("auto-continue-note")).toContainText("3s");
+    await expect(page.getByTestId("feedback")).toHaveCount(0, { timeout: 10_000 });
+
+    await page.getByTestId("finish").click();
+    await page.getByTestId("finish-end").click();
+    const types = await storedEventTypes(page);
+    const session = types.slice(types.indexOf("session.started"));
+    expect(session.filter((t) => t === "attempt.completed")).toHaveLength(1);
   });
 
   test("Away mode: no orient block, tapped answers", async ({ page }) => {

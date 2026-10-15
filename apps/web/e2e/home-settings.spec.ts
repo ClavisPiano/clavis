@@ -45,6 +45,21 @@ test("settings persist across reload as a settings.changed event", async ({ page
   await expect(page.getByTestId("start-session")).toContainText("20 min");
 });
 
+test("auto-continue defaults to 3 seconds and the choice persists", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByTestId("auto-continue")).toHaveValue("3");
+  await page.getByTestId("auto-continue").selectOption("0");
+  await page.getByTestId("save").click();
+  await expect(page.getByTestId("saved")).toHaveText("Saved");
+  await page.reload();
+  await expect(page.getByTestId("auto-continue")).toHaveValue("0");
+});
+
+test("about shows which build is running", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByTestId("build-id")).toHaveText(/^[0-9a-f]{7}|dev \(\d{4}-\d{2}-\d{2}\)/);
+});
+
 test("an inverted voice range is blocked", async ({ page }) => {
   await page.goto("/settings");
   await page.getByTestId("range-low").selectOption("70");

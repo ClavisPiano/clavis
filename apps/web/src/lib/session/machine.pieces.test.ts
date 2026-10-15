@@ -30,6 +30,14 @@ import {
    generator; only the notation port is a fake. */
 
 const HCB = "piece.hot-cross-buns";
+
+/** The event log after the held-back attempt has been written, as it is on moving on. */
+async function logOf(r: { machine: SessionMachine; h: Harness }): Promise<LearningEvent[]> {
+  r.machine.commit();
+  await r.machine.settled();
+  return r.h.log();
+}
+
 const NODE = "apply.pieces";
 
 const shipped = loadGraph();
@@ -176,7 +184,7 @@ describe("an Apply block phrase", () => {
     await r.machine.start();
     await play(r);
     expect(r.machine.state).toMatchObject({ kind: "feedback", feedback: { correct: true } });
-    const log = await r.h.log();
+    const log = await logOf(r);
     const presented = ofType(log, "item.presented")[0];
     expect(presented).toMatchObject({
       block: "apply",
@@ -202,7 +210,7 @@ describe("an Apply block phrase", () => {
     if (s.kind !== "feedback") throw new Error("not feedback");
     expect(s.feedback.correct).toBe(false);
     expect(s.feedback.lines.length).toBeGreaterThan(0);
-    const attempt = ofType(await r.h.log(), "attempt.completed")[0];
+    const attempt = ofType(await logOf(r), "attempt.completed")[0];
     expect(attempt?.outcome.correct).toBe(false);
     expect(attempt?.errors?.[0]).toMatchObject({ code: "sequence.wrong-note" });
     expect(r.h.service.state.pieces[HCB]?.phrases["1"]).toMatchObject({
@@ -236,7 +244,7 @@ describe("an Apply block phrase", () => {
     await play(r);
     r.machine.finish();
     await until(r, summary);
-    expect(ofType(await r.h.log(), "piece.completed")).toEqual([]);
+    expect(ofType(await logOf(r), "piece.completed")).toEqual([]);
   });
 
   it("plays no phrase when notation cannot load: the items are dropped and the summary says so", async () => {
@@ -245,7 +253,7 @@ describe("an Apply block phrase", () => {
     await r.machine.settled();
     const s = r.machine.state;
     expect(["summary", "nothing"]).toContain(s.kind);
-    expect(ofType(await r.h.log(), "item.presented")).toEqual([]);
+    expect(ofType(await logOf(r), "item.presented")).toEqual([]);
   });
 });
 
@@ -261,7 +269,7 @@ describe("a whole-piece run", () => {
     r.machine.next();
     await until(r, summary);
 
-    const log = await r.h.log();
+    const log = await logOf(r);
     const types = log.map((e) => e.type);
     expect(types.filter((t) => t === "piece.completed")).toHaveLength(1);
     expect(types.indexOf("piece.completed")).toBeLessThan(types.indexOf("session.ended"));
@@ -293,7 +301,7 @@ describe("a whole-piece run", () => {
     await play(r, 0);
     r.machine.next();
     await until(r, summary);
-    const completed = ofType(await r.h.log(), "piece.completed");
+    const completed = ofType(await logOf(r), "piece.completed");
     expect(completed).toHaveLength(1);
     expect(completed[0]).toMatchObject({ phrases: 2, correctPhrases: 1 });
     const done = r.machine.state;
@@ -314,7 +322,7 @@ describe("a whole-piece run", () => {
     await until(r, feedback);
     r.machine.next();
     await until(r, summary);
-    expect(ofType(await r.h.log(), "piece.completed")[0]).toMatchObject({ correctPhrases: 1 });
+    expect(ofType(await logOf(r), "piece.completed")[0]).toMatchObject({ correctPhrases: 1 });
   });
 
   it("finishing early writes no piece.completed", async () => {
@@ -323,7 +331,7 @@ describe("a whole-piece run", () => {
     await play(r);
     r.machine.finish();
     await until(r, summary);
-    const log = await r.h.log();
+    const log = await logOf(r);
     expect(ofType(log, "piece.completed")).toEqual([]);
     expect(r.machine.state).toMatchObject({ kind: "summary" });
     expect((r.machine.state as { summary: { run?: unknown } }).summary.run).toBeUndefined();
@@ -340,7 +348,7 @@ describe("a whole-piece run", () => {
     await play(first);
     first.machine.next();
     await until(first, summary);
-    const history = [...trebleHistory(), ...(await first.h.log())];
+    const history = [...trebleHistory(), ...(await logOf(first))];
     const completedAt = first.h.service.state.pieces[HCB]?.completedAt;
 
     const h = await makeHarness({ budgetSec: 600, graph, history, idSalt: 91 });
@@ -389,7 +397,7 @@ describe("play it by ear (TP.6)", () => {
     await play(first);
     first.machine.next();
     await until(first, summary);
-    return [...trebleHistory(), ...(await first.h.log())];
+    return [...trebleHistory(), ...(await logOf(first))];
   }
 
   async function makeEarRig(): Promise<Rig> {
@@ -499,7 +507,7 @@ describe("play it by ear (TP.6)", () => {
     await r.machine.start();
     await sing(r);
     await playPhrase(r);
-    const log = await r.h.log();
+    const log = await logOf(r);
     const attempt = ofType(log, "attempt.completed").at(-1);
     expect(attempt).toMatchObject({
       nodeId: EAR_NODE,
@@ -525,7 +533,7 @@ describe("play it by ear (TP.6)", () => {
     if (done.kind !== "feedback") throw new Error("not feedback");
     expect(done.feedback.correct).toBe(false);
     expect(done.item.revealed).toBe(true);
-    const attempt = ofType(await r.h.log(), "attempt.completed").at(-1);
+    const attempt = ofType(await logOf(r), "attempt.completed").at(-1);
     expect(attempt?.outcome.correct).toBe(false);
     expect(attempt?.errors?.length).toBeGreaterThan(0);
     expect(attempt?.errors?.every((e) => e.detail?.part === "sing")).toBe(true);

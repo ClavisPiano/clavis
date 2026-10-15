@@ -686,7 +686,8 @@ describe("backgrounding", () => {
     h.machine.pause();
     expect(h.machine.state.kind).toBe("paused");
     h.machine.resume();
-    expect(h.machine.state).toEqual(feedback);
+    // Pausing writes the held-back attempt, so Try again is no longer offered.
+    expect(h.machine.state).toEqual({ ...feedback, canRetry: false });
   });
 
   it("pausing during orient restarts the orient audio on resume", async () => {

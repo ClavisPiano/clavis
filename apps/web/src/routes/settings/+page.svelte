@@ -23,6 +23,12 @@
   import { INPUT_STORAGE_KEY } from "../../lib/input";
   import { createTapCounter, devToolsEnabled, setDevToolsEnabled } from "../../lib/dev-tools";
   import pkg from "../../../package.json";
+  import {
+    AUTO_CONTINUE_DEFAULT_SEC,
+    AUTO_CONTINUE_MAX_SEC,
+    AUTO_CONTINUE_META_KEY,
+    parseAutoContinueSec,
+  } from "../../lib/auto-continue";
 
   type InputChoice = "auto" | "mic" | "tap";
   const HEADPHONES_META_KEY = "headphones";
@@ -30,6 +36,9 @@
   const learner = useLearner();
   let draft = $state<EffectiveSettings | undefined>();
   let inputChoice = $state<InputChoice>("auto");
+  /** Seconds before moving on after a correct answer; 0 is off. A device setting, not synced. */
+  let autoContinueSec = $state(AUTO_CONTINUE_DEFAULT_SEC);
+  let savedAutoContinueSec = AUTO_CONTINUE_DEFAULT_SEC;
   let saved = $state(false);
   let saveError = $state("");
 
@@ -47,6 +56,12 @@
     }
     await learner.init();
     if (learner.state) draft = effectiveSettings(learner.state.settings);
+    if (learner.status === "ready") {
+      savedAutoContinueSec = parseAutoContinueSec(
+        await learner.ctx.store.getMeta(AUTO_CONTINUE_META_KEY),
+      );
+      autoContinueSec = savedAutoContinueSec;
+    }
   });
 
   const current = $derived(learner.state ? effectiveSettings(learner.state.settings) : undefined);
@@ -86,6 +101,10 @@
           await store.setMeta(HEADPHONES_META_KEY, patch.headphones);
         }
       }
+      if (autoContinueSec !== savedAutoContinueSec) {
+        await learner.ctx.store.setMeta(AUTO_CONTINUE_META_KEY, autoContinueSec);
+        savedAutoContinueSec = autoContinueSec;
+      }
       try {
         if (inputChoice === "auto") localStorage.removeItem(INPUT_STORAGE_KEY);
         else localStorage.setItem(INPUT_STORAGE_KEY, inputChoice);
@@ -97,6 +116,9 @@
       saveError = `Could not save: ${e instanceof Error ? e.message : String(e)}`;
     }
   }
+
+  /** The commit this build came from and the day it was built, so a stale install is easy to spot. */
+  const buildId = __BUILD_ID__;
 
   const contentVersion = $derived(
     learner.status === "ready" ? learner.ctx.graph.contentVersion : "",
@@ -250,6 +272,27 @@
     </fieldset>
 
     <fieldset>
+      <legend>After a correct answer</legend>
+      <label>
+        Move on to the next exercise
+        <select
+          data-testid="auto-continue"
+          value={String(autoContinueSec)}
+          onchange={(e) => {
+            autoContinueSec = parseAutoContinueSec(Number(e.currentTarget.value));
+            touch();
+          }}
+        >
+          <option value="0">Never, I will tap Next</option>
+          {#each Array.from({ length: AUTO_CONTINUE_MAX_SEC }, (_, i) => i + 1) as n (n)}
+            <option value={String(n)}>After {n} {n === 1 ? "second" : "seconds"}</option>
+          {/each}
+        </select>
+      </label>
+      <p class="muted">A wrong answer always waits for you, so you can read what went wrong.</p>
+    </fieldset>
+
+    <fieldset>
       <legend>Audio and input</legend>
       <div class="choice" role="radiogroup" aria-label="Headphones">
         <span>Headphones</span>
@@ -330,6 +373,7 @@
   <button type="button" class="version" data-testid="app-version" onclick={tapVersion}>
     {pkg.version}
   </button>
+  <br />Build <span data-testid="build-id">{buildId}</span>
   {#if contentVersion}
     <br />Content version <span data-testid="content-version">{contentVersion}</span>
   {/if}

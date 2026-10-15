@@ -136,6 +136,13 @@ function buildInfo(
  * Degree nodes offer both `degreeSing` and `degreeId`; they alternate (sing first) with each item
  * the node contributes to the plan, so a block mixes production modes.
  */
+const RHYTHM_GENERATORS: readonly GeneratorId[] = ["rhythmEcho", "rhythmRead"];
+
+/** A node drilled only by rhythm generators. */
+function isRhythmNode(node: SkillNode): boolean {
+  return node.itemGenerators.every((g) => RHYTHM_GENERATORS.includes(g));
+}
+
 function chooseGenerator(info: NodeInfo, taken: number): GeneratorId {
   const degree = info.gens.filter((g) => g === "degreeSing" || g === "degreeId");
   if (degree.length === 2) return degree[taken % 2] as GeneratorId;
@@ -466,7 +473,12 @@ export function composeSession(input: ComposeInput): SessionPlan {
           (mode === "instrument" || !dependsOnHands(graph, node.id)),
       )
       .sort(
-        (a, b) => a.node.prerequisites.length - b.node.prerequisites.length || a.order - b.order,
+        (a, b) =>
+          // Pitch skills before rhythm: rhythm has no prerequisites, so it would otherwise always
+          // win, and once it is mid-learning it holds back every other skill of its strand.
+          Number(isRhythmNode(a.node)) - Number(isRhythmNode(b.node)) ||
+          a.node.prerequisites.length - b.node.prerequisites.length ||
+          a.order - b.order,
       )[0]?.node;
   };
   const lastIntroduction = (strand: Strand): number =>

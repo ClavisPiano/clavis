@@ -159,6 +159,8 @@ export interface HarnessOptions {
   notation?: NotationPort;
   /** Offer the practice step before degree answers. */
   practiceStep?: boolean;
+  /** Auto-continue after a correct answer, in ms (0 = never). Undefined keeps the older tick. */
+  autoContinueMs?: number;
   /** Makes ids differ from another harness that used the same clock. */
   idSalt?: number;
   /** A graph other than the shipped one, for example with `pieceLine` switched on. */
@@ -202,6 +204,7 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
       : {}),
     ...(opts.notation ? { notation: opts.notation } : {}),
     ...(opts.practiceStep ? { practiceStep: true } : {}),
+    ...(opts.autoContinueMs === undefined ? {} : { autoContinueMs: opts.autoContinueMs }),
     compose: composeSession,
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
@@ -247,7 +250,12 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     graph,
     machine,
     deps,
-    log: () => store.list(),
+    log: async () => {
+      // A held-back attempt (Try again) is written by now, as it would be on moving on.
+      machine.commit();
+      await machine.settled();
+      return store.list();
+    },
     advance,
     states,
   };
