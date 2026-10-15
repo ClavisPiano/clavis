@@ -51,7 +51,7 @@ export default defineConfig(
       svelte.configs.recommended,
     ],
     languageOptions: {
-      globals: globals.browser,
+      globals: { ...globals.browser, __BUILD_ID__: "readonly" },
       parserOptions: {
         projectService: true,
         extraFileExtensions: [".svelte"],

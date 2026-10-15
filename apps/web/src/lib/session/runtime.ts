@@ -1,3 +1,4 @@
+import { AUTO_CONTINUE_META_KEY, parseAutoContinueSec } from "../auto-continue";
 import { asset } from "$app/paths";
 import {
   FakeInstrument,
@@ -122,6 +123,7 @@ export async function createSessionRuntime(
         : undefined;
   const headphones = params.headphones === "ask" ? undefined : (params.headphones ?? known);
   const latency = parseLatency(await store.getMeta(LATENCY_META_KEY));
+  const autoContinueSec = parseAutoContinueSec(await store.getMeta(AUTO_CONTINUE_META_KEY));
   let orientCardSeen = (await store.getMeta(ORIENT_CARD_META_KEY)) === true;
 
   // Reading items draw through this port (R17: `show` resolves after the paint). The worker only
@@ -135,6 +137,7 @@ export async function createSessionRuntime(
     mode: placement ? "instrument" : params.mode,
     ...(params.practice ? { practice: true } : {}),
     practiceStep: !placement,
+    autoContinueMs: autoContinueSec * 1000,
     ...(params.learn && !placement
       ? { extraNewItems: effectiveSettings(service.state.settings).newItemsPerDay }
       : {}),

@@ -286,6 +286,21 @@ describe("composeSession rules", () => {
     expect(compose(state).introductions).toEqual([]);
   });
 
+  it("introduces a pitch skill before rhythm, though rhythm has no prerequisites", () => {
+    const state = newLearner();
+    state.nodes[D135] = { state: "mastered" };
+    state.nodes[DIATONIC] = { state: "available" };
+    state.nodes["ear.rhythm.echo"] = { state: "available" };
+    expect(compose(state).introductions).toEqual([DIATONIC]);
+  });
+
+  it("introduces rhythm when no pitch skill is waiting", () => {
+    const state = newLearner();
+    state.nodes[D135] = { state: "mastered" };
+    state.nodes["ear.rhythm.echo"] = { state: "available" };
+    expect(compose(state).introductions).toEqual(["ear.rhythm.echo"]);
+  });
+
   it("takes the default budget from settings, then the mode default", () => {
     const s = learnerWithDueCards();
     expect(compose(s).budgetSec).toBe(720);

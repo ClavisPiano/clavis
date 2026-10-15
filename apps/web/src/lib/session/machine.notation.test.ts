@@ -21,6 +21,13 @@ import { FakeNotation, makeHarness, noteAt, type Harness } from "./test-harness"
 
 const READ_NODE = "read.bass.landmarks";
 
+/** The event log after the held-back attempt has been written, as it is on moving on. */
+async function logOf(r: { machine: SessionMachine; h: Harness }): Promise<LearningEvent[]> {
+  r.machine.commit();
+  await r.machine.settled();
+  return r.h.log();
+}
+
 const COUNT_IN: StimulusSpec = {
   tempoBpm: 60,
   events: [0, 1, 2, 3].map((atSec) => ({
@@ -172,7 +179,7 @@ describe("reference time (R17)", () => {
     r.h.input.emitNote(noteAt(54, shownAt + 700, "mic"));
     await r.machine.settled();
     expect(r.machine.state.kind).toBe("feedback");
-    const attempt = byType(await r.h.log(), "attempt.completed")[0];
+    const attempt = byType(await logOf(r), "attempt.completed")[0];
     expect(attempt?.outcome.correct).toBe(true);
     expect(attempt?.outcome.latencyMs).toBe(700);
   });
@@ -299,7 +306,7 @@ describe("preload", () => {
     expect(end.summary.notes).toEqual([
       "Reading items were skipped because notation could not load.",
     ]);
-    const presented = byType(await r.h.log(), "item.presented");
+    const presented = byType(await logOf(r), "item.presented");
     expect(presented.every((e) => e.block === "ear")).toBe(true);
   });
 
@@ -312,7 +319,7 @@ describe("preload", () => {
     expect(end.summary.notes).toEqual([
       "Reading items were skipped because notation could not load.",
     ]);
-    expect(byType(await r.h.log(), "item.presented")).toHaveLength(0);
+    expect(byType(await logOf(r), "item.presented")).toHaveLength(0);
   });
 
   it("has no notes when everything loads", async () => {
@@ -345,7 +352,7 @@ describe("pause and resume", () => {
     expect(r.notation.count("show")).toBe(2);
     expect(r.h.player.plays).toHaveLength(2);
     expect(r.machine.debug().stimulusEndMs).toBeGreaterThan(firstRef + 20_000);
-    expect(byType(await r.h.log(), "item.presented")).toHaveLength(1);
+    expect(byType(await logOf(r), "item.presented")).toHaveLength(1);
   });
 
   it("takes the reference from the new paint time when the stimulus is empty", async () => {
@@ -380,7 +387,7 @@ describe("event log", () => {
     const r = await makeReadHarness();
     await r.machine.start();
     await r.machine.settled();
-    const presented = byType(await r.h.log(), "item.presented");
+    const presented = byType(await logOf(r), "item.presented");
     expect(presented).toHaveLength(1);
     expect(presented[0]).toMatchObject({
       block: "read",
@@ -541,7 +548,7 @@ describe("Away reading on the tap keyboard (T3.11)", () => {
     const r = await makeReadHarness({ mode: "away" });
     await r.machine.start();
     await tapAnswer(r, 54);
-    const attempts = byType(await r.h.log(), "attempt.completed");
+    const attempts = byType(await logOf(r), "attempt.completed");
     expect(attempts).toHaveLength(1);
     expect(attempts[0]?.outcome.correct).toBe(true);
     expect(attempts[0]?.inputSource).toBe("tap");
@@ -555,7 +562,7 @@ describe("Away reading on the tap keyboard (T3.11)", () => {
     const r = await makeReadHarness({ mode: "away" });
     await r.machine.start();
     await tapAnswer(r, 66);
-    const attempt = byType(await r.h.log(), "attempt.completed")[0];
+    const attempt = byType(await logOf(r), "attempt.completed")[0];
     expect(attempt?.outcome.correct).toBe(false);
     expect(attempt?.errors?.map((e) => e.code)).toEqual(["pitch.octave"]);
   });
@@ -564,7 +571,7 @@ describe("Away reading on the tap keyboard (T3.11)", () => {
     const r = await makeReadHarness({ mode: "away" });
     await r.machine.start();
     await tapAnswer(r, 54);
-    const attempt = byType(await r.h.log(), "attempt.completed")[0];
+    const attempt = byType(await logOf(r), "attempt.completed")[0];
     if (!attempt) throw new Error("no attempt");
     expect(r.h.service.state.sessions[attempt.sessionId]?.mode).toBe("away");
     expect(r.h.service.state.cards[attempt.itemId]?.reps).toBe(1);

@@ -80,7 +80,14 @@
   }
 
   function sectionLabel(block: "ear" | "read" | "apply"): string {
-    return block === "ear" ? "Ear" : block === "apply" ? "Pieces" : "Reading";
+    return block === "ear" ? "Ear, C major" : block === "apply" ? "Pieces" : "Reading";
+  }
+
+  /** What the learner is asked to do, in words. */
+  function instruction(block: "ear" | "read" | "apply"): string {
+    return block === "ear"
+      ? "Listen to the chords, which set the key (C major), then play the one note you hear on your piano. Any octave counts."
+      : "Play the note shown on the staff, in the right octave.";
   }
 </script>
 
@@ -105,10 +112,22 @@
     {#if view.kind === "idle"}
       <h1>Find your starting point</h1>
       <p data-testid="placement-intro">
-        A few minutes at your piano. You will hear a key, then name notes by playing them, and then
-        read some notes on the bass staff and play them. It stops by itself when things get hard,
-        and it never takes progress away.
+        A few minutes at your piano, so Clavis can start you at the right place. It never takes
+        progress away.
       </p>
+      <ol class="how" data-testid="placement-how">
+        <li>
+          <strong>Ear.</strong> You hear a few chords, which set the key, then one note. Play that note
+          on your piano. Any octave counts. The key is C major for every ear question, so it never changes.
+        </li>
+        <li>
+          <strong>Reading.</strong> A note is shown on the bass staff. Play it in the right octave.
+        </li>
+        <li>
+          Not sure? Tap "I don't know". It stops by itself when things get hard. Each question is
+          marked right or wrong, with no hints, because this only measures where you are.
+        </li>
+      </ol>
       <button type="button" class="primary" data-testid="placement-start" onclick={start}>
         Start placement
       </button>
@@ -119,6 +138,7 @@
       <section class="card" data-testid="presenting">
         <p class="eyebrow">{sectionLabel(view.item.block)}</p>
         <p class="prompt" aria-live="polite">{view.prompt}</p>
+        <p class="hint">{instruction(view.item.block)}</p>
         <button type="button" class="secondary" data-testid="skip" onclick={() => machine?.skip()}>
           I don't know
         </button>
@@ -127,6 +147,7 @@
       <section class="card" data-testid="listening">
         <p class="eyebrow">{sectionLabel(view.item.block)}</p>
         <p class="prompt" aria-live="polite" data-testid="prompt">{view.prompt}</p>
+        <p class="hint" data-testid="placement-hint">{instruction(view.item.block)}</p>
         <button type="button" class="secondary" data-testid="skip" onclick={() => machine?.skip()}>
           I don't know
         </button>
@@ -228,6 +249,22 @@
 
   .notation-slot {
     min-height: 8rem;
+  }
+
+  .how {
+    margin: 0;
+    padding-left: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    line-height: 1.5;
+  }
+
+  .hint {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    text-align: center;
   }
 
   .prompt {

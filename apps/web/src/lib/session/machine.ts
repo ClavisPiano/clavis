@@ -145,6 +145,12 @@ export interface SessionDeps {
    * fluent: nothing is scored until `ready()`. Default false.
    */
   practiceStep?: boolean;
+  /**
+   * Seconds-as-ms to wait on feedback before moving on by itself after a correct answer. 0 means
+   * never: every answer waits for Next. Undefined keeps the older behaviour, where a faded correct
+   * answer shows a brief tick.
+   */
+  autoContinueMs?: number;
 }
 
 /** The session blocks an item can come from. Apply holds piece phrases. */
@@ -233,6 +239,10 @@ export type SessionState =
       item: ItemView;
       feedback: FeedbackView;
       canReplay: boolean;
+      /** The attempt is still held back, so Try again can discard it and ask the item again. */
+      canRetry: boolean;
+      /** A correct answer moves on by itself after this long (ms), unless the learner steps in. */
+      autoContinueMs?: number;
       /** For the guide keyboard: the pitch classes asked for and the notes the learner played. */
       answerKeys?: { targetPcs: number[]; played: number[] };
     }
@@ -362,6 +372,11 @@ export class SessionMachine {
   #placementSkippedReading = false;
   /** Whole-piece run (MP): whether each phrase was played correctly, in order. */
   #runResults: boolean[] = [];
+  /**
+   * The attempt of the item on the feedback screen, written only when the learner moves on, pauses
+   * or ends the session. Until then Try again can drop it (a key press the app missed).
+   */
+  #pending: { events: LearningEvent[]; correct: boolean; nodeId: string } | undefined;
   #runSummary: SessionSummary["run"];
 
   #startedWall = 0;
@@ -473,8 +488,33 @@ export class SessionMachine {
     } else if (s.kind === "feedback") {
       this.#cancelTimers();
       this.#d.player.stop();
+      this.commit();
       this.#advance();
     }
+  }
+
+  /** Write the held-back attempt now. Safe to call at any time; Try again is no longer offered. */
+  commit(): void {
+    const pending = this.#pending;
+    if (!pending) return;
+    this.#pending = undefined;
+    void this.#enqueue(() => this.#d.append(pending.events));
+  }
+
+  /**
+   * Feedback: throw this attempt away and ask the item again, for when an answer was not heard.
+   * Nothing is written for the discarded attempt.
+   */
+  retry(): void {
+    const pending = this.#pending;
+    if (this.#state.kind !== "feedback" || !this.#cur || !pending) return;
+    this.#pending = undefined;
+    this.#attempts--;
+    if (pending.correct) this.#correct--;
+    this.#sessionAttempts[pending.nodeId] = (this.#sessionAttempts[pending.nodeId] ?? 1) - 1;
+    this.#cancelTimers();
+    this.#d.player.stop();
+    this.#playStimulus();
   }
 
   /** Skip the current item (logged as an incorrect attempt). Elsewhere it acts like `next`. */
@@ -541,7 +581,10 @@ export class SessionMachine {
     if (s.kind === "idle" || s.kind === "preparing" || s.kind === "headphones") return;
     if (s.kind === "paused" || s.kind === "summary" || s.kind === "error") return;
     if (s.kind === "nothing") return;
-    this.#beforePause = s;
+    // The app may be closed from the background, so a held-back attempt is written now.
+    const committed = s.kind === "feedback" && this.#pending !== undefined;
+    this.commit();
+    this.#beforePause = committed ? { ...s, canRetry: false } : s;
     this.#pausedAt = this.#d.clock.wallNow();
     this.#stopActivity();
     this.#setState({ kind: "paused", resumeTo: s.kind });
@@ -570,6 +613,10 @@ export class SessionMachine {
         // Pausing cancelled the auto-advance timer, and auto-advancing feedback has no Next button.
         if (before.feedback.autoAdvance) {
           this.#schedule(AUTO_ADVANCE_MS, () => {
+            this.next();
+          });
+        } else if (before.autoContinueMs !== undefined) {
+          this.#schedule(before.autoContinueMs, () => {
             this.next();
           });
         }
@@ -1411,21 +1458,33 @@ export class SessionMachine {
 
       // Play by ear: stay on the revealed score until the learner moves on.
       const reveal = cur.instance.reveal !== undefined && d.notation !== undefined;
-      const feedback = reveal ? { ...built, autoAdvance: false } : built;
+      // With an auto-continue setting, every correct answer follows it, so nothing advances on
+      // its own clock; without one, a faded correct answer shows a brief tick.
+      const autoContinueMs =
+        d.autoContinueMs !== undefined && d.autoContinueMs > 0 && outcome.correct && !reveal
+          ? d.autoContinueMs
+          : undefined;
+      const feedback =
+        reveal || d.autoContinueMs !== undefined ? { ...built, autoAdvance: false } : built;
 
-      await d.append([
-        {
-          ...this.#base(),
-          type: "attempt.completed" as const,
-          sessionId: this.#sessionId,
-          itemId: cur.instance.itemId,
-          nodeId,
-          outcome,
-          ...(Object.keys(subScores).length > 0 ? { subScores } : {}),
-          inputSource: source,
-          ...(errors.length > 0 ? { errors } : {}),
-        },
-      ]);
+      const attemptEvent: LearningEvent = {
+        ...this.#base(),
+        type: "attempt.completed" as const,
+        sessionId: this.#sessionId,
+        itemId: cur.instance.itemId,
+        nodeId,
+        outcome,
+        ...(Object.keys(subScores).length > 0 ? { subScores } : {}),
+        inputSource: source,
+        ...(errors.length > 0 ? { errors } : {}),
+      };
+      // Piece runs and revealed scores write at once; everything else waits so it can be retried.
+      const retryable = !this.#plan?.run && !reveal;
+      if (retryable) {
+        this.#pending = { events: [attemptEvent], correct: outcome.correct, nodeId };
+      } else {
+        await d.append([attemptEvent]);
+      }
       this.#attempts++;
       if (outcome.correct) this.#correct++;
       if (this.#plan?.run) this.#runResults.push(outcome.correct);
@@ -1439,6 +1498,8 @@ export class SessionMachine {
         item: this.#itemView(cur),
         feedback,
         canReplay: !feedback.autoAdvance,
+        canRetry: retryable,
+        ...(autoContinueMs === undefined ? {} : { autoContinueMs }),
         ...(this.#itemView(cur).guide
           ? {
               answerKeys: {
@@ -1457,6 +1518,10 @@ export class SessionMachine {
       if (reveal) this.#revealScore(cur, outcome.correct, errors);
       if (feedback.autoAdvance) {
         this.#schedule(AUTO_ADVANCE_MS, () => {
+          this.next();
+        });
+      } else if (autoContinueMs !== undefined) {
+        this.#schedule(autoContinueMs, () => {
           this.next();
         });
       }
@@ -1499,6 +1564,7 @@ export class SessionMachine {
       item: this.#itemView(cur),
       feedback: { correct: outcome.correct, lines: [], detailed: false, autoAdvance: true },
       canReplay: false,
+      canRetry: false,
     };
     if (this.#state.kind === "paused") {
       this.#beforePause = shown;
@@ -1521,6 +1587,9 @@ export class SessionMachine {
     this.#stopActivity();
     this.#hideNotation();
     const d = this.#d;
+    const pending = this.#pending;
+    this.#pending = undefined;
+    if (pending) await d.append(pending.events);
     d.input.stop();
     this.#singInput?.stop();
     const elapsedSec = Math.round(this.elapsedSec());

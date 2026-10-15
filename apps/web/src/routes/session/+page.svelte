@@ -209,6 +209,11 @@
       phase = "ready";
     });
     document.addEventListener("visibilitychange", onVisibility);
+    // Closing the tab on the feedback screen still writes the attempt that was held back.
+    function onPageHide(): void {
+      current?.machine.commit();
+    }
+    window.addEventListener("pagehide", onPageHide);
     const timer = setInterval(() => {
       elapsed = current?.machine.elapsedSec() ?? 0;
     }, 1000);
@@ -216,6 +221,7 @@
     return () => {
       gone = true;
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
       clearInterval(timer);
       off?.();
       current?.teardown();
@@ -596,6 +602,16 @@
                 Replay
               </button>
             {/if}
+            {#if view.canRetry}
+              <button
+                type="button"
+                class="secondary"
+                data-testid="retry"
+                onclick={() => machine?.retry()}
+              >
+                Try again
+              </button>
+            {/if}
             <button
               type="button"
               class="primary"
@@ -605,6 +621,17 @@
               Next
             </button>
           </div>
+          {#if view.autoContinueMs}
+            <p class="hint" data-testid="auto-continue-note">
+              Moving on in {Math.round(view.autoContinueMs / 1000)}s. Replay or Try again to stay
+              here. Change this in Settings.
+            </p>
+          {/if}
+          {#if view.canRetry && !view.feedback.correct}
+            <p class="hint">
+              If your key presses were not heard, Try again asks it again without counting this go.
+            </p>
+          {/if}
           {#if itemCard && !view.feedback.tip}
             <button
               type="button"
