@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SkillNode } from "../graph/schema.js";
 import type { Duration, ScoreNote, ScoreSpec } from "../score/schema.js";
 import type { StimulusEvent } from "../stimulus/types.js";
+import { tonicChroma, type Key } from "../theory/keys.js";
 import { latencyField } from "./build.js";
 import { itemId } from "./ids.js";
 import type { GenerateContext, Generator, ItemInstance, ItemParams } from "./types.js";
@@ -103,7 +104,16 @@ const RhythmItemParams = z.object({ pattern: z.string() });
 export const DEFAULT_TEMPO_RANGE: readonly [number, number] = [80, 100];
 export const COUNT_IN_PITCH = 84;
 export const COUNT_IN_VELOCITY = 0.4;
+/** The rhythm's note when no key is given: middle C. */
 export const RHYTHM_PITCH = 60;
+
+/**
+ * The rhythm sounds on the tonic of the key of the day (middle C up to the B above it), so even
+ * a rhythm exercise keeps the key in the ear.
+ */
+export function rhythmPitch(key?: Key): number {
+  return key === undefined ? RHYTHM_PITCH : RHYTHM_PITCH + tonicChroma(key);
+}
 export const BEATS_PER_BAR = 4;
 
 /**
@@ -128,6 +138,7 @@ export const rhythmEcho: Generator = {
     const tempoBpm = rng.int(Math.ceil(lo / 5), Math.floor(hi / 5)) * 5;
     const seed = rng.int(0, 0x7fffffff);
     const beatSec = 60 / tempoBpm;
+    const pitch = rhythmPitch(ctx.preferredKey);
 
     const events: StimulusEvent[] = [];
     for (let i = 0; i < BEATS_PER_BAR; i++) {
@@ -143,7 +154,7 @@ export const rhythmEcho: Generator = {
     for (const b of pat.onsetsBeats) {
       events.push({
         atSec: start + b * beatSec,
-        midi: [RHYTHM_PITCH],
+        midi: [pitch],
         durationSec: beatSec * 0.4,
         velocity: 0.8,
         role: "target",
@@ -161,7 +172,7 @@ export const rhythmEcho: Generator = {
         onsetsBeats: [...pat.onsetsBeats],
         tempoBpm,
         beatsPerBar: BEATS_PER_BAR,
-        pitch: RHYTHM_PITCH,
+        pitch,
         seed,
       },
       stimulus: { events, tempoBpm },
@@ -171,7 +182,7 @@ export const rhythmEcho: Generator = {
           onsetsBeats: [...pat.onsetsBeats],
           tempoBpm,
           beatsPerBar: BEATS_PER_BAR,
-          pitch: RHYTHM_PITCH,
+          pitch,
         },
         responseWindowMs: 12000,
       },

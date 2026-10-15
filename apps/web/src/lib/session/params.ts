@@ -16,6 +16,10 @@ export interface SessionParams {
   /** `?practice=1`: extra practice on started items (T2.15). Cards and schedule stay untouched. */
   practice: boolean;
   /**
+   * `?skills=a,b`: with `practice`, drill only these skills (node ids). Undefined means all.
+   */
+  skills: string[] | undefined;
+  /**
    * `?learn=1`: "Learn something new" grants one more batch of new items beyond the daily cap for
    * this session only. Nothing is stored. Practice wins when both are set.
    */
@@ -29,6 +33,19 @@ export interface SessionParams {
 
 export const MIN_BUDGET_SEC = 30;
 export const MAX_BUDGET_SEC = 3600;
+
+const NODE_ID = /^[A-Za-z0-9.-]{1,64}$/;
+const MAX_SKILLS = 40;
+
+/** `?skills=` as a list of well-formed node ids; undefined when absent or empty. */
+export function parseSkills(raw: string | null): string[] | undefined {
+  if (raw === null) return undefined;
+  const ids = raw
+    .split(",")
+    .filter((id) => NODE_ID.test(id))
+    .slice(0, MAX_SKILLS);
+  return ids.length > 0 ? [...new Set(ids)] : undefined;
+}
 
 export function parseBudget(raw: string | null): number | undefined {
   if (raw === null || !/^\d+$/.test(raw)) return undefined;
@@ -54,6 +71,8 @@ export function parseSessionParams(
     inputKind,
     silent,
     practice: searchParams.get("practice") === "1",
+    skills:
+      searchParams.get("practice") === "1" ? parseSkills(searchParams.get("skills")) : undefined,
     learn: searchParams.get("practice") !== "1" && searchParams.get("learn") === "1",
     headphones: headphones ?? (inputKind === "fake" ? true : undefined),
     run:

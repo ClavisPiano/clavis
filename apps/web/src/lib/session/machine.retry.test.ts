@@ -144,3 +144,18 @@ describe("auto-continue", () => {
     expect(h.machine.state.kind).toBe("feedback");
   });
 });
+
+describe("played source", () => {
+  it("grades an answer made only on the on-screen keys as tapped, and a mic answer as mic", async () => {
+    for (const source of ["tap", "mic"] as const) {
+      const h = await makeHarness({ budgetSec: 90 });
+      await toFirstItem(h);
+      const expected = h.machine.debug().expected;
+      if (expected?.play?.kind !== "pitchClass") throw new Error("expected a played degree");
+      h.input.emitNote(noteAt(expected.play.targetMidi, h.clock.ctxMs + 200, source));
+      await until(h, (s) => s.kind === "feedback");
+      const attempt = (await h.log()).find((e) => e.type === "attempt.completed");
+      expect(attempt).toMatchObject({ inputSource: source, outcome: { correct: true } });
+    }
+  });
+});

@@ -64,10 +64,12 @@
   const learnHref = $derived(resolve("/session") + learnSearch);
   /** Buttons to answer a choice item (R21), in both modes. They replace the keyboard. */
   const choices = $derived(view.kind === "listening" ? view.item.choices : undefined);
+  // The on-screen keyboard answers like the external one: it is the only input in Away mode, and an
+  // extra one at the piano, so the learner can practise anywhere.
   const showKeyboard = $derived(
-    params?.mode === "away" &&
+    runtime?.tap !== undefined &&
       view.kind === "listening" &&
-      (view.phase === "play" || view.practice) &&
+      (params?.mode !== "away" || view.phase === "play" || view.practice) &&
       !choices,
   );
   const awayKeys = $derived(
@@ -753,7 +755,7 @@
     {/if}
 
     {#if showKeyboard}
-      <div class="keys">
+      <div class="keys" data-testid="live-keyboard">
         <Keyboard
           low={awayKeys.low}
           high={awayKeys.high}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBudget, parseLatency, parseSessionParams } from "./params";
+import { parseBudget, parseLatency, parseSessionParams, parseSkills } from "./params";
 
 const q = (s: string) => new URLSearchParams(s);
 
@@ -93,5 +93,21 @@ describe("parseLatency", () => {
     expect(parseLatency(null)).toEqual({});
     expect(parseLatency(undefined)).toEqual({});
     expect(parseLatency(5)).toEqual({});
+  });
+});
+
+describe("?skills=", () => {
+  it("lists the skills to practise, only with practice", () => {
+    expect(
+      parseSessionParams(q("practice=1&skills=read.bass.landmarks,ear.rhythm.echo")).skills,
+    ).toEqual(["read.bass.landmarks", "ear.rhythm.echo"]);
+    expect(parseSessionParams(q("skills=read.bass.landmarks")).skills).toBeUndefined();
+    expect(parseSessionParams(q("practice=1")).skills).toBeUndefined();
+  });
+
+  it("drops malformed ids and repeats", () => {
+    expect(parseSkills("a.b,a.b,../x,ok-1,,%20")).toEqual(["a.b", "ok-1"]);
+    expect(parseSkills("../x,,")).toBeUndefined();
+    expect(parseSkills(null)).toBeUndefined();
   });
 });

@@ -27,6 +27,11 @@ export interface ComposeInput {
    */
   practice?: boolean;
   /**
+   * Practice only these skills (node ids), for drilling one thing rather than a mix. Absent means
+   * every started skill. Ids that are not started skills add nothing.
+   */
+  skills?: readonly string[];
+  /**
    * Learn more today: extra new items allowed in this plan on top of what is left of the daily
    * cap (the caller passes one batch, the `newItemsPerDay` setting). Nothing is stored, so it
    * applies to this plan only. Ignored for practice.

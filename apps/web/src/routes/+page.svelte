@@ -193,6 +193,16 @@
     <strong>Away session</strong>
     <span>{minutesLabel(settings.awayBudgetSec)}, no piano needed</span>
   </a>
+  {#if !firstRun}
+    <a class="button secondary" href={resolve("/practice")} data-testid="choose-practice">
+      <strong>Practise a skill</strong>
+      <span>Choose what to drill</span>
+    </a>
+    <a class="button secondary" href={resolve("/keyboard")} data-testid="open-keyboard">
+      <strong>Keyboard</strong>
+      <span>Play and hear the key of the day, any time</span>
+    </a>
+  {/if}
 </div>
 
 {#if pieces}

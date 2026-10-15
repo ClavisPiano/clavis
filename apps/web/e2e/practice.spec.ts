@@ -54,6 +54,32 @@ test.describe("practise more", () => {
   });
 });
 
+test.describe("choose what to practise", () => {
+  test.setTimeout(240_000);
+
+  test("lists started skills, and the chosen one is all that is drilled", async ({ page }) => {
+    await page.goto("/practice");
+    await expect(page.getByTestId("practice-empty")).toBeVisible();
+
+    await page.goto("/session?input=fake&budget=90");
+    await page.getByTestId("start").click();
+    await runToSummary(page);
+    await page.getByTestId("home").click();
+
+    await page.getByTestId("choose-practice").click();
+    const skills = page.getByTestId("practice-skill");
+    await expect(skills.first()).toBeVisible();
+    const skill = skills.first();
+    const node = await skill.getAttribute("data-node");
+    await skill.check();
+    await expect(page.getByTestId("practice-start")).toContainText("1 selected");
+    await expect(page.getByTestId("practice-start")).toHaveAttribute(
+      "href",
+      new RegExp(`practice=1&skills=${encodeURIComponent(node ?? "")}`),
+    );
+  });
+});
+
 test.describe("new items per day", () => {
   test("persists across reload as a settings.changed v2 event", async ({ page }) => {
     await page.goto("/settings");

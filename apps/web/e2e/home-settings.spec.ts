@@ -57,7 +57,9 @@ test("auto-continue defaults to 3 seconds and the choice persists", async ({ pag
 
 test("about shows which build is running", async ({ page }) => {
   await page.goto("/settings");
-  await expect(page.getByTestId("build-id")).toHaveText(/^[0-9a-f]{7}|dev \(\d{4}-\d{2}-\d{2}\)/);
+  await expect(page.getByTestId("build-id")).toHaveText(
+    /^([0-9a-f]{7}|dev) \(\d{4}-\d{2}-\d{2}\)$/,
+  );
 });
 
 test("an inverted voice range is blocked", async ({ page }) => {
@@ -136,4 +138,21 @@ test("home shows the 7-day row after a seeded session", async ({ page }) => {
   await expect(page.getByTestId("today-status")).toContainText("Session done today");
   await expect(page.getByTestId("week-progress")).toContainText("This week: 1 of 5 days");
   await expect(page.getByTestId("day-cell").last()).toHaveAttribute("data-level", "1");
+});
+
+test("the keyboard page marks the home note and chord and can be played any time", async ({
+  page,
+}) => {
+  await page.goto("/keyboard");
+  await expect(page.getByTestId("keyboard-key")).toBeVisible();
+  await page.getByTestId("keyboard-key").selectOption({ label: "G major" });
+  const board = page.getByTestId("keyboard-board");
+  await expect(board.locator('[data-mark="tonic"]').first()).toBeVisible();
+  await expect(board.locator('[data-mark="chord"]').first()).toBeVisible();
+  // G, B and D are marked; C is not.
+  await expect(board.locator('[data-midi="67"]')).toHaveAttribute("data-mark", "tonic");
+  await expect(board.locator('[data-midi="71"]')).toHaveAttribute("data-mark", "chord");
+  await expect(board.locator('[data-midi="60"]')).not.toHaveAttribute("data-mark", /.+/);
+  await board.locator('[data-midi="67"]').click();
+  await expect(page.getByTestId("hear-key")).toBeVisible();
 });
