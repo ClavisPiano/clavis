@@ -17,7 +17,7 @@ export function syncStatusText(state: SyncState, locale?: string): string {
     case "signedOut":
       return `Not syncing because you are signed out.${last}`;
     case "error":
-      return `Sync hit a problem and will try again.${last}`;
+      return `Some practice could not be backed up. It is still saved on this device.${last}`;
     case "idle":
       return state.lastSyncedAt === undefined ? "Waiting to sync." : `Synced.${last}`;
   }

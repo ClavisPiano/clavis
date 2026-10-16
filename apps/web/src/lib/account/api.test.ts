@@ -10,7 +10,10 @@ interface Call {
 function fake(respond: (call: Call) => Response | Promise<Response>) {
   const calls: Call[] = [];
   const fetchFn = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const call = { url: String(input), init: init ?? {} };
+    const call = {
+      url: typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      init: init ?? {},
+    };
     calls.push(call);
     return Promise.resolve(respond(call));
   }) as typeof fetch;
@@ -22,6 +25,8 @@ const jsonRes = (body: unknown, status = 200): Response =>
     status,
     headers: { "content-type": "application/json" },
   });
+
+const bodyOf = (body: BodyInit | null | undefined): string => body as string;
 
 async function kindOf(p: Promise<unknown>): Promise<AccountErrorKind | "no error"> {
   try {
@@ -81,8 +86,8 @@ describe("auth API request shapes", () => {
       "/api/auth/login/verify",
       "/api/auth/passkeys/verify",
     ]);
-    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ challengeId: "c1", response: cred });
-    expect(JSON.parse(String(calls[2]?.init.body))).toEqual({ challengeId: "c3", response: cred });
+    expect(JSON.parse(bodyOf(calls[0]?.init.body))).toEqual({ challengeId: "c1", response: cred });
+    expect(JSON.parse(bodyOf(calls[2]?.init.body))).toEqual({ challengeId: "c3", response: cred });
   });
 
   it("recovery posts the code and logout posts an empty body", async () => {
@@ -93,7 +98,7 @@ describe("auth API request shapes", () => {
     );
     expect(await api.recovery("AAAA-BBBB")).toEqual({ userId: "u1", recoveryCodesLeft: 8 });
     await api.logout();
-    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ code: "AAAA-BBBB" });
+    expect(JSON.parse(bodyOf(calls[0]?.init.body))).toEqual({ code: "AAAA-BBBB" });
     expect(calls[1]?.url).toBe("/api/auth/logout");
     expect(calls[1]?.init.credentials).toBe("include");
   });
@@ -101,8 +106,7 @@ describe("auth API request shapes", () => {
 
 describe("auth API error mapping", () => {
   it("maps a network failure", async () => {
-    const api = createAuthApi((() =>
-      Promise.reject(new TypeError("Failed to fetch"))) as typeof fetch);
+    const api = createAuthApi(() => Promise.reject(new TypeError("Failed to fetch")));
     expect(await kindOf(api.me())).toBe("network");
   });
 

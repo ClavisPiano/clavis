@@ -9,9 +9,9 @@ import { AccountError } from "./errors";
 
 /** The browser side of the ceremonies, injectable so the store is testable without a browser. */
 export interface Ceremonies {
-  supported(): boolean;
-  register(options: PublicKeyCredentialCreationOptionsJSON): Promise<unknown>;
-  authenticate(options: PublicKeyCredentialRequestOptionsJSON): Promise<unknown>;
+  supported: () => boolean;
+  register: (options: PublicKeyCredentialCreationOptionsJSON) => Promise<unknown>;
+  authenticate: (options: PublicKeyCredentialRequestOptionsJSON) => Promise<unknown>;
 }
 
 /** Map what `@simplewebauthn/browser` throws to an `AccountError`. Exported for tests. */

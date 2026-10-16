@@ -81,7 +81,7 @@ describe("account store", () => {
     const t = setup({
       registerOptions: vi.fn(
         () =>
-          new Promise((resolve) => {
+          new Promise<Awaited<ReturnType<AuthApi["registerOptions"]>>>((resolve) => {
             release = () => {
               resolve({ challengeId: "c1", options: {} as never });
             };
@@ -251,7 +251,7 @@ describe("format", () => {
     expect(syncStatusText({ status: "offline" })).toMatch(/^Offline/);
     expect(syncStatusText({ status: "signedOut" })).toMatch(/signed out/);
     expect(syncStatusText({ status: "syncing" })).toMatch(/^Syncing/);
-    expect(syncStatusText({ status: "error" })).toMatch(/problem/);
+    expect(syncStatusText({ status: "error" })).toMatch(/could not be backed up/);
   });
 
   it("recovery codes text lists every code and has no em dash", () => {

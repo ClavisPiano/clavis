@@ -11,7 +11,7 @@ import type { SyncResult } from "@clavis/core";
  */
 
 export type SyncStatus = "idle" | "syncing" | "offline" | "signedOut" | "error";
-export type SyncReason = "start" | "sessionEnd" | "visible" | "online" | "timer";
+export type SyncReason = "start" | "manual" | "sessionEnd" | "visible" | "online" | "timer";
 
 export interface SyncState {
   status: SyncStatus;

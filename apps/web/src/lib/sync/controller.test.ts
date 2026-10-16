@@ -160,6 +160,13 @@ describe("sync controller", () => {
     expect(pulled).toHaveBeenCalledTimes(1);
   });
 
+  it("a manual trigger runs even while signed out", async () => {
+    const t = setup(() => ({ outcome: "signedOut", pushed: 0, pulledNew: 0, skipped: 0 }));
+    await t.controller.trigger("start");
+    await t.controller.trigger("manual");
+    expect(t.calls()).toBe(2);
+  });
+
   it("notifySignedOut shows signedOut, keeps lastSyncedAt and silences the timer", async () => {
     const t = setup(() => ok());
     const stop = t.controller.start();

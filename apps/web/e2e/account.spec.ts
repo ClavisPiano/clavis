@@ -16,13 +16,20 @@ const b64url = (n: number): string =>
 
 interface Fake {
   signedIn: boolean;
+  codesLeft: number;
   credentialIds: Set<string>;
   pushes: { events: { type?: string }[] }[];
   requests: string[];
 }
 
 async function installFakeBackend(page: Page): Promise<Fake> {
-  const fake: Fake = { signedIn: false, credentialIds: new Set(), pushes: [], requests: [] };
+  const fake: Fake = {
+    signedIn: false,
+    codesLeft: RECOVERY_CODES.length,
+    credentialIds: new Set(),
+    pushes: [],
+    requests: [],
+  };
   const json = (route: Route, body: unknown, status = 200): Promise<void> =>
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
@@ -37,7 +44,7 @@ async function installFakeBackend(page: Page): Promise<Fake> {
           ? json(route, {
               userId: "user-1",
               passkeys: fake.credentialIds.size,
-              recoveryCodesLeft: RECOVERY_CODES.length,
+              recoveryCodesLeft: fake.codesLeft,
             })
           : json(route, { error: "unauthorized" }, 401);
       case "/api/auth/register/options":
@@ -82,7 +89,8 @@ async function installFakeBackend(page: Page): Promise<Fake> {
       case "/api/auth/recovery":
         if (body.code !== RECOVERY_CODES[0]) return json(route, { error: "invalid_code" }, 401);
         fake.signedIn = true;
-        return json(route, { userId: "user-1", recoveryCodesLeft: RECOVERY_CODES.length - 1 });
+        fake.codesLeft -= 1;
+        return json(route, { userId: "user-1", recoveryCodesLeft: fake.codesLeft });
       case "/api/auth/logout":
         fake.signedIn = false;
         return json(route, { ok: true });
@@ -117,8 +125,8 @@ async function addVirtualAuthenticator(page: Page): Promise<void> {
   });
 }
 
-test.beforeEach(({}, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium", "CDP virtual authenticators are Chromium only");
+test.beforeEach(({ browserName }) => {
+  test.skip(browserName !== "chromium", "CDP virtual authenticators are Chromium only");
 });
 
 test("sign up, confirm recovery codes, sync, sign out, sign in with the passkey", async ({
@@ -193,7 +201,8 @@ test("adding a passkey raises the count", async ({ page }) => {
 });
 
 test("recovery code sign in prompts to add a passkey on this device", async ({ page }) => {
-  await installFakeBackend(page);
+  const fake = await installFakeBackend(page);
+  fake.credentialIds.add("passkey-on-another-device");
   await addVirtualAuthenticator(page);
   await page.goto("/settings");
   await page.getByTestId("use-recovery").click();
@@ -205,7 +214,7 @@ test("recovery code sign in prompts to add a passkey on this device", async ({ p
   await expect(page.getByTestId("account-summary")).toContainText("9 recovery codes left");
   await expect(page.getByTestId("suggest-passkey")).toBeVisible();
   await page.getByTestId("add-passkey").click();
-  await expect(page.getByTestId("account-summary")).toContainText("1 passkey");
+  await expect(page.getByTestId("account-summary")).toContainText("2 passkeys");
   await expect(page.getByTestId("suggest-passkey")).toHaveCount(0);
 });
 

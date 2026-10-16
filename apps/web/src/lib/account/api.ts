@@ -37,21 +37,21 @@ const Recovered = z.object({ userId: z.string(), recoveryCodesLeft: z.number().i
 const PasskeyAdded = z.object({ userId: z.string(), passkeys: z.number().int() });
 
 export interface AuthApi {
-  me(): Promise<MeResponse>;
-  registerOptions(): Promise<OptionsResponse<PublicKeyCredentialCreationOptionsJSON>>;
-  registerVerify(
+  me: () => Promise<MeResponse>;
+  registerOptions: () => Promise<OptionsResponse<PublicKeyCredentialCreationOptionsJSON>>;
+  registerVerify: (
     challengeId: string,
     response: unknown,
-  ): Promise<{ userId: string; recoveryCodes: string[] }>;
-  loginOptions(): Promise<OptionsResponse<PublicKeyCredentialRequestOptionsJSON>>;
-  loginVerify(challengeId: string, response: unknown): Promise<{ userId: string }>;
-  recovery(code: string): Promise<{ userId: string; recoveryCodesLeft: number }>;
-  passkeyOptions(): Promise<OptionsResponse<PublicKeyCredentialCreationOptionsJSON>>;
-  passkeyVerify(
+  ) => Promise<{ userId: string; recoveryCodes: string[] }>;
+  loginOptions: () => Promise<OptionsResponse<PublicKeyCredentialRequestOptionsJSON>>;
+  loginVerify: (challengeId: string, response: unknown) => Promise<{ userId: string }>;
+  recovery: (code: string) => Promise<{ userId: string; recoveryCodesLeft: number }>;
+  passkeyOptions: () => Promise<OptionsResponse<PublicKeyCredentialCreationOptionsJSON>>;
+  passkeyVerify: (
     challengeId: string,
     response: unknown,
-  ): Promise<{ userId: string; passkeys: number }>;
-  logout(): Promise<void>;
+  ) => Promise<{ userId: string; passkeys: number }>;
+  logout: () => Promise<void>;
 }
 
 export function createAuthApi(
