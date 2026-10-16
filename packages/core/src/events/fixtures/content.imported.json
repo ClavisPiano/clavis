@@ -1,0 +1,131 @@
+{
+  "id": "01JBX00000000000000000A010",
+  "deviceId": "dev-laptop",
+  "at": 1760000007000,
+  "type": "content.imported",
+  "v": 1,
+  "pieceId": "piece.user-01jbx00000000000000000a010",
+  "title": "Little tune",
+  "source": "musicxml",
+  "score": {
+    "staves": [
+      {
+        "clef": "treble",
+        "lines": 5,
+        "measures": [
+          [
+            {
+              "kind": "note",
+              "id": "n1",
+              "pitches": [
+                {
+                  "step": "C",
+                  "alter": 0,
+                  "octave": 4
+                }
+              ],
+              "duration": {
+                "value": 4,
+                "dots": 0
+              }
+            },
+            {
+              "kind": "note",
+              "id": "n2",
+              "pitches": [
+                {
+                  "step": "D",
+                  "alter": 0,
+                  "octave": 4
+                }
+              ],
+              "duration": {
+                "value": 4,
+                "dots": 0
+              }
+            },
+            {
+              "kind": "note",
+              "id": "n3",
+              "pitches": [
+                {
+                  "step": "E",
+                  "alter": 0,
+                  "octave": 4
+                }
+              ],
+              "duration": {
+                "value": 2,
+                "dots": 0
+              }
+            }
+          ],
+          [
+            {
+              "kind": "note",
+              "id": "n4",
+              "pitches": [
+                {
+                  "step": "E",
+                  "alter": 0,
+                  "octave": 4
+                }
+              ],
+              "duration": {
+                "value": 4,
+                "dots": 0
+              }
+            },
+            {
+              "kind": "note",
+              "id": "n5",
+              "pitches": [
+                {
+                  "step": "D",
+                  "alter": 0,
+                  "octave": 4
+                }
+              ],
+              "duration": {
+                "value": 4,
+                "dots": 0
+              }
+            },
+            {
+              "kind": "note",
+              "id": "n6",
+              "pitches": [
+                {
+                  "step": "C",
+                  "alter": 0,
+                  "octave": 4
+                }
+              ],
+              "duration": {
+                "value": 2,
+                "dots": 0
+              }
+            }
+          ]
+        ]
+      }
+    ],
+    "key": {
+      "tonic": "C",
+      "mode": "major"
+    },
+    "meter": {
+      "beats": 4,
+      "beatValue": 4
+    }
+  },
+  "phrases": [
+    {
+      "firstMeasure": 1,
+      "lastMeasure": 2
+    }
+  ],
+  "difficulty": 1,
+  "partIndex": 0,
+  "staff": 1
+}

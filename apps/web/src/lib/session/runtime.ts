@@ -43,6 +43,8 @@ export interface SessionRuntime {
   tap: TapInputAdapter | undefined;
   /** What to offer after the session (Keep going, Learn something new), from the current state. */
   nextSteps(elapsedSec: number): NextSteps;
+  /** Title of a piece, library or imported, for the run summary. */
+  pieceTitle(pieceId: string): string | undefined;
   /** Short piano note for key presses. No-op when silent. */
   tone(midi: number): void;
   /** Call from a user gesture before `machine.start()` or `resume()`. */
@@ -165,17 +167,17 @@ export async function createSessionRuntime(
         ? composePieceRun({
             state: input.state,
             graph: input.graph,
-            pieces: appPieces(),
+            pieces: appPieces(input.state),
             pieceId: params.run,
             now: input.now,
             tzOffsetMin: input.tzOffsetMin,
-            generators: appGenerators(),
+            generators: appGenerators(input.state),
           })
-        : composeSession({ ...input, ...pieceInputs() }),
+        : composeSession({ ...input, ...pieceInputs(input.state) }),
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
       if (!node) throw new Error(`Unknown skill node ${item.nodeId}`);
-      return generatorFor(item.generator).generate(node, item.params, ctx);
+      return generatorFor(item.generator, service.state).generate(node, item.params, ctx);
     },
     player: {
       play: (spec) => stimulusPlayer.play(spec),
@@ -235,6 +237,9 @@ export async function createSessionRuntime(
       machine,
       tap,
       notation,
+      pieceTitle(pieceId) {
+        return appPieces(service.state).find((p) => p.id === pieceId)?.title;
+      },
       nextSteps(elapsedSec) {
         return computeNextSteps({
           state: service.state,

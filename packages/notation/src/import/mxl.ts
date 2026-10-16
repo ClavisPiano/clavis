@@ -52,8 +52,13 @@ function rootFilePath(containerXml: string): string {
   return path;
 }
 
-export function importMxl(bytes: Uint8Array, options: ImportOptions = {}): ScoreSpec {
+/** The MusicXML text of the score inside an archive. */
+export function mxlScoreXml(bytes: Uint8Array): string {
   const container = decode(unzipOne(bytes, CONTAINER_PATH));
   const root = rootFilePath(container);
-  return importMusicXml(decode(unzipOne(bytes, root)), options);
+  return decode(unzipOne(bytes, root));
+}
+
+export function importMxl(bytes: Uint8Array, options: ImportOptions = {}): ScoreSpec {
+  return importMusicXml(mxlScoreXml(bytes), options);
 }

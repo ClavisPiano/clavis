@@ -58,7 +58,7 @@ export function nextSteps(opts: {
       mode: opts.mode,
       batch,
       budgetSec: opts.budgetSec,
-      ...pieceInputs(),
+      ...pieceInputs(opts.state),
     }),
   };
 }
@@ -75,7 +75,7 @@ export function startWouldBeEmpty(opts: {
   mode: SessionMode;
   budgetSec: number;
 }): boolean {
-  const plan = composeSession({ ...opts, ...pieceInputs(), seed: 0 });
+  const plan = composeSession({ ...opts, ...pieceInputs(opts.state), seed: 0 });
   return plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0) === 0;
 }
 

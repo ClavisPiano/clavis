@@ -82,7 +82,7 @@
   /** Pieces (MP): the current tune, what is played through, and what unlocks the rest. */
   const pieces = $derived(
     snap && !firstRun && learner.status === "ready"
-      ? pieceCard(appPieces(), snap, learner.ctx.graph)
+      ? pieceCard(appPieces(snap), snap, learner.ctx.graph)
       : undefined,
   );
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
