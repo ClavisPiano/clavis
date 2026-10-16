@@ -9,6 +9,7 @@
   import { requestPersistentStorage } from "../lib/pwa/persist";
   import { watchServiceWorker } from "../lib/pwa/update-state.svelte";
   import { initAppStore } from "../lib/app-store";
+  import { getSyncController } from "../lib/sync/app";
 
   let { children }: { children: Snippet } = $props();
   let storageFailed = $state(false);
@@ -25,6 +26,7 @@
       local = undefined;
     }
     void requestPersistentStorage(navigator.storage, local);
+    return getSyncController().start();
   });
 </script>
 
