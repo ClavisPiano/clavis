@@ -317,8 +317,12 @@ export function targetOnly(spec: StimulusSpec): StimulusSpec {
   return { ...spec, events: targets.map((e) => ({ ...e, atSec: e.atSec - first })) };
 }
 
-/** "Major or minor?" or "Major, minor or diminished?" from the option labels. */
+/**
+ * "Major or minor?" or "Major, minor or diminished?" from the option labels. Labels that are not
+ * plain words (progressions such as "I-V-vi-IV") ask "Which one did you hear?" instead.
+ */
 export function choiceQuestion(options: readonly ChoiceOption[]): string {
+  if (options.some((o) => !/^[A-Z][a-z]+$/.test(o.label))) return "Which one did you hear?";
   const labels = options.map((o, i) => (i === 0 ? o.label : o.label.toLowerCase()));
   const last = labels[labels.length - 1] ?? "";
   return `${labels.slice(0, -1).join(", ")} or ${last}?`;
