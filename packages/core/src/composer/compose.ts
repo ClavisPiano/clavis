@@ -272,6 +272,7 @@ function applyCandidates(
   pieces: readonly Piece[],
   state: LearnerState,
   now: number,
+  introducing?: string,
 ): { due: Candidate[]; fresh: Candidate[] } {
   const statuses = listPieces(pieces, state);
   const current = statuses.find(
@@ -280,6 +281,7 @@ function applyCandidates(
   const due: Candidate[] = [];
   const fresh: Candidate[] = [];
   const freshByEar: Candidate[] = [];
+  const freshMelody: Candidate[] = [];
   for (const info of infos) {
     const nodeId = info.node.id;
     const dueAll: (Candidate & { card: CardState })[] = [];
@@ -290,6 +292,17 @@ function applyCandidates(
       }
     }
     due.push(...rankDue(dueAll, now));
+
+    // By-ear melodies (BYEAR, T7.2): one new melody per session, in universe order (shortest
+    // first), from a node being introduced or still learning or fluent.
+    if (info.node.strand === "BYEAR") {
+      const rank = NODE_RANK[state.nodes[nodeId]?.state ?? "locked"];
+      if (introducing === nodeId || (rank >= NODE_RANK.learning && rank < NODE_RANK.mastered)) {
+        const next = info.universe.find((u) => state.cards[u.itemId] === undefined);
+        if (next !== undefined) freshMelody.push({ ...next, nodeId, isNew: true });
+      }
+      continue;
+    }
 
     // New phrases come from one piece at a time, in phrase order: to read, the current piece; to
     // play by ear, the first piece whose phrases have all been read and not yet heard.
@@ -312,7 +325,7 @@ function applyCandidates(
     }
   }
   // A tune already read comes before the next one: hearing it settles what was just learned.
-  return { due, fresh: [...freshByEar, ...fresh] };
+  return { due, fresh: [...freshMelody, ...freshByEar, ...fresh] };
 }
 
 /** True when every phrase of the piece has been played correctly at least once. */
@@ -446,7 +459,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
 
   const skillSet = input.skills === undefined ? undefined : new Set(input.skills);
   const infos = new Map<string, NodeInfo>();
-  const strands: Strand[] = ["EAR", "READ", "APPLY"];
+  const strands: Strand[] = ["EAR", "READ", "BYEAR", "APPLY"];
   for (const node of graph.nodes) {
     if (!strands.includes(node.strand)) continue;
     const info = buildInfo(node, graph, mode, registry);
@@ -494,12 +507,20 @@ export function composeSession(input: ComposeInput): SessionPlan {
   let intro: SkillNode | undefined;
   const earIntro = introCandidate("EAR");
   const readIntro = introCandidate("READ");
-  const chosen =
-    earIntro && readIntro
-      ? lastIntroduction("READ") < lastIntroduction("EAR")
-        ? readIntro
-        : earIntro
-      : (earIntro ?? readIntro);
+  // A by-ear task node (T7.2) joins the Apply block, so only instrument sessions can introduce it.
+  const byearIntro = mode === "instrument" ? introCandidate("BYEAR") : undefined;
+  // The strand whose most recent introduction is oldest goes first; ties go to EAR, READ, BYEAR.
+  const chosen = [
+    { strand: "EAR", node: earIntro },
+    { strand: "READ", node: readIntro },
+    { strand: "BYEAR", node: byearIntro },
+  ]
+    .filter((c) => c.node !== undefined)
+    .sort((a, b) => {
+      const x = lastIntroduction(a.strand as Strand);
+      const y = lastIntroduction(b.strand as Strand);
+      return x < y ? -1 : x > y ? 1 : 0;
+    })[0]?.node;
   if (chosen) {
     if (newAllowance > 0) intro = chosen;
     else notes.push("daily new-item cap reached: introduction deferred");
@@ -584,16 +605,25 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const readHasContent = read.due.length > 0 || (read.fresh.length > 0 && newAllowance > 0);
 
   // Apply: piece phrases (MP), read and played by ear. Due phrases first, then the next new ones.
-  const applyInfos =
-    input.pieces !== undefined &&
-    input.pieces.length > 0 &&
-    mode === "instrument" &&
-    !input.practice
-      ? [...infos.values()].filter((i) => i.node.strand === "APPLY")
-      : [];
-  const apply = applyCandidates(applyInfos, input.pieces ?? [], state, input.now);
+  const applyOpen = mode === "instrument" && !input.practice;
+  const hasPieces = input.pieces !== undefined && input.pieces.length > 0;
+  const applyInfos = applyOpen
+    ? [...infos.values()].filter(
+        (i) => (i.node.strand === "APPLY" && hasPieces) || i.node.strand === "BYEAR",
+      )
+    : [];
+  const apply = applyCandidates(
+    applyInfos,
+    input.pieces ?? [],
+    state,
+    input.now,
+    intro?.strand === "BYEAR" ? intro.id : undefined,
+  );
+  // An introduction needs its item, so a by-ear node being introduced always gets a share.
+  const byearIntroducing = intro?.strand === "BYEAR" && newAllowance > 0;
   const applyHasContent =
-    apply.due.length > 0 || (apply.fresh.length > 0 && Math.round(newAllowance / 3) > 0);
+    apply.due.length > 0 ||
+    (apply.fresh.length > 0 && (Math.round(newAllowance / 3) > 0 || byearIntroducing));
 
   // The warm-up that sets the key of the day plays once: before the first session of the day that
   // got as far as an exercise. Later sessions and practice rounds go straight to the items, which
@@ -616,7 +646,10 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const readReserve = read.fresh.length > 0 ? Math.floor(newAllowance / 2) : 0;
   // New piece phrases get a small share of the daily allowance too, or the many new reading items
   // would always use it up first: about a third, and never more than the phrases on offer.
-  const applyReserve = Math.min(apply.fresh.length, Math.round(newAllowance / 3));
+  const applyReserve = Math.min(
+    apply.fresh.length,
+    Math.max(Math.round(newAllowance / 3), byearIntroducing ? 1 : 0),
+  );
   const taken = new Map<string, number>();
   const earFill = fillBlock({
     blockSec: alloc.earSec,
@@ -656,7 +689,8 @@ export function composeSession(input: ComposeInput): SessionPlan {
   });
 
   const introduced =
-    intro !== undefined && [...earFill.items, ...readFill.items].some((i) => i.nodeId === intro.id);
+    intro !== undefined &&
+    [...earFill.items, ...readFill.items, ...applyFill.items].some((i) => i.nodeId === intro.id);
   const introductions = intro && introduced ? [intro.id] : [];
   const introductionKeyFamilies: Record<string, KeyFamily> =
     intro && introduced && intro.keyDependent ? { [intro.id]: "A" } : {};

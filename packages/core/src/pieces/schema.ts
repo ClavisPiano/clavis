@@ -36,93 +36,133 @@ export const PhraseSchema = z
   });
 export type Phrase = z.infer<typeof PhraseSchema>;
 
+const pieceShape = {
+  title: z.string().min(1),
+  /** Composer, or "Traditional". The full provenance is in `docs/licences.md`. */
+  source: z.string().min(1),
+  score: ScoreSpecSchema,
+  /** Tile the measures exactly: the first starts at 1, each starts after the last, the last ends the score. */
+  phrases: z.array(PhraseSchema).min(1),
+  /** 1 (easiest) to 10. The library is ordered by it. */
+  difficulty: z.int().min(1).max(10),
+};
+
+/** What `refinePiece` reads, so the library and user schemas share it. */
+interface Refinable {
+  score: ScoreSpec;
+  phrases: Phrase[];
+  requiredNodeIds: string[];
+}
+
+function refinePiece(piece: Refinable, ctx: z.RefinementCtx): void {
+  const staff = piece.score.staves[0];
+  if (staff === undefined) return;
+  if (staff.clef === "percussion") {
+    ctx.addIssue({
+      code: "custom",
+      message: "a piece is pitched, not percussion",
+      path: ["score", "staves", 0, "clef"],
+    });
+  }
+  if (piece.score.key === null) {
+    ctx.addIssue({ code: "custom", message: "a piece needs a key", path: ["score", "key"] });
+  }
+  const units = measureUnits(piece.score);
+  if (units === null) {
+    ctx.addIssue({ code: "custom", message: "a piece needs a meter", path: ["score", "meter"] });
+  }
+  staff.measures.forEach((measure, m) => {
+    if (measure.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `measure ${String(m + 1)} is empty`,
+        path: ["score", "staves", 0, "measures", m],
+      });
+      return;
+    }
+    if (units !== null) {
+      const total = measure.reduce((sum, el) => sum + durationUnits(el.duration), 0);
+      if (total !== units) {
+        ctx.addIssue({
+          code: "custom",
+          message: `measure ${String(m + 1)} does not fill the meter (${String(total)}/64 of ${String(units)}/64)`,
+          path: ["score", "staves", 0, "measures", m],
+        });
+      }
+    }
+    measure.forEach((el, e) => {
+      if (el.kind === "note" && el.pitches.length !== 1) {
+        ctx.addIssue({
+          code: "custom",
+          message: "a piece is a single line: one pitch per note",
+          path: ["score", "staves", 0, "measures", m, e, "pitches"],
+        });
+      }
+    });
+  });
+
+  let next = 1;
+  piece.phrases.forEach((p, i) => {
+    if (p.firstMeasure !== next) {
+      ctx.addIssue({
+        code: "custom",
+        message: `phrases must tile the measures: expected phrase ${String(i + 1)} to start at ${String(next)}`,
+        path: ["phrases", i, "firstMeasure"],
+      });
+    }
+    next = p.lastMeasure + 1;
+  });
+  if (next - 1 !== staff.measures.length) {
+    ctx.addIssue({
+      code: "custom",
+      message: `phrases end at measure ${String(next - 1)} but the score has ${String(staff.measures.length)}`,
+      path: ["phrases"],
+    });
+  }
+  if (new Set(piece.requiredNodeIds).size !== piece.requiredNodeIds.length) {
+    ctx.addIssue({
+      code: "custom",
+      message: "requiredNodeIds must be unique",
+      path: ["requiredNodeIds"],
+    });
+  }
+}
+
 export const PieceSchema = z
   .strictObject({
     id: z.string().regex(/^piece\.[a-z0-9-]+$/),
-    title: z.string().min(1),
-    /** Composer, or "Traditional". The full provenance is in `docs/licences.md`. */
-    source: z.string().min(1),
-    score: ScoreSpecSchema,
-    /** Tile the measures exactly: the first starts at 1, each starts after the last, the last ends the score. */
-    phrases: z.array(PhraseSchema).min(1),
+    ...pieceShape,
     /** Skill nodes the learner needs before the piece is offered (see `listPieces`). */
     requiredNodeIds: z.array(z.string().min(1)).min(1),
-    /** 1 (easiest) to 10. The library is ordered by it. */
-    difficulty: z.int().min(1).max(10),
   })
-  .superRefine((piece, ctx) => {
-    const staff = piece.score.staves[0];
-    if (staff === undefined) return;
-    if (staff.clef === "percussion") {
-      ctx.addIssue({
-        code: "custom",
-        message: "a piece is pitched, not percussion",
-        path: ["score", "staves", 0, "clef"],
-      });
-    }
-    if (piece.score.key === null) {
-      ctx.addIssue({ code: "custom", message: "a piece needs a key", path: ["score", "key"] });
-    }
-    const units = measureUnits(piece.score);
-    if (units === null) {
-      ctx.addIssue({ code: "custom", message: "a piece needs a meter", path: ["score", "meter"] });
-    }
-    staff.measures.forEach((measure, m) => {
-      if (measure.length === 0) {
-        ctx.addIssue({
-          code: "custom",
-          message: `measure ${String(m + 1)} is empty`,
-          path: ["score", "staves", 0, "measures", m],
-        });
-        return;
-      }
-      if (units !== null) {
-        const total = measure.reduce((sum, el) => sum + durationUnits(el.duration), 0);
-        if (total !== units) {
-          ctx.addIssue({
-            code: "custom",
-            message: `measure ${String(m + 1)} does not fill the meter (${String(total)}/64 of ${String(units)}/64)`,
-            path: ["score", "staves", 0, "measures", m],
-          });
-        }
-      }
-      measure.forEach((el, e) => {
-        if (el.kind === "note" && el.pitches.length !== 1) {
-          ctx.addIssue({
-            code: "custom",
-            message: "a piece is a single line: one pitch per note",
-            path: ["score", "staves", 0, "measures", m, e, "pitches"],
-          });
-        }
-      });
-    });
+  .superRefine(refinePiece);
 
-    let next = 1;
-    piece.phrases.forEach((p, i) => {
-      if (p.firstMeasure !== next) {
-        ctx.addIssue({
-          code: "custom",
-          message: `phrases must tile the measures: expected phrase ${String(i + 1)} to start at ${String(next)}`,
-          path: ["phrases", i, "firstMeasure"],
-        });
-      }
-      next = p.lastMeasure + 1;
-    });
-    if (next - 1 !== staff.measures.length) {
-      ctx.addIssue({
-        code: "custom",
-        message: `phrases end at measure ${String(next - 1)} but the score has ${String(staff.measures.length)}`,
-        path: ["phrases"],
-      });
-    }
-    if (new Set(piece.requiredNodeIds).size !== piece.requiredNodeIds.length) {
-      ctx.addIssue({
-        code: "custom",
-        message: "requiredNodeIds must be unique",
-        path: ["requiredNodeIds"],
-      });
-    }
-  });
+/** The `source` shown for every imported piece. */
+export const IMPORTED_PIECE_SOURCE = "Imported";
+
+/** Id of a piece the learner imported: `piece.user-` and a lowercase ULID. Fits the library pattern. */
+export const USER_PIECE_ID_REGEX = /^piece\.user-[0-9a-z]{26}$/;
+
+export function isUserPieceId(id: string): boolean {
+  return USER_PIECE_ID_REGEX.test(id);
+}
+
+/** The piece id for an imported piece with ULID `ulid`. */
+export function userPieceId(ulid: string): string {
+  return `piece.user-${ulid.toLowerCase()}`;
+}
+
+/**
+ * A piece the learner imported (T7.4). Same shape and score rules as a library piece, but it has no
+ * required nodes, so it is unlocked from the start, and its id carries the `piece.user-` prefix.
+ */
+export const UserPieceSchema = z
+  .strictObject({
+    id: z.string().regex(USER_PIECE_ID_REGEX),
+    ...pieceShape,
+    requiredNodeIds: z.array(z.string().min(1)).max(0),
+  })
+  .superRefine(refinePiece);
 export type Piece = z.infer<typeof PieceSchema>;
 
 /** Right hand plays the treble staff, left hand the bass staff. */

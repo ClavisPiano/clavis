@@ -48,6 +48,7 @@ These are proposed decisions. Each is cheap to change now and expensive after M2
 | R22 | Piece phrases (MP, TP.4) need a place in the model: attempts must hit a graph node, a phrase is graded on pitch and rhythm together, and no spec says what a finished piece is | **Node.** One graph node `apply.pieces` (new strand `APPLY`, generator `pieceLine`) holds every phrase item, `apply.pieces|phrase=N|piece=<id>`. Its mastery state is not used: unlocking is per piece (`listPieces`, every required node at least `fluent`) and progress is `state.pieces`, derived from phrase attempts and `piece.completed`. **Grading.** A new `line` play target (exact pitches and onsets) is scored in two stages, pitch first with `sequence` rules, then rhythm with `rhythm` rules only once the pitches are right. Correct needs both; `partial` is 0.7 pitch plus 0.3 rhythm. **Composer.** `blocks.apply` is `null` or the phrases for the session: due phrases first, then up to 2 new phrases of the current piece (the first unlocked piece not yet played through). It is never planned in Away mode or practice. Apply takes about a third of the daily new-item allowance (rounded) so reading cannot use it all. **Runs.** `composePieceRun` plans every phrase of a piece in order (`plan.run`). The session writes `piece.completed { pieceId, phrases, correctPhrases }` once all phrases were attempted; the piece counts as played through when `correctPhrases === phrases`. **Rollout.** `pieceLine` stays `implemented: false` and is not in the app registry until the enabling PR (TP.5), so nothing changes for learners yet |
 | R23 | Playing a learned tune by ear (MP, TP.6) needs a node, a rule for when it is offered, and a way to show the score only after the answer | **Node.** A second APPLY node, `apply.piece-ear`, with the `pieceEar` generator (injected like `pieceLine`). Its items are `apply.piece-ear\|phrase=N\|piece=<id>`, so they never share a card or a phrase record with reading: only `pieceLine` attempts feed `LearnerState.pieces`. **Offered** for a piece once every phrase of it has been played correctly at least once (the same "learned" the Home card shows), one new phrase per session (`APPLY_NEW_EAR_PHRASES_PER_SESSION`), ahead of new reading phrases, in the instrument only. **Stages.** The item plays a one bar count-in and the phrase at 60 bpm with its real rhythm; the expected response is a `sungSequence` and then the same `line` as reading (R12: both parts must be right, errors tagged `sing` or `play`). Rhythm is fitted to the learner's own pace, so playing needs no reference beat. **Reveal.** `ItemInstance.reveal` is the phrase as a score. The machine draws it with the feedback (not before), marks the notes, and holds the feedback until the learner moves on. Feedback names sung notes as sung ("you sang E4"). |
 | R24 | Sessions and practice grew features outside any plan task: choosing skills, the on-screen keys as an answer, a free keyboard page, the daily warm-up, where rhythm and targets sound | **Practice.** `/practice` lists started skills with answered items; `?practice=1&skills=a,b` drills only those (`ComposeInput.skills`). A practice round always offers the try-first step (Ready) for degree items. **Input.** At the piano the mic or MIDI and the on-screen keys answer together (`CompositeInputAdapter`); an answer made only on the keys is graded and logged as `tap`. `/keyboard` is a free-play page (key picker, home note and chord marked, hear the key): nothing is graded or stored. **Warm-up.** The key-of-the-day orient block is planned only before the first finished, non-practice session of the day that presented an item; otherwise its share goes to ear. **Rhythm.** `rhythmEcho` sounds on the tonic of the key of the day. **Register.** Degree targets (and melodic cells, when they fit) sound in the register of the cadence's last chord, so 1, 3, 5 and the other degrees are heard in one place; another keyboard range falls back to its centre. **Introductions.** Pitch skills are introduced before rhythm nodes. |
+| R25 | The by-ear capstone loop (spec 9, T7.2) has seven stages and several nodes, but only the melody stage can be graded today, `byEarPhrase` was listed by three nodes, and BYEAR is not a block in spec 6.2 | **Stages.** `byear.melody.simple` runs hear (after the key-setting cadence), sing (`sungSequence`), play (a `line`: exact pitches, then rhythm fitted to the learner's pace) and reveal (the score drawn after the answer, as in R23). Both parts must be right and errors name their part (R12). Left out: "find the tonic" (the cadence sets home), bass and harmonise (polyphonic input, `byear.harmonise`), and the cross-session gating of later stages (nothing later exists yet). **Items.** `byear.melody.simple\|bars=N\|slot=K`: 3 lengths (4, 6, 8 bars of 4/4) x 6 slots = 18 melodies, each a pure function of its id (seeded rejection sampling: diatonic, mostly stepwise, starts on 1, 3 or 5, half close on 2, 3 or 5, ends on 1, within an octave). The key is a presentation parameter in a major key (R1) and the register follows the learner's voice range; the presentation carries the degrees, beats and MIDI notes (R2). **Generators.** `byEarPhrase` is the melody stage only. `byear.harmonise` moves to `byEarHarmonise` and `ear.real.phrase` and `byear.full.phrase` to `byEarRecording` (both unimplemented), so they stay disabled and no synthetic content ships as "real recordings". **Composer.** BYEAR melodies go in the Apply block (spec 6.2: "one HANDS or BYEAR task"), instrument mode only: a BYEAR node is introduced like any node (strands take turns, oldest introduction first, ties to EAR, READ, BYEAR), then one new melody per session plus due ones. Spec 5.4 task priority and error micro-drills are not built; FSRS cards schedule the melodies like other items. `contentVersion` 2026.10.11 |
 
 ---
 
@@ -236,6 +237,16 @@ Follow-ups, deliberately out of MP: hands-together pieces (M5 alignment, MIDI fi
 - R2 upload endpoint for recordings, keyed `userId/...`, with a local size cap.
 - Risk: DO free-tier write limits under batch pushes. Mitigation: batch per request, measure in staging.
 
+Tasks (filed when started; later rows may be revised once T4.1 lands):
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T4.1 | **Sync protocol and per-user Durable Object.** `core/sync` zod schemas for push and pull; `UserEvents` DO on SQLite storage with `INSERT OR IGNORE` and `serverSeq`; `/api/sync/push` and `/api/sync/pull` behind an HMAC session token (`SESSION_SECRET`); no token issuing yet, so every request is 401 until T4.2 | - | Idempotent duplicate push; distinct increasing seqs; paginated pull with `hasMore`; 400 on invalid events; 401 on missing, expired or tampered tokens; users isolated |
+| T4.2 | **Passkey auth.** `@simplewebauthn/server` register and login (options and verify), short-lived challenges, D1 tables for users, credentials and hashed recovery codes; issues the T4.1 session cookie; recovery-code login; add a second passkey while signed in; sign out; `/api/me` | T4.1 | Worker tests with fixture attestation and assertion responses; replayed or expired challenge rejected; recovery code works once |
+| T4.3 | **Client sync loop.** Push unsynced events in batches, pull after the stored `serverSeq`, append pulled events idempotently, refold from the snapshot before the earliest new event; triggers on session end, foreground and an online interval; claiming is the first authenticated push (R7) | T4.1 | Two in-memory clients against a fake server converge to identical state (`fast-check` over interleavings); offline sessions sync later; no duplicate events; anonymous events pushed on first sign-in are pulled by a second device |
+| T4.4 | **Account UI.** Settings: create account with a passkey, show recovery codes once, sign in, add a passkey, sign out, sync status | T4.2, T4.3 | Playwright (Chromium) with a CDP virtual authenticator: sign up, sync, sign in on a fresh profile, same state |
+| T4.5 | **Recordings upload.** R2 endpoint keyed `userId/...` with a size cap; local IndexedDB copies with a cap | T4.2 | Worker tests for auth, key prefixing and size limits |
+
 ### M5: Hands
 
 - Web MIDI adapter (Chromium/Android/desktop).
@@ -246,6 +257,12 @@ Follow-ups, deliberately out of MP: hands-together pieces (M5 alignment, MIDI fi
 - Apply block in the composer; placement HANDS section.
 - Risk: polyphonic mic accuracy. S1 results decide whether mic-based HANDS ships in v1 or HANDS is MIDI-first.
 
+Tasks (first slice; the rest are planned after S1):
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T5.1 | **Web MIDI input adapter.** `MidiAdapter` over Web MIDI (`source: "midi"`, note off and velocity 0, channel filter, hot-plug, graceful absence on iOS); settings option and device picker; no latency calibration for MIDI | - | Unit tests with a fake `MIDIAccess`; Playwright (Chromium) with a stubbed `requestMIDIAccess` grades a played answer |
+
 ### M6: Progress
 
 - Skill map (graph view with node states), consistency calendar, weekly target, fluency trends, capability milestones (from fold diffs, R4).
@@ -253,12 +270,30 @@ Follow-ups, deliberately out of MP: hands-together pieces (M5 alignment, MIDI fi
 - Practice cue push notifications (Web Push from the Worker; iOS requires home-screen install).
 - Self-assessment flow (spec 8.4) and calibration metric.
 
+Tasks:
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T6.1 | **Progress page.** Pure `core/progress` helpers (practice days and minutes by learner-local day, weekly progress, per-strand weekly accuracy and median latency); weekly target as `settings.changed` v3 with an upcaster; `/progress` with the consistency calendar, weekly target and trends | - | Table tests across time zones; `fast-check` order independence; schema and upcaster tests; Playwright: calendar and target shown, target persists |
+| T6.2 | **Skill map.** Graph view of nodes by strand with states, tap a node for its card and mastery criteria | T6.1 | Component tests; Playwright: a seeded learner's states appear on the map |
+| T6.3 | **Capability milestones.** Plain statements per meaningful node in content; derived from node-state fold diffs (R4); shown in the session summary and on `/progress` | T6.1 | Content tests; reducer tests: one milestone per first mastery, refold order independent |
+| T6.4 | **Practice cue.** Web Push from the Worker with a learner-chosen time and habit; iOS needs home-screen install | T4.2 | Worker tests for subscription storage and scheduling |
+| T6.5 | **Monthly benchmark and self-assessment.** Benchmark recording with side-by-side replay (R2 storage); self-assessment flow and calibration metric | T4.5 | Tests per sub-feature |
+
 ### M7: By ear and import
 
 - EAR progression nodes and generators (`progressionId`; `bassMotion` and `chordQuality` move to MP, TP.1), minor and colour progressions.
-- `byEarPhrase` staged loop (spec 9) with stage gating.
+- `byEarPhrase` staged loop (spec 9) with stage gating: melody stage shipped in T7.2 (R25); roots and chords stages remain.
 - Import: MusicXML/MXL (primary), MIDI, ABC (via Verovio conversion), audio with loop regions; phrase splitting and difficulty estimate; private R2 storage.
 - `ear.real.phrase` content sourcing (public domain first).
+
+Tasks:
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T7.1 | **Progression and cadence ear.** `progressionId` for `ear.prog.core`, `ear.cadence`, `ear.prog.minor` and `ear.prog.colour`: hear a progression or cadence in a random key, choose it by tap; cards; enable | TP.1 | Seeded tests (chords match the answer, ids stable across keys, universe sizes); card coverage; Playwright: answer by tap |
+| T7.2 | **`byEarPhrase` staged loop.** Spec 9 stages with gating, generalising TP.6 beyond known pieces | TP.6 | Machine tests per stage; Playwright |
+| T7.3 | **MusicXML import.** MusicXML and MXL to `ScoreSpec`, phrase splitting and difficulty estimate; stored locally, R2 later | T3.4 | Fixture imports round-trip; phrase splits tile the score |
 
 ---
 

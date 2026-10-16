@@ -146,7 +146,7 @@ export interface HarnessOptions {
   skills?: readonly string[];
   /** Learn something new: extra new items for this session. */
   extraNewItems?: number;
-  inputSource?: "mic" | "tap";
+  inputSource?: "mic" | "tap" | "midi";
   headphones?: boolean | undefined;
   askHeadphones?: boolean;
   latency?: { tapMs?: number; micMs?: number };

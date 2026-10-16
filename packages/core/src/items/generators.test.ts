@@ -102,10 +102,12 @@ describe("registry and universes", () => {
       [
         "bassMotion",
         "bassNoteRead",
+        "byEarPhrase",
         "cellEcho",
         "chordQuality",
         "degreeId",
         "degreeSing",
+        "progressionId",
         "rhythmEcho",
         "rhythmRead",
         "trebleNoteRead",

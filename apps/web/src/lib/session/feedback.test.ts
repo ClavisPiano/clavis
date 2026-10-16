@@ -23,6 +23,20 @@ describe("describeError", () => {
       "You chose minor; it was major",
     ],
     [{ code: "choice.wrong" }, "That was not the right choice"],
+    [
+      {
+        code: "choice.wrong",
+        detail: { expectedLabel: "I-V-vi-IV", playedLabel: "vi-IV-I-V", part: "play" },
+      },
+      "You chose vi-IV-I-V; it was I-V-vi-IV",
+    ],
+    [
+      {
+        code: "choice.wrong",
+        detail: { expectedLabel: "Perfect", playedLabel: "Plagal", part: "play" },
+      },
+      "You chose plagal; it was perfect",
+    ],
     [{ code: "pitch.wrong" }, "That was not the target note"],
     [{ code: "pitch.octave" }, "Right note, wrong octave"],
     [{ code: "response.timeout" }, "No answer was heard in time"],

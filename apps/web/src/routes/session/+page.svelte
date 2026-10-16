@@ -16,7 +16,6 @@
   import { createSessionRuntime, type SessionRuntime } from "../../lib/session/runtime";
   import { followUpSearch } from "../../lib/next-steps";
   import { minutesLabel } from "../../lib/home";
-  import { appPieces } from "../../lib/pieces";
 
   type Phase = "loading" | "failed" | "ready";
 
@@ -44,7 +43,7 @@
   const runResult = $derived.by(() => {
     if (view.kind !== "summary" || !view.summary.run) return undefined;
     const run = view.summary.run;
-    return { ...run, title: appPieces().find((x) => x.id === run.pieceId)?.title ?? "the piece" };
+    return { ...run, title: runtime?.pieceTitle(run.pieceId) ?? "the piece" };
   });
   /** After the session, or on the Nothing-due screen: what else to offer today. */
   const steps = $derived(
