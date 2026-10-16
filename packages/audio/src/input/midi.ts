@@ -97,6 +97,8 @@ export class MidiAdapter implements InputAdapter {
   #status: MidiStatus = "idle";
   #running = false;
   #paused = false;
+  /** Bumped by `stop()`, so a `start()` still waiting on the permission prompt gives up. */
+  #generation = 0;
   /** Notes sounding, per input id, so a note off only reports a release for a held note. */
   readonly #held = new Map<string, Set<number>>();
 
@@ -144,13 +146,15 @@ export class MidiAdapter implements InputAdapter {
       this.#status = "unsupported";
       return;
     }
+    const generation = this.#generation;
     let access: MidiAccessLike;
     try {
       access = await this.#request({ sysex: false });
     } catch {
-      this.#status = "denied";
+      if (generation === this.#generation) this.#status = "denied";
       return;
     }
+    if (generation !== this.#generation) return;
     this.#running = true;
     this.#status = "available";
     this.#access = access;
@@ -159,6 +163,7 @@ export class MidiAdapter implements InputAdapter {
   }
 
   stop(): void {
+    this.#generation++;
     this.#running = false;
     this.#access?.removeEventListener("statechange", this.#onStateChange);
     this.#access = undefined;

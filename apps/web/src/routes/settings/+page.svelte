@@ -76,6 +76,7 @@
   function chooseInput(): void {
     touch();
     if (inputChoice === "midi") void probeMidi();
+    else stopMidiProbe();
   }
 
   onDestroy(stopMidiProbe);

@@ -218,6 +218,30 @@ describe("MidiAdapter", () => {
     expect(notes).toEqual([]);
   });
 
+  it("stop() during a pending permission prompt leaves nothing attached", async () => {
+    const access = new FakeAccess();
+    const input = new FakeInput("a");
+    access.map.set("a", input);
+    const pending: { grant?: (a: MidiAccessLike) => void } = {};
+    const adapter = new MidiAdapter({
+      requestMIDIAccess: () =>
+        new Promise<MidiAccessLike>((resolve) => {
+          pending.grant = resolve;
+        }),
+      getContext: () => undefined,
+    });
+    const notes: NoteEvent[] = [];
+    adapter.onNote((n) => notes.push(n));
+    const started = adapter.start();
+    adapter.stop();
+    pending.grant?.(access);
+    await started;
+    expect(input.listenerCount).toBe(0);
+    expect(access.statechangeListeners).toBe(0);
+    input.send([0x90, 60, 80]);
+    expect(notes).toEqual([]);
+  });
+
   it("reports unavailable instead of throwing when Web MIDI is missing", async () => {
     const adapter = new MidiAdapter({ requestMIDIAccess: undefined, getContext: () => undefined });
     await expect(adapter.start()).resolves.toBeUndefined();
