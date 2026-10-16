@@ -6,6 +6,7 @@ import {
   StimulusPlayer,
   TapInputAdapter,
   getAudioContextManager,
+  isMidiSupported,
   type FakeClock,
   type InputAdapter,
   type Instrument,
@@ -27,7 +28,7 @@ import { getLearnerState } from "../learner";
 import { getNotationClient } from "../notation/shared";
 import { appGenerators, appPieces, generatorFor, pieceInputs } from "../pieces";
 import { createNotationViewPort, type NotationViewPort } from "../notation/view-port";
-import { createInput, detachFakeInput } from "../input";
+import { MIDI_INPUT_META_KEY, createInput, detachFakeInput, parseMidiInputId } from "../input";
 import { SessionMachine, type SessionDeps } from "./machine";
 import { findOpenSessions } from "./open";
 import { parseLatency, type SessionParams } from "./params";
@@ -80,7 +81,8 @@ export async function createSessionRuntime(
   // Fake input has no audio context: use performance.now for everything so nothing depends on the
   // browser starting an AudioContext (headless WebKit may not). Silent audio with tap input has
   // nothing that needs the context clock either. The mic and audible stimuli share the context.
-  const performanceClock = fake || (params.silent && params.inputKind === "tap");
+  const performanceClock =
+    fake || (params.silent && (params.inputKind === "tap" || params.inputKind === "midi"));
   const contextNowMs = performanceClock
     ? (): number => performance.now()
     : (): number => audio.getContext().currentTime * 1000;
@@ -107,9 +109,14 @@ export async function createSessionRuntime(
   }
   const stimulusPlayer = new StimulusPlayer(clockSource, instrument);
 
-  const handle = createInput(params.inputKind, {
+  // MIDI is chosen in settings, but a browser without Web MIDI (or a stored choice from another
+  // browser profile) falls back to the mic.
+  const inputKind = params.inputKind === "midi" && !isMidiSupported() ? "mic" : params.inputKind;
+  const midiInputId = parseMidiInputId(await store.getMeta(MIDI_INPUT_META_KEY));
+  const handle = createInput(inputKind, {
     clock: { now: contextNowMs, schedule },
     ...(performanceClock ? { tapClockMs: contextNowMs } : {}),
+    ...(midiInputId === undefined ? {} : { midiInputId }),
   });
   // At the piano the on-screen keys answer too, so the learner can practise anywhere. Away mode's
   // main input already is the keyboard, and placement is for the instrument alone.
@@ -223,8 +230,9 @@ export async function createSessionRuntime(
   };
   const machine = new SessionMachine(deps);
 
-  if (fake) {
-    // Test hook: lets Playwright see what the current item expects. Never exposed otherwise.
+  if (fake || (params.silent && params.inputKind === "midi")) {
+    // Test hook: lets Playwright see what the current item expects. Never exposed otherwise
+    // (MIDI exposes it only with `?audio=silent`, which real use never sets).
     Object.defineProperty(window, "__clavisSession", {
       configurable: true,
       get: () => machine.debug(),
@@ -297,8 +305,8 @@ export async function createSessionRuntime(
         machine.finish();
         notation.hide();
         input.stop();
-        if (fake) {
-          detachFakeInput();
+        if (fake) detachFakeInput();
+        if (fake || (params.silent && params.inputKind === "midi")) {
           Reflect.deleteProperty(window, "__clavisSession");
           Reflect.deleteProperty(window, "__clavisExamplesPlayed");
         }
