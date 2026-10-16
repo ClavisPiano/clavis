@@ -7,7 +7,7 @@ import { rate } from "../grading/rate.js";
 import type { GeneratorId, NodeState, SkillGraph, SkillNode } from "../graph/schema.js";
 import { isNodeEnabled } from "../graph/validate.js";
 import type { JsonObject } from "../json.js";
-import { learnerDay } from "../learning/day.js";
+import { learnerDay, type LearnerDay } from "../learning/day.js";
 import { isValidKey, keyFamily, type KeyFamily } from "../theory/keys.js";
 import type {
   DailyRecord,
@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 
 /** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
-export const REDUCER_VERSION = 3;
+export const REDUCER_VERSION = 4;
 
 export const DURATION_WINDOW = 20;
 /** Fewer samples than this and the graph seed is used instead of the median. */
@@ -215,7 +215,7 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
         day = learnerDay(event.at, 0);
       }
       daily(state, day).nodesIntroduced++;
-      reevaluate(state, node);
+      reevaluate(state, node, event.at, day);
       recomputeAvailability(state, ctx.graph);
       return;
     }
@@ -247,7 +247,7 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
           }
           rec.byFamily = by;
         }
-        reevaluate(state, node);
+        reevaluate(state, node, event.at, learnerDay(event.at, 0));
       }
       recomputeAvailability(state, ctx.graph);
       return;
@@ -332,7 +332,7 @@ function reduceAttempt(
   list.push(secs);
   if (list.length > DURATION_WINDOW) list.splice(0, list.length - DURATION_WINDOW);
 
-  reevaluate(state, node);
+  reevaluate(state, node, event.at, attempt.day);
   recomputeAvailability(state, ctx.graph);
 }
 
@@ -363,7 +363,16 @@ function keyHints(p: JsonObject): Pick<PresentationRecord, "tonic" | "mode"> {
 }
 
 /** Re-evaluate one node from its attempt history. Locked and available nodes do not move. */
-function reevaluate(state: LearnerState, node: SkillNode): void {
+function reevaluate(state: LearnerState, node: SkillNode, at: number, day: LearnerDay): void {
+  reevaluateState(state, node);
+  // The first time a node is mastered is kept for good (T6.3): a later drop and regain leaves it.
+  const rec = state.nodes[node.id];
+  if (rec?.state === "mastered" && rec.firstMastered === undefined) {
+    rec.firstMastered = { at, day };
+  }
+}
+
+function reevaluateState(state: LearnerState, node: SkillNode): void {
   const rec = state.nodes[node.id];
   if (!rec || RANK[rec.state] < RANK.learning) return;
   const attempts = state.attempts[node.id] ?? [];

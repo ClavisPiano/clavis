@@ -19,6 +19,7 @@ import {
   type LearningEvent,
   type StimulusSpec,
 } from "@clavis/core";
+import { loadMilestones } from "@clavis/content";
 import { scoreAttempt } from "@clavis/scoring";
 import { AUTO_CONTINUE_META_KEY, parseAutoContinueSec } from "../auto-continue";
 import { effectiveSettings } from "../home";
@@ -158,6 +159,7 @@ export async function createSessionRuntime(
       ? { extraNewItems: effectiveSettings(service.state.settings).newItemsPerDay }
       : {}),
     graph,
+    milestones: loadMilestones(),
     // Placement (R19): the plan replaces the composer and nothing but its result is stored.
     ...(placement ? { placement: { plan: placementPlan(graph, createRng(seed)) } } : {}),
     compose: (input) =>

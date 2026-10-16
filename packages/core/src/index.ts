@@ -16,3 +16,4 @@ export * from "./score/index.js";
 export * from "./pieces/index.js";
 export * from "./placement/index.js";
 export * from "./progress/index.js";
+export * from "./milestones/index.js";

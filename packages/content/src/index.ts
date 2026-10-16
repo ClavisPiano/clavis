@@ -7,6 +7,12 @@ import {
 import { CARDS_V1, ORIENT_CARD_ID } from "./cards/v1.js";
 
 export { conceptTip, type ConceptTip, type TipMode } from "./tips.js";
+export {
+  MILESTONE_EXEMPT,
+  loadMilestones,
+  milestoneForNode,
+  parseMilestones,
+} from "./milestones.js";
 export { loadPieces } from "./pieces/library.js";
 import v1 from "./graph/v1.json";
 

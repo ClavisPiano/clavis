@@ -27,6 +27,12 @@ export interface NodeRecord {
   byFamily?: Partial<Record<KeyFamily, NodeState>>;
   introducedAt?: number;
   placementFloor?: NodeState;
+  /**
+   * When the node first reached `mastered`: the event time and learner day (T6.3). Set once and
+   * never cleared, so a drop and a regain keep the first date. Placement counts, on the day of the
+   * placement event read at UTC.
+   */
+  firstMastered?: { at: number; day: LearnerDay };
 }
 
 /** A graded attempt plus the key family it was played in (key-dependent nodes only). */
