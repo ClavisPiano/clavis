@@ -44,6 +44,30 @@ Local preview of the full stack: `pnpm --filter @clavis/worker dev` (builds the 
 - Each user's events live in a `UserEvents` Durable Object with SQLite storage (binding `USER_EVENTS`). The first deploy applies the `v1` migration in `wrangler.jsonc` (`new_sqlite_classes`). Add new classes or renames as new migration tags, never edit a shipped one.
 - Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `clavis_session` cookie. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
 
+## Passkey auth (D1)
+
+Passkeys (WebAuthn) are the only login method. Accounts, credentials, recovery code hashes and short-lived challenges live in a D1 database bound as `DB`. Session tokens are the HMAC tokens above, delivered in the `clavis_session` cookie (HttpOnly, Secure, SameSite=Lax, 30 days).
+
+One-time setup:
+
+```sh
+# 1. Create the database and copy the printed database_id into wrangler.jsonc (d1_databases[0]).
+pnpm --filter @clavis/worker exec wrangler d1 create clavis
+
+# 2. Apply migrations to the remote database (repeat after adding a migration file).
+pnpm --filter @clavis/worker exec wrangler d1 migrations apply clavis --remote
+
+# Local dev database (used by `wrangler dev`):
+pnpm --filter @clavis/worker exec wrangler d1 migrations apply clavis --local
+```
+
+- Set `RP_ID` (bare host, for example `clavis.me.workers.dev`) and `EXPECTED_ORIGIN` (`https://clavis.me.workers.dev`) in `vars` in `wrangler.jsonc`. They default to localhost values. A passkey is bound to `RP_ID`, so changing it later orphans existing passkeys; pick the final host first (moving to a custom domain means a new RP id, so users re-register or use recovery codes).
+- `SESSION_SECRET` (above) must be set before any login works.
+- Migrations are numbered files in `apps/worker/migrations/`. Never edit a shipped one; add the next number.
+- `@simplewebauthn/server` runs on Workers without `nodejs_compat`: it only uses WebCrypto (`globalThis.crypto`) and pure JS dependencies, and imports no Node built-ins. No compatibility flag is set. If a future upgrade starts importing `node:` modules, `wrangler deploy --dry-run` will fail and `nodejs_compat` must be added.
+- Endpoints (all JSON; every POST needs `content-type: application/json` and an `Origin` header equal to `EXPECTED_ORIGIN`): `POST /api/auth/register/options|verify`, `login/options|verify`, `recovery`, `passkeys/options|verify` (signed in), `logout`, and `GET /api/me`. The `options` endpoints return `{ challengeId, options }`; pass `challengeId` back with the browser response to the matching `verify` endpoint. Challenges are single use and expire after 5 minutes.
+- Follow-up: there is no rate limiting yet. Add a Cloudflare rate limiting rule (or the Workers rate limit binding) on `/api/auth/*`, in particular `/api/auth/recovery`, before opening sign-ups widely.
+
 ## Finding the workers.dev URL
 
 The deploy log ends with `https://clavis.<your-subdomain>.workers.dev`. It is also shown in the dashboard under Workers & Pages, clavis. The subdomain is chosen once per account under Workers & Pages, Account details.

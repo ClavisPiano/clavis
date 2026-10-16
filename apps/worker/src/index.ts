@@ -1,51 +1,16 @@
 import { DEFAULT_PULL_LIMIT, PullRequest, PushRequest } from "@clavis/core";
-import { extractToken, verifySession } from "./auth/session";
+import { authenticate } from "./auth/guard";
+import { handleAuth } from "./auth/handlers";
+import type { Env } from "./env";
+import { API_HEADERS, json, methodNotAllowed } from "./http";
 
 export { UserEvents } from "./user-events";
+export type { Env } from "./env";
 
 /** Largest accepted push body. 500 events at a few KB each fits well inside this. */
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
-export interface Env {
-  /** Workers Static Assets binding serving the web build. */
-  ASSETS: Fetcher;
-  /** Build id (commit SHA in CI), "dev" locally. Set via `vars` or `--var VERSION:<sha>`. */
-  VERSION: string;
-  /** Per-user event store (one `UserEvents` Durable Object per user). */
-  USER_EVENTS: DurableObjectNamespace;
-  /** HMAC key for session tokens. Set with `wrangler secret put SESSION_SECRET`. */
-  SESSION_SECRET: string;
-  // Later milestones add bindings here (D1, R2).
-}
-
-const API_HEADERS: Record<string, string> = {
-  "content-type": "application/json; charset=utf-8",
-  "cache-control": "no-store",
-  "x-content-type-options": "nosniff",
-  "referrer-policy": "no-referrer",
-  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: API_HEADERS });
-}
-
-function methodNotAllowed(allow: string): Response {
-  return new Response(JSON.stringify({ error: "method_not_allowed" }), {
-    status: 405,
-    headers: { ...API_HEADERS, allow },
-  });
-}
-
 const unauthorized = (): Response => json({ error: "unauthorized" }, 401);
-
-/** Resolve the session user id, or null when the token is missing, invalid or expired. */
-async function authenticate(request: Request, env: Env): Promise<string | null> {
-  const token = extractToken(request);
-  if (!token) return null;
-  const claims = await verifySession(token, env.SESSION_SECRET, Date.now());
-  return claims?.sub ?? null;
-}
 
 /** The user id comes from the token, never from the payload (R7). */
 function userStub(env: Env, userId: string): DurableObjectStub {
@@ -110,6 +75,9 @@ async function handleApi(request: Request, url: URL, env: Env): Promise<Response
       return methodNotAllowed("GET, HEAD");
     }
     return json({ ok: true, version: env.VERSION });
+  }
+  if (url.pathname === "/api/me" || url.pathname.startsWith("/api/auth/")) {
+    return handleAuth(request, url, env);
   }
   if (url.pathname === "/api/sync/push") return handlePush(request, env);
   if (url.pathname === "/api/sync/pull") return handlePull(request, url, env);
