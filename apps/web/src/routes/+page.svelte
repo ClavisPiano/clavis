@@ -247,6 +247,9 @@
     <p class="muted" data-testid="week-progress">
       This week: {week.daysPractised} of {week.target} days
     </p>
+    <p>
+      <a href={resolve("/progress")} data-testid="see-progress">See your progress</a>
+    </p>
   </section>
 {/if}
 

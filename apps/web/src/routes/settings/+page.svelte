@@ -192,7 +192,9 @@
           }}
         >
           {#each WEEKLY_TARGET_OPTIONS as d (d)}
-            <option value={String(d)}>{d} days a week</option>
+            <option value={String(d)}
+              >{d === 1 ? "1 day a week" : `${String(d)} days a week`}</option
+            >
           {/each}
         </select>
       </label>

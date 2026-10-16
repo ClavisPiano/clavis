@@ -21,7 +21,9 @@ describe("parseEvent", () => {
     expect(parseEvent({ ...device, userAgent: "UA" }).ok).toBe(true);
     expect(parseEvent(settings)).toEqual({ ok: true, event: { ...settings, v: 2 } });
     expect(parseEvent({ ...settings, patch: {} }).ok).toBe(true);
-    expect(parseEvent({ ...settings, patch: { weeklyTargetDays: 5 } }).ok).toBe(true);
+    for (const days of [1, 5, 7]) {
+      expect(parseEvent({ ...settings, patch: { weeklyTargetDays: days } }).ok).toBe(true);
+    }
     expect(parseEvent({ ...settings, patch: { weeklyTargetDays: 8 } }).ok).toBe(false);
     expect(parseEvent({ ...settings, patch: { weeklyTargetDays: 0 } }).ok).toBe(false);
   });

@@ -1,10 +1,11 @@
 export interface NavItem {
-  readonly href: "/" | "/settings";
+  readonly href: "/" | "/progress" | "/settings";
   readonly label: string;
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/", label: "Home" },
+  { href: "/progress", label: "Progress" },
   { href: "/settings", label: "Settings" },
 ];
 
