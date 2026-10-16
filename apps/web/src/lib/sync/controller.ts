@@ -44,6 +44,10 @@ export interface SyncController {
   subscribe(fn: (s: SyncState) => void): () => void;
   /** Called after a run that added events from other devices. */
   onPulled(fn: () => void): () => void;
+  /** The user just signed in or up (T4.4): forget `signedOut` and sync immediately. */
+  notifySignedIn(): Promise<void>;
+  /** The user signed out (T4.4): stop timer syncs and show `signedOut`. Local data is kept. */
+  notifySignedOut(): void;
 }
 
 export function createSyncController(deps: SyncControllerDeps): SyncController {
@@ -130,6 +134,15 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
       subs.add(fn);
       fn(state);
       return () => subs.delete(fn);
+    },
+    notifySignedIn() {
+      signedOut = false;
+      return trigger("start");
+    },
+    notifySignedOut() {
+      signedOut = true;
+      const kept = state.lastSyncedAt === undefined ? {} : { lastSyncedAt: state.lastSyncedAt };
+      set({ status: "signedOut", ...kept });
     },
     onPulled(fn) {
       pulledSubs.add(fn);
