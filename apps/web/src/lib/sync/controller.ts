@@ -8,6 +8,8 @@ import type { SyncResult } from "@clavis/core";
  * - Signed out (401): remembered. Only explicit triggers (start, session end, visible, online)
  *   retry, which costs one cheap 401. The 5 minute timer stays quiet while signed out.
  * - The timer runs only while the page is visible and online.
+ * - Without the signed-in hint (`isSignedIn`), no trigger touches the network: the status is
+ *   `signedOut`. A 401 calls `onSignedOut` so the hint is cleared.
  */
 
 export type SyncStatus = "idle" | "syncing" | "offline" | "signedOut" | "error";
@@ -35,6 +37,10 @@ export interface SyncControllerDeps {
   doc: Target;
   win: Target;
   intervalMs?: number;
+  /** False skips every run without a request. Defaults to always signed in. */
+  isSignedIn?: () => boolean;
+  /** Called when a run comes back signed out (401). */
+  onSignedOut?: () => void;
 }
 
 export interface SyncController {
@@ -74,6 +80,7 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
       };
     }
     signedOut = result.outcome === "signedOut";
+    if (signedOut) deps.onSignedOut?.();
     const kept = state.lastSyncedAt === undefined ? {} : { lastSyncedAt: state.lastSyncedAt };
     if (result.outcome === "ok") set({ status: "idle", lastSyncedAt: deps.now() });
     else {
@@ -84,6 +91,11 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
   }
 
   function trigger(reason: SyncReason): Promise<void> {
+    if (deps.isSignedIn && !deps.isSignedIn()) {
+      signedOut = true;
+      if (state.status !== "signedOut") set({ ...state, status: "signedOut" });
+      return running ?? Promise.resolve();
+    }
     if (reason === "timer" && (signedOut || !deps.isVisible() || !deps.isOnline())) {
       return running ?? Promise.resolve();
     }

@@ -59,6 +59,41 @@ describe("sync controller", () => {
     vi.useRealTimers();
   });
 
+  it("makes no request without the signed-in hint, and clears the hint on a 401", async () => {
+    let signedIn = false;
+    let cleared = 0;
+    let calls = 0;
+    let outcome: SyncResult["outcome"] = "ok";
+    const controller = createSyncController({
+      run: () => {
+        calls++;
+        return Promise.resolve(ok({ outcome }));
+      },
+      now: () => Date.now(),
+      isVisible: () => true,
+      isOnline: () => true,
+      doc: new EventTarget(),
+      win: new EventTarget(),
+      isSignedIn: () => signedIn,
+      onSignedOut: () => {
+        cleared++;
+        signedIn = false;
+      },
+    });
+    await controller.trigger("start");
+    await controller.trigger("online");
+    expect(calls).toBe(0);
+    expect(controller.state.status).toBe("signedOut");
+
+    signedIn = true;
+    outcome = "signedOut";
+    await controller.trigger("visible");
+    expect(calls).toBe(1);
+    expect(cleared).toBe(1);
+    await controller.trigger("sessionEnd");
+    expect(calls).toBe(1);
+  });
+
   it("is single-flight: triggers during a run collapse into one follow-up", async () => {
     let release: (() => void) | undefined;
     const t = setup(
