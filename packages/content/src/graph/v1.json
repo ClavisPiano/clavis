@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.9",
+  "contentVersion": "2026.10.10",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -770,7 +770,7 @@
     },
     {
       "id": "progressionId",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 15,
       "awayEligible": true,
       "requires": ["keys"]

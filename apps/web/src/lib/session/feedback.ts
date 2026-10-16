@@ -30,6 +30,14 @@ function verb(detail: AttemptError["detail"]): string {
 export type NoteNamer = (midi: number) => string;
 
 /** One short sentence for an error code. With `names` (reading items) notes are named. */
+/**
+ * An option label inside a sentence: a plain capitalised word ("Minor") drops its capital, while
+ * anything else ("I-V-vi-IV") is kept as it is, since case carries meaning in Roman numerals.
+ */
+export function choiceWord(label: string): string {
+  return /^[A-Z][a-z]+$/.test(label) ? label.toLowerCase() : label;
+}
+
 export function describeError(error: AttemptError, names?: NoteNamer): string {
   const { code, detail } = error;
   if (names) {
@@ -65,7 +73,7 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
       const expected = detail?.expectedLabel;
       const played = detail?.playedLabel;
       if (typeof expected === "string" && typeof played === "string") {
-        return `You chose ${played.toLowerCase()}; it was ${expected.toLowerCase()}`;
+        return `You chose ${choiceWord(played)}; it was ${choiceWord(expected)}`;
       }
       return "That was not the right choice";
     }
