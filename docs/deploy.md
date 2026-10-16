@@ -68,6 +68,18 @@ pnpm --filter @clavis/worker exec wrangler d1 migrations apply clavis --local
 - Endpoints (all JSON; every POST needs `content-type: application/json` and an `Origin` header equal to `EXPECTED_ORIGIN`): `POST /api/auth/register/options|verify`, `login/options|verify`, `recovery`, `passkeys/options|verify` (signed in), `logout`, and `GET /api/me`. The `options` endpoints return `{ challengeId, options }`; pass `challengeId` back with the browser response to the matching `verify` endpoint. Challenges are single use and expire after 5 minutes.
 - Follow-up: there is no rate limiting yet. Add a Cloudflare rate limiting rule (or the Workers rate limit binding) on `/api/auth/*`, in particular `/api/auth/recovery`, before opening sign-ups widely.
 
+## Recordings (R2)
+
+Recordings are stored in an R2 bucket bound as `BLOBS`. Create it once before the first deploy (the deploy fails while the bucket is missing):
+
+```sh
+pnpm --filter @clavis/worker exec wrangler r2 bucket create clavis-blobs
+```
+
+- `PUT|GET|DELETE /api/blobs/:name`. Auth is the same as sync. `PUT` and `DELETE` also need an `Origin` header equal to `EXPECTED_ORIGIN`. The stored key is always `<userId>/<name>` with the user id from the token. `name` matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` and has no `..`.
+- `PUT` accepts `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/wav` and `audio/mpeg`, up to 20 MiB (413 above that, 415 for other types). `GET` returns the stored content type with `cache-control: private`.
+- There is no server-side listing or quota yet. The client keeps its own copies under a size cap (200 MB) and uploads oldest first.
+
 ## Finding the workers.dev URL
 
 The deploy log ends with `https://clavis.<your-subdomain>.workers.dev`. It is also shown in the dashboard under Workers & Pages, clavis. The subdomain is chosen once per account under Workers & Pages, Account details.

@@ -1,4 +1,5 @@
 import { metaCursorStore, syncOnce, type SyncResult } from "@clavis/core";
+import { uploadPendingBlobs } from "../blobs/app";
 import { getLearnerState } from "../learner";
 import { createSyncController, type SyncController } from "./controller";
 import { createFetchTransport } from "./transport";
@@ -29,6 +30,7 @@ export function getSyncController(): SyncController {
         },
       });
     },
+    afterSync: uploadPendingBlobs,
     now: () => Date.now(),
     isVisible: () => document.visibilityState === "visible",
     isOnline: () => navigator.onLine,

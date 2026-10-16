@@ -13,6 +13,8 @@ export interface Env {
   RP_ID: string;
   /** Exact origin the web app is served from, for example `https://clavis.me.workers.dev`. */
   EXPECTED_ORIGIN: string;
+  /** R2 bucket for recordings, keyed `${userId}/${name}`. */
+  BLOBS: R2Bucket;
   /** Test seam for the clock (unix ms). Never set in production. */
   now?: () => number;
 }

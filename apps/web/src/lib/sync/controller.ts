@@ -35,6 +35,11 @@ export interface SyncControllerDeps {
   doc: Target;
   win: Target;
   intervalMs?: number;
+  /**
+   * Runs after a sync that finished `ok` (so the user is signed in), for example the recording
+   * upload queue. Never awaited: a slow or failing upload cannot hold up or fail a sync run.
+   */
+  afterSync?: () => Promise<unknown>;
 }
 
 export interface SyncController {
@@ -79,6 +84,14 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
     else {
       const detail = result.detail === undefined ? {} : { detail: result.detail };
       set({ status: result.outcome, ...kept, ...detail });
+    }
+    if (result.outcome === "ok" && deps.afterSync) {
+      const after = deps.afterSync;
+      void Promise.resolve()
+        .then(after)
+        .catch((e: unknown) => {
+          console.error("Post-sync task failed", e);
+        });
     }
     if (result.pulledNew > 0) for (const fn of [...pulledSubs]) fn();
   }
