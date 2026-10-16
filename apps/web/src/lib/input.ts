@@ -1,6 +1,7 @@
 import {
   FakeInputAdapter,
   MicInputAdapter,
+  MidiAdapter,
   TapInputAdapter,
   getAudioContextManager,
   type CaptureContext,
@@ -11,11 +12,23 @@ import type { ExpectedResponse, NoteEvent, PitchFrame } from "@clavis/core";
 import { createMicPitchSource } from "@clavis/audio/web";
 import type { SessionMode } from "./session-mode";
 
-export type InputKind = "mic" | "tap" | "fake";
+export type InputKind = "mic" | "tap" | "midi" | "fake";
 
-const KINDS: readonly string[] = ["mic", "tap", "fake"];
+const KINDS: readonly string[] = ["mic", "tap", "midi", "fake"];
 
 export const INPUT_STORAGE_KEY = "clavisInput";
+
+/**
+ * Device meta key for the chosen MIDI input (its Web MIDI id). Device-local like the latency
+ * calibration: meta is never synced, and a MIDI id means nothing on another device. Absent means
+ * every connected input.
+ */
+export const MIDI_INPUT_META_KEY = "midiInput";
+
+/** A stored MIDI input id, or undefined (all inputs) when nothing usable is stored. */
+export function parseMidiInputId(raw: unknown): string | undefined {
+  return typeof raw === "string" && raw.length > 0 && raw.length <= 256 ? raw : undefined;
+}
 
 function asKind(value: string | null | undefined): InputKind | undefined {
   return value !== null && value !== undefined && KINDS.includes(value)
@@ -25,7 +38,8 @@ function asKind(value: string | null | undefined): InputKind | undefined {
 
 /**
  * Pick the adapter kind. Precedence: `?input=` query, then `localStorage.clavisInput`, then the
- * session mode (instrument -> mic, away -> tap). Unknown values are ignored.
+ * session mode (instrument -> mic, away -> tap). Unknown values are ignored. "midi" only makes
+ * sense where Web MIDI exists; the session runtime falls back to the mic when it does not.
  */
 export function resolveInputKind(
   mode: SessionMode,
@@ -80,6 +94,8 @@ export interface CreateInputDeps {
    * WebKit may never start a context). Tap times are then read on this clock instead.
    */
   tapClockMs?: () => number;
+  /** For "midi": listen to this input only. Default: every input. */
+  midiInputId?: string | undefined;
 }
 
 /** Build the adapter for `kind` on the shared AudioContext. */
@@ -93,6 +109,16 @@ export function createInput(kind: InputKind, deps: CreateInputDeps = {}): InputH
         : () => audio.getContext(),
     });
     return { kind, adapter: tap, tap };
+  }
+  if (kind === "midi") {
+    const clockMs = deps.tapClockMs;
+    return {
+      kind,
+      adapter: new MidiAdapter({
+        getContext: clockMs ? () => ({ currentTime: clockMs() / 1000 }) : () => audio.getContext(),
+        ...(deps.midiInputId === undefined ? {} : { inputId: deps.midiInputId }),
+      }),
+    };
   }
   if (kind === "fake") {
     const fake = new FakeInputAdapter({

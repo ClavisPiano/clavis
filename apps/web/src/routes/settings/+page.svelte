@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { resolve } from "$app/paths";
+  import { MidiAdapter, isMidiSupported, type MidiDeviceInfo } from "@clavis/audio";
   import { createUlidGenerator } from "@clavis/core";
   import { useLearner } from "../../lib/learner.svelte";
   import {
@@ -20,7 +21,7 @@
     settingsDiff,
     type EffectiveSettings,
   } from "../../lib/home";
-  import { INPUT_STORAGE_KEY } from "../../lib/input";
+  import { INPUT_STORAGE_KEY, MIDI_INPUT_META_KEY, parseMidiInputId } from "../../lib/input";
   import { createTapCounter, devToolsEnabled, setDevToolsEnabled } from "../../lib/dev-tools";
   import pkg from "../../../package.json";
   import {
@@ -30,7 +31,7 @@
     parseAutoContinueSec,
   } from "../../lib/auto-continue";
 
-  type InputChoice = "auto" | "mic" | "tap";
+  type InputChoice = "auto" | "mic" | "tap" | "midi";
   const HEADPHONES_META_KEY = "headphones";
 
   const learner = useLearner();
@@ -39,6 +40,14 @@
   /** Seconds before moving on after a correct answer; 0 is off. A device setting, not synced. */
   let autoContinueSec = $state(AUTO_CONTINUE_DEFAULT_SEC);
   let savedAutoContinueSec = AUTO_CONTINUE_DEFAULT_SEC;
+  /** Web MIDI exists in this browser (not iOS Safari). Decided on mount, so it is false on the server. */
+  let midiSupported = $state(false);
+  /** The chosen MIDI input id; "" means every connected input. A device setting, not synced. */
+  let midiDevice = $state("");
+  let savedMidiDevice = "";
+  let midiDevices = $state<MidiDeviceInfo[]>([]);
+  let midiProbe: MidiAdapter | undefined;
+  let midiProbed = $state(false);
   let saved = $state(false);
   let saveError = $state("");
 
@@ -47,10 +56,36 @@
     (_, i) => PICKER_MIDI_MIN + i,
   );
 
+  /** List the connected keyboards (asks the browser for MIDI access the first time). */
+  async function probeMidi(): Promise<void> {
+    if (midiProbe || !midiSupported) return;
+    const probe = new MidiAdapter({ getContext: () => undefined });
+    midiProbe = probe;
+    probe.onDevicesChanged((devices) => {
+      midiDevices = devices;
+    });
+    await probe.start();
+    midiProbed = probe.available;
+  }
+
+  function stopMidiProbe(): void {
+    midiProbe?.stop();
+    midiProbe = undefined;
+  }
+
+  function chooseInput(): void {
+    touch();
+    if (inputChoice === "midi") void probeMidi();
+  }
+
+  onDestroy(stopMidiProbe);
+
   onMount(async () => {
+    midiSupported = isMidiSupported();
     try {
       const stored = localStorage.getItem(INPUT_STORAGE_KEY);
       if (stored === "mic" || stored === "tap") inputChoice = stored;
+      if (stored === "midi" && midiSupported) inputChoice = "midi";
     } catch {
       // Storage unavailable: leave on Auto.
     }
@@ -61,7 +96,11 @@
         await learner.ctx.store.getMeta(AUTO_CONTINUE_META_KEY),
       );
       autoContinueSec = savedAutoContinueSec;
+      savedMidiDevice =
+        parseMidiInputId(await learner.ctx.store.getMeta(MIDI_INPUT_META_KEY)) ?? "";
+      midiDevice = savedMidiDevice;
     }
+    if (inputChoice === "midi") void probeMidi();
   });
 
   const current = $derived(learner.state ? effectiveSettings(learner.state.settings) : undefined);
@@ -104,6 +143,10 @@
       if (autoContinueSec !== savedAutoContinueSec) {
         await learner.ctx.store.setMeta(AUTO_CONTINUE_META_KEY, autoContinueSec);
         savedAutoContinueSec = autoContinueSec;
+      }
+      if (midiDevice !== savedMidiDevice) {
+        await learner.ctx.store.setMeta(MIDI_INPUT_META_KEY, midiDevice === "" ? null : midiDevice);
+        savedMidiDevice = midiDevice;
       }
       try {
         if (inputChoice === "auto") localStorage.removeItem(INPUT_STORAGE_KEY);
@@ -325,12 +368,39 @@
       </div>
       <label>
         Input
-        <select data-testid="input-mode" bind:value={inputChoice} onchange={touch}>
+        <select data-testid="input-mode" bind:value={inputChoice} onchange={chooseInput}>
           <option value="auto">Auto</option>
           <option value="mic">Microphone</option>
           <option value="tap">On-screen keyboard</option>
+          {#if midiSupported}
+            <option value="midi">MIDI keyboard</option>
+          {/if}
         </select>
       </label>
+      {#if midiSupported && inputChoice === "midi"}
+        <label>
+          MIDI keyboard
+          <select data-testid="midi-device" bind:value={midiDevice} onchange={touch}>
+            <option value="">All connected keyboards</option>
+            {#each midiDevices as device (device.id)}
+              <option value={device.id}>{device.name}</option>
+            {/each}
+            {#if midiDevice !== "" && !midiDevices.some((d) => d.id === midiDevice)}
+              <option value={midiDevice}>Saved keyboard (not connected)</option>
+            {/if}
+          </select>
+        </label>
+        <p class="muted" data-testid="midi-help">
+          {#if midiProbed && midiDevices.length === 0}
+            No MIDI keyboard found. Plug one in and it will appear here.
+          {:else if !midiProbed}
+            Allow MIDI access in the browser to list your keyboards.
+          {:else}
+            Played answers use this keyboard. Singing still uses the microphone, and the on-screen
+            keys keep working. No latency calibration is needed.
+          {/if}
+        </p>
+      {/if}
     </fieldset>
 
     <div class="save-row">
