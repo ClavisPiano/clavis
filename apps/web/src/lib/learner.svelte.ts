@@ -1,5 +1,6 @@
 import type { LearnerState, LearningEvent } from "@clavis/core";
 import { getLearnerState, type LearnerResult } from "./learner";
+import { getSyncController } from "./sync/app";
 
 type Ready = Extract<LearnerResult, { ok: true }>;
 
@@ -26,6 +27,14 @@ export class ReactiveLearner {
     this.result = r;
     this.state = r.service.state;
     this.status = "ready";
+    // Sync merges other devices' events behind our back: pick up the refolded state. The weak
+    // reference lets pages that were left behind be collected; their listener then removes itself.
+    const ref = new WeakRef(this);
+    const off = getSyncController().onPulled(() => {
+      const self = ref.deref();
+      if (self) self.refresh();
+      else off();
+    });
   }
 
   async append(events: LearningEvent[]): Promise<LearnerState> {

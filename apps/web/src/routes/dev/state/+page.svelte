@@ -10,9 +10,11 @@
     type ValidatedImport,
   } from "../../../lib/backup";
   import { useLearner } from "../../../lib/learner.svelte";
+  import { ReactiveSyncStatus } from "../../../lib/sync/status.svelte";
   import { dueRows, durationRows, nodeRows, recentDays } from "../../../lib/state-view";
 
   const learner = useLearner();
+  const sync = new ReactiveSyncStatus();
   let now = $state(Date.now());
   let exportStatus = $state("");
   let canShareFiles = $state(false);
@@ -24,6 +26,7 @@
   let busy = $state(false);
 
   onMount(async () => {
+    sync.init();
     await learner.init();
     now = Date.now();
     canShareFiles =
@@ -133,6 +136,12 @@
       {/if}
     </p>
     <p>Warnings: <strong data-testid="warnings">{snap.warnings}</strong></p>
+    <p>
+      Sync: <strong data-testid="sync-status">{sync.state.status}</strong>
+      {#if sync.state.lastSyncedAt !== undefined}
+        (last {fmt(sync.state.lastSyncedAt)})
+      {/if}
+    </p>
   </section>
 
   <section>
