@@ -8,7 +8,7 @@ import {
 } from "@simplewebauthn/server";
 import { z } from "zod";
 import { nowMs, type Env } from "../env";
-import { json, methodNotAllowed } from "../http";
+import { csrfFailure, json, methodNotAllowed } from "../http";
 import { authenticate } from "./guard";
 import { createAuthRepo, type AuthRepo, type ChallengeKind } from "./repo";
 import { fromBase64Url, signSession, toBase64Url } from "./session";
@@ -57,15 +57,6 @@ async function withSession(
   const exp = Math.floor(nowMs(env) / 1000) + SESSION_TTL_SECONDS;
   const token = await signSession({ sub: userId, exp }, env.SESSION_SECRET);
   return json(body, status, { "set-cookie": sessionCookie(token, SESSION_TTL_SECONDS) });
-}
-
-/** CSRF defence: JSON content type (not form-submittable) plus an exact Origin match. */
-function csrfFailure(request: Request, env: Env): Response | null {
-  const type = (request.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase();
-  if (type !== "application/json") return json({ error: "unsupported_media_type" }, 415);
-  if (request.headers.get("origin") !== env.EXPECTED_ORIGIN)
-    return json({ error: "forbidden" }, 403);
-  return null;
 }
 
 /** Parse the JSON body against a schema; null on any failure. Empty bodies count as `{}`. */

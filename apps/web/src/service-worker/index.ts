@@ -1,6 +1,7 @@
 import { version } from "$app/env";
 import { assets, immutable, prerendered } from "$app/manifest";
 import { self as sw } from "$app/service-worker";
+import { parseCuePayload } from "../lib/pwa/cue-payload";
 import {
   WARM_NOTATION_MESSAGE,
   isWorkerChunk,
@@ -68,6 +69,41 @@ sw.addEventListener("message", (event) => {
     // and a notation request that finds the cache empty fills it itself.
     event.waitUntil(warmNotation().catch(() => undefined));
   }
+});
+
+// Practice cue (T6.4). The Worker sends an encrypted JSON payload `{ title, body, url }`. Every push
+// must show a notification (userVisibleOnly), so a missing or malformed payload falls back to a
+// generic one. Precaching and fetch handling above are unaffected.
+sw.addEventListener("push", (event) => {
+  const cue = parseCuePayload(event.data);
+  event.waitUntil(
+    sw.registration.showNotification(cue.title, {
+      body: cue.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      // One cue notification at a time: a newer one replaces an unread older one.
+      tag: "practice-cue",
+      data: { url: cue.url },
+    }),
+  );
+});
+
+sw.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const data: unknown = event.notification.data;
+  const path = typeof data === "object" && data !== null && "url" in data ? data.url : "/";
+  const target = new URL(typeof path === "string" ? path : "/", sw.location.origin).href;
+  event.waitUntil(
+    (async () => {
+      const windows = await sw.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const open = windows.find((w) => new URL(w.url).origin === sw.location.origin);
+      if (open) {
+        await open.focus();
+      } else {
+        await sw.clients.openWindow(target);
+      }
+    })(),
+  );
 });
 
 sw.addEventListener("fetch", (event) => {

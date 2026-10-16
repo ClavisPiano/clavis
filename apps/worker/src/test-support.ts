@@ -2,7 +2,8 @@ import { DatabaseSync } from "node:sqlite";
 import type { SqlLike } from "./event-log";
 import { UserEvents } from "./user-events";
 import type { Env } from "./env";
-import migration from "../migrations/0001_auth.sql?raw";
+import auth from "../migrations/0001_auth.sql?raw";
+import push from "../migrations/0002_push.sql?raw";
 
 /** SQLite wants Uint8Array for BLOBs; D1 binds ArrayBuffer. */
 const toSqliteValue = (v: unknown): unknown => (v instanceof ArrayBuffer ? new Uint8Array(v) : v);
@@ -12,7 +13,8 @@ const toSqliteValue = (v: unknown): unknown => (v instanceof ArrayBuffer ? new U
  * `d1Sql` adapter makes: `prepare().bind().run()/all()` and `batch()` (atomic).
  */
 export function fakeD1(db: DatabaseSync = new DatabaseSync(":memory:")): D1Database {
-  db.exec(migration);
+  db.exec(auth);
+  db.exec(push);
   const prepare = (query: string) => ({
     bind: (...bindings: unknown[]) => {
       const values = bindings.map(toSqliteValue);

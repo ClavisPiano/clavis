@@ -13,6 +13,12 @@ export interface Env {
   RP_ID: string;
   /** Exact origin the web app is served from, for example `https://clavis.me.workers.dev`. */
   EXPECTED_ORIGIN: string;
+  /** VAPID public key (base64url, 65 byte uncompressed P-256 point), served at `/api/push/key`. */
+  VAPID_PUBLIC_KEY?: string;
+  /** VAPID private scalar (base64url, 32 bytes). Set with `wrangler secret put VAPID_PRIVATE_KEY`. */
+  VAPID_PRIVATE_KEY?: string;
+  /** VAPID contact claim, a `mailto:` or `https:` URL. */
+  VAPID_SUBJECT?: string;
   /** Test seam for the clock (unix ms). Never set in production. */
   now?: () => number;
 }

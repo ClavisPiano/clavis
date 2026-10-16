@@ -30,6 +30,23 @@
     parseAutoContinueSec,
   } from "../../lib/auto-continue";
 
+  import {
+    CUE_META_KEY,
+    DEFAULT_CUE,
+    HABIT_MAX_CHARS,
+    WEEKDAY_LABELS,
+    cueError,
+    disableCue,
+    enableCue,
+    isSignedIn,
+    parseCueSettings,
+    syncCue,
+    type CueResult,
+    type CueSettings,
+    type CueSupport,
+  } from "../../lib/practice-cue";
+  import { browserCueDeps, readCueSupport } from "../../lib/practice-cue-browser";
+
   type InputChoice = "auto" | "mic" | "tap";
   const HEADPHONES_META_KEY = "headphones";
 
@@ -41,6 +58,16 @@
   let savedAutoContinueSec = AUTO_CONTINUE_DEFAULT_SEC;
   let saved = $state(false);
   let saveError = $state("");
+
+  // Practice cue (T6.4). Device-local: stored in device meta, not synced.
+  let cue = $state<CueSettings>({ ...DEFAULT_CUE });
+  let cueSupport = $state<CueSupport>("ok");
+  /** Undefined until `/api/me` has answered. */
+  let signedIn = $state<boolean | undefined>();
+  let permission = $state<NotificationPermission | "unsupported">("default");
+  let cueBusy = $state(false);
+  let cueMessage = $state("");
+  let cueSaved = $state(false);
 
   const notes = Array.from(
     { length: PICKER_MIDI_MAX - PICKER_MIDI_MIN + 1 },
@@ -55,6 +82,7 @@
       // Storage unavailable: leave on Auto.
     }
     await learner.init();
+    void loadCue();
     if (learner.state) draft = effectiveSettings(learner.state.settings);
     if (learner.status === "ready") {
       savedAutoContinueSec = parseAutoContinueSec(
@@ -63,6 +91,115 @@
       autoContinueSec = savedAutoContinueSec;
     }
   });
+
+  async function loadCue(): Promise<void> {
+    cueSupport = readCueSupport();
+    permission = "Notification" in window ? Notification.permission : "unsupported";
+    if (learner.status !== "ready") return;
+    cue = parseCueSettings(await learner.ctx.store.getMeta(CUE_META_KEY));
+    const deps = browserCueDeps();
+    signedIn = await isSignedIn(deps);
+    // The time zone may have changed since the subscription was registered, so refresh the server copy.
+    if (cue.enabled && signedIn && cueSupport === "ok" && permission === "granted") {
+      void syncCue(deps, cue);
+    }
+  }
+
+  async function persistCue(next: CueSettings): Promise<void> {
+    await learner.ctx.store.setMeta(CUE_META_KEY, $state.snapshot(next));
+  }
+
+  function describeCueFailure(result: CueResult): string {
+    switch (result.status) {
+      case "signin-required":
+        return "Reminders need an account, so they can be sent while the app is closed. Sign in first.";
+      case "unavailable":
+        return "This browser could not set up reminders. Try again in a moment, or open the installed app.";
+      case "error":
+        return `Could not set up the reminder: ${result.message}`;
+      default:
+        return "";
+    }
+  }
+
+  async function toggleCue(on: boolean): Promise<void> {
+    if (cueBusy || learner.status !== "ready") return;
+    cueBusy = true;
+    cueMessage = "";
+    cueSaved = false;
+    try {
+      if (on) {
+        const problem = cueError(cue);
+        if (problem) {
+          cueMessage = problem;
+          return;
+        }
+        // Called straight from the click so the permission prompt keeps its user gesture.
+        const result = await enableCue(browserCueDeps(), {
+          ...$state.snapshot(cue),
+          enabled: true,
+        });
+        permission = "Notification" in window ? Notification.permission : "unsupported";
+        if (result.status === "ok") {
+          cue.enabled = true;
+          await persistCue(cue);
+          cueSaved = true;
+        } else {
+          cueMessage = describeCueFailure(result);
+        }
+      } else {
+        const result = await disableCue(browserCueDeps());
+        cue.enabled = false;
+        await persistCue(cue);
+        cueSaved = result.status === "ok";
+        if (result.status === "error") cueMessage = describeCueFailure(result);
+      }
+    } finally {
+      cueBusy = false;
+    }
+  }
+
+  async function saveCue(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (cueBusy || learner.status !== "ready") return;
+    const problem = cueError(cue);
+    if (problem) {
+      cueMessage = problem;
+      return;
+    }
+    cueBusy = true;
+    cueMessage = "";
+    cueSaved = false;
+    try {
+      cue.habit = cue.habit.trim();
+      await persistCue(cue);
+      if (cue.enabled) {
+        const result = await syncCue(browserCueDeps(), $state.snapshot(cue));
+        if (result.status !== "ok") {
+          cueMessage =
+            describeCueFailure(result) || "Saved on this device, but not yet sent to the server.";
+          return;
+        }
+      }
+      cueSaved = true;
+    } finally {
+      cueBusy = false;
+    }
+  }
+
+  function toggleDay(day: number): void {
+    cue.weekdays = cue.weekdays.includes(day)
+      ? cue.weekdays.filter((d) => d !== day)
+      : [...cue.weekdays, day].sort((a, b) => a - b);
+    cueSaved = false;
+    cueMessage = "";
+  }
+
+  const cueToggleDisabled = $derived(
+    cueBusy ||
+      learner.status !== "ready" ||
+      (!cue.enabled && (cueSupport !== "ok" || signedIn !== true || permission === "denied")),
+  );
 
   const current = $derived(learner.state ? effectiveSettings(learner.state.settings) : undefined);
   const error = $derived(draft ? rangeError(draft.voiceRangeLow, draft.voiceRangeHigh) : undefined);
@@ -349,6 +486,105 @@
   <p>Loading...</p>
 {/if}
 
+<section aria-labelledby="cue-heading" data-testid="practice-cue">
+  <h2 id="cue-heading">Practice reminder</h2>
+  <p class="muted">
+    Pick a time and attach practice to something you already do, for example "After my morning
+    coffee". We send one notification then, and skip it on days you have already practised. This is
+    set per device.
+  </p>
+  {#if cueSupport === "needs-install"}
+    <p data-testid="cue-install-hint">
+      On iPhone and iPad, reminders only work once Clavis is added to your Home Screen. In Safari
+      tap Share, then Add to Home Screen, then open Clavis from the new icon and come back here.
+    </p>
+  {:else if cueSupport === "unsupported"}
+    <p data-testid="cue-unsupported">This browser does not support notifications for web apps.</p>
+  {:else}
+    {#if signedIn === false && !cue.enabled}
+      <p data-testid="cue-signin">
+        Reminders need an account, so they can reach you while the app is closed. Sign in to turn
+        them on.
+      </p>
+    {/if}
+    {#if permission === "denied"}
+      <p role="alert" class="error" data-testid="cue-blocked">
+        Notifications are blocked. Allow them for Clavis in your browser or device settings, then
+        come back to turn reminders on.
+      </p>
+    {/if}
+    <form onsubmit={saveCue} class="cue-form">
+      <label class="inline">
+        <input
+          type="checkbox"
+          data-testid="cue-enabled"
+          checked={cue.enabled}
+          disabled={cueToggleDisabled}
+          onchange={(e) => {
+            void toggleCue(e.currentTarget.checked);
+          }}
+        />
+        Remind me to practise
+      </label>
+      <label>
+        Time
+        <input
+          type="time"
+          data-testid="cue-time"
+          value={cue.time}
+          onchange={(e) => {
+            cue.time = e.currentTarget.value;
+            cueSaved = false;
+          }}
+        />
+      </label>
+      <fieldset class="days">
+        <legend>Days</legend>
+        <div class="choice">
+          {#each WEEKDAY_LABELS as label, day (day)}
+            <label class="inline">
+              <input
+                type="checkbox"
+                data-testid={`cue-day-${String(day)}`}
+                checked={cue.weekdays.includes(day)}
+                onchange={() => {
+                  toggleDay(day);
+                }}
+              />
+              {label}
+            </label>
+          {/each}
+        </div>
+      </fieldset>
+      <label>
+        Habit to attach it to
+        <input
+          type="text"
+          data-testid="cue-habit"
+          maxlength={HABIT_MAX_CHARS}
+          placeholder="After my morning coffee"
+          value={cue.habit}
+          oninput={(e) => {
+            cue.habit = e.currentTarget.value;
+            cueSaved = false;
+          }}
+        />
+      </label>
+      <div class="save-row">
+        <button type="submit" class="button" data-testid="cue-save" disabled={cueBusy}>
+          Save reminder
+        </button>
+        {#if cueSaved}
+          <span role="status" data-testid="cue-saved">Saved</span>
+        {/if}
+        {#if cueMessage}
+          <span role="alert" class="error" data-testid="cue-message">{cueMessage}</span>
+        {/if}
+      </div>
+    </form>
+  {/if}
+</section>
+
 <h2>Tools</h2>
 <ul>
   <li><a href={resolve("/settings/latency")}>Latency calibration</a></li>
@@ -432,7 +668,9 @@
   }
 
   select,
-  input[type="number"] {
+  input[type="number"],
+  input[type="time"],
+  input[type="text"] {
     min-height: var(--touch-target);
     padding: 0 var(--space-3);
     font: inherit;
@@ -440,6 +678,17 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
+  }
+
+  .cue-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+  }
+
+  .days {
+    margin: 0;
   }
 
   .save-row {
