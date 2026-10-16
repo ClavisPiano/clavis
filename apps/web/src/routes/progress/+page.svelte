@@ -81,6 +81,10 @@
 {:else if learner.status === "loading" || events === undefined}
   <p>Loading...</p>
 {:else}
+  <p class="map-link">
+    <a href={resolve("/progress/map")} data-testid="skill-map-link">See your skill map</a>
+  </p>
+
   <section class="card" aria-labelledby="week-h">
     <h2 id="week-h">This week</h2>
     <p class="big" data-testid="weekly-target">
@@ -218,6 +222,10 @@
 {/if}
 
 <style>
+  .map-link {
+    margin: 0 0 var(--space-4);
+  }
+
   .card {
     padding: var(--space-4);
     margin-bottom: var(--space-4);
