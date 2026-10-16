@@ -402,6 +402,37 @@ export const CARDS_V1: unknown[] = [
     ],
     links: [{ label: "Diatonic triads (musictheory.net)", url: `${MT}/43` }],
   },
+  {
+    id: "concept.byear.melody.simple",
+    nodeIds: ["byear.melody.simple"],
+    title: "Playing a heard melody",
+    body: [
+      "Playing by ear means hearing a tune and finding it on your instrument with no music in front of you. Start with a short, simple tune: it moves mostly by step, begins on 1, 3 or 5, and comes to rest on 1, home.",
+      "Singing it first is the trick. If you can sing the tune, you have heard it in your head, and your fingers only need to follow. Hear the shape and the rhythm as well as the notes: where it rises, where it settles, where it breathes.",
+      "Afterwards the score appears, so you can check what you did against what is written.",
+    ],
+    howTo: [
+      "Listen to the cadence, then the whole tune. Replay it if you need to.",
+      "Sing it back. Any octave will do, but every note and the order must be right.",
+      "Now play it on your piano, in the exact octave you heard. Your rhythm is judged against your own pace.",
+      "Both parts count: a wrong sung note is a miss, even if the playing is right. The score then shows what you got right and wrong.",
+    ],
+    examples: [
+      {
+        kind: "degrees",
+        label: "Mostly steps, resting home: 1 2 3 2 1",
+        degrees: [1, 2, 3, 2, 1],
+        afterCadence: true,
+      },
+      {
+        kind: "degrees",
+        label: "A skip, then back by step: 3 5 4 3 2 1",
+        degrees: [3, 5, 4, 3, 2, 1],
+        afterCadence: true,
+      },
+    ],
+    links: [{ label: "The major scale (musictheory.net)", url: `${MT}/21` }],
+  },
   ...READ_CARDS_V1,
   ...PIECE_CARDS_V1,
 ];

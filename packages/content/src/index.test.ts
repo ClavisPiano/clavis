@@ -94,7 +94,7 @@ describe("v1 skill graph", () => {
   });
 
   it("lists every generator once and implements exactly the core registry", () => {
-    expect(graph.generators).toHaveLength(18);
+    expect(graph.generators).toHaveLength(20);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
     // `pieceLine` and `pieceEar` are built over the piece library, so the app injects them; the
     // core registry has the rest.
@@ -133,9 +133,17 @@ describe("v1 skill graph", () => {
       "apply.pieces",
       "apply.piece-ear",
     ]);
+    // T7.2: the melody stage is the only by-ear task that exists. Harmonising and real recordings
+    // have their own generators, so `ear.real.phrase` and the later BYEAR nodes stay disabled.
+    expect(enabled.filter((id) => id.startsWith("byear."))).toEqual(["byear.melody.simple"]);
+    expect(enabled).not.toContain("ear.real.phrase");
     expect(
       enabled.every(
-        (id) => id.startsWith("ear.") || id.startsWith("read.") || id.startsWith("apply."),
+        (id) =>
+          id.startsWith("ear.") ||
+          id.startsWith("read.") ||
+          id.startsWith("apply.") ||
+          id === "byear.melody.simple",
       ),
     ).toBe(true);
   });
