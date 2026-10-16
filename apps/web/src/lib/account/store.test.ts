@@ -48,6 +48,20 @@ describe("account store", () => {
     expect(t.onSignedOut).not.toHaveBeenCalled();
   });
 
+  it("without the signed-in hint, reports anonymous and never calls /api/me", async () => {
+    const me = vi.fn(() => Promise.reject(new AccountError("unauthorized", "no", 401)));
+    const store = createAccountStore({
+      api: { ...setup().api, me },
+      ceremonies: setup().cer,
+      onSignedIn: vi.fn(),
+      onSignedOut: vi.fn(),
+      mayHaveSession: () => false,
+    });
+    await store.refresh();
+    expect(store.snapshot.account).toEqual({ kind: "anonymous" });
+    expect(me).not.toHaveBeenCalled();
+  });
+
   it("loads a signed in account from /api/me", async () => {
     const t = setup({ me: vi.fn(() => Promise.resolve(me)) });
     await t.store.refresh();

@@ -45,6 +45,11 @@ export interface AccountStoreDeps {
   onSignedIn: () => void;
   /** Called after sign-out, or when a signed-in session turns out to be expired. */
   onSignedOut: () => void;
+  /**
+   * False when this device has never signed in (no signed-in hint): `refresh` then reports
+   * anonymous without calling `/api/me`, so anonymous learners make no failing requests.
+   */
+  mayHaveSession?: () => boolean;
 }
 
 export interface AccountStore {
@@ -86,7 +91,12 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
   });
 
   /** Reads `/api/me` into state. Throws nothing: errors become `offline` or `anonymous`. */
-  async function load(): Promise<void> {
+  async function load(afterAuth = false): Promise<void> {
+    // Right after a sign-in the hint is not set yet, but the session cookie is.
+    if (!afterAuth && deps.mayHaveSession && !deps.mayHaveSession()) {
+      set({ account: { kind: "anonymous" }, offline: false });
+      return;
+    }
     try {
       const me = await api.me();
       set({
@@ -181,14 +191,14 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
         const { challengeId, options } = await api.loginOptions();
         const response = await ceremonies.authenticate(options);
         await api.loginVerify(challengeId, response);
-        await load();
+        await load(true);
         set({ suggestPasskey: false });
         deps.onSignedIn();
       }),
     recover: (code) =>
       action("recovering", async () => {
         await api.recovery(code.trim());
-        await load();
+        await load(true);
         set({ suggestPasskey: ceremonies.supported() });
         deps.onSignedIn();
       }),
@@ -202,7 +212,7 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
         if (account.kind === "signedIn") {
           set({ account: { ...account, passkeys: done.passkeys }, suggestPasskey: false });
         } else {
-          await load();
+          await load(true);
           set({ suggestPasskey: false });
         }
       }),
