@@ -330,6 +330,19 @@ describe("Away mode", () => {
   });
 });
 
+describe("MIDI keyboard at the piano", () => {
+  it("leaves the mic closed when no item needs singing", async () => {
+    let created = 0;
+    const h = await makeHarness({ budgetSec: 90, inputSource: "midi", withSingInput: false });
+    h.deps.createSingInput = () => {
+      created++;
+      return h.singInput;
+    };
+    await h.machine.start();
+    expect(created).toBe(0);
+  });
+});
+
 describe("stimulus gating (T1.6)", () => {
   /** The right note, as the item expects it. */
   const targetOf = (h: Harness): number => {
@@ -408,6 +421,28 @@ describe("latency offsets", () => {
     await until(h, isKind("feedback"));
     const attempts = byType(await h.log(), "attempt.completed");
     expect(attempts[0]?.outcome.latencyMs).toBeCloseTo(800, 0);
+  });
+
+  it("leaves MIDI event times alone", async () => {
+    const h = await makeHarness({
+      budgetSec: 90,
+      inputSource: "midi",
+      latency: { tapMs: 50, micMs: 100 },
+    });
+    await h.machine.start();
+    h.machine.next();
+    h.machine.next();
+    await until(h, isListening("play"));
+    const end = h.machine.debug().stimulusEndMs ?? 0;
+    const play = h.machine.debug().expected?.play;
+    if (play?.kind !== "pitchClass") throw new Error("expected a pitch class target");
+    h.input.emitNote(noteAt(play.targetMidi, end + 850, "midi"));
+    await h.machine.settled();
+    await until(h, isKind("feedback"));
+    const attempts = byType(await h.log(), "attempt.completed");
+    expect(attempts[0]?.outcome.latencyMs).toBeCloseTo(850, 0);
+    expect(attempts[0]?.inputSource).toBe("midi");
+    expect(attempts[0]?.outcome.correct).toBe(true);
   });
 
   it("subtracts the mic offset from event times", async () => {

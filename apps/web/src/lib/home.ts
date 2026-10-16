@@ -2,6 +2,7 @@ import {
   DEFAULT_NEW_ITEM_CAP,
   dayNumberToIso,
   learnerDayNumber,
+  PRACTISED_MIN_MS,
   type LearnerState,
   type SettingsPatch,
 } from "@clavis/core";
@@ -22,10 +23,10 @@ export const DEFAULT_VOICE_HIGH = 72;
 
 export const BUDGET_OPTIONS_MIN = [5, 8, 12, 15, 20] as const;
 export const AWAY_BUDGET_OPTIONS_MIN = [3, 5, 8] as const;
-export const WEEKLY_TARGET_OPTIONS = [3, 4, 5, 6, 7] as const;
+export const WEEKLY_TARGET_OPTIONS = [1, 2, 3, 4, 5, 6, 7] as const;
 
 /** A day counts as practised from one minute of session time. */
-export const PRACTISED_MIN_SEC = 60;
+export const PRACTISED_MIN_SEC = PRACTISED_MIN_MS / 1000;
 export const WEEK_DAYS = 7;
 
 export interface EffectiveSettings {

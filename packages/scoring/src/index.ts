@@ -25,3 +25,5 @@ export {
   scoreRhythm,
 } from "./rhythm.js";
 export type { RhythmAnalysis, RhythmClass, RhythmInput } from "./rhythm.js";
+
+export * from "./align/index.js";
