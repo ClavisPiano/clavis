@@ -867,6 +867,14 @@ describe("practice session (T2.15)", () => {
     expect(started?.practice).toBeUndefined();
   });
 
+  it("says so when none of the chosen skills can be practised", async () => {
+    const h = await makeHarness({ budgetSec: 90, practice: true, skills: ["read.bass.landmarks"] });
+    await h.machine.start();
+    const state = h.machine.state;
+    if (state.kind !== "error") throw new Error("expected an error state");
+    expect(state.message).toContain("skills you chose");
+  });
+
   it("an empty practice plan ends with a friendly message and writes no events", async () => {
     const h = await makeHarness({ budgetSec: 90, practice: true });
     await h.machine.start();

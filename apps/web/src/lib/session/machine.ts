@@ -750,7 +750,11 @@ export class SessionMachine {
     const planned =
       plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0);
     if (d.practice && planned === 0) {
-      throw new Error("Nothing to practise yet. Finish a regular session first, then come back.");
+      throw new Error(
+        d.skills
+          ? "Nothing to practise in the skills you chose yet. Pick again from Practise a skill."
+          : "Nothing to practise yet. Finish a regular session first, then come back.",
+      );
     }
     if (planned === 0) {
       // An empty plan is not a session: no events, no inputs, just a screen that says so.
@@ -1222,12 +1226,18 @@ export class SessionMachine {
     this.#openPhase(index, false);
   }
 
-  /** Practice before answering: scale degree items, until the skill is fluent. Not in placement. */
+  /**
+   * Practice before answering: scale degree items, until the skill is fluent and in every practice
+   * round. Not in placement.
+   */
   #wantsPractice(cur: Current): boolean {
     const d = this.#d;
     if (d.practiceStep !== true || d.placement) return false;
     const g = cur.instance.generator;
     if (g !== "degreeSing" && g !== "degreeId") return false;
+    // Practice rounds always let the learner try first, whatever the stage: that is what they are
+    // for. Regular sessions offer it until the skill is fluent.
+    if (d.practice === true) return true;
     const state = d.getState().nodes[cur.planned.nodeId]?.state ?? "locked";
     return isEarly(state);
   }

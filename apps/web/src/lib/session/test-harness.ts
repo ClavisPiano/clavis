@@ -141,6 +141,8 @@ export interface HarnessOptions {
   mode?: "instrument" | "away";
   budgetSec?: number;
   practice?: boolean;
+  /** Practice only these skills (node ids). */
+  skills?: readonly string[];
   /** Learn something new: extra new items for this session. */
   extraNewItems?: number;
   inputSource?: "mic" | "tap";
@@ -197,6 +199,7 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     deviceId: "device-1",
     mode,
     ...(opts.practice ? { practice: true } : {}),
+    ...(opts.practice && opts.skills ? { skills: opts.skills } : {}),
     ...(opts.extraNewItems ? { extraNewItems: opts.extraNewItems } : {}),
     graph,
     ...(opts.placement

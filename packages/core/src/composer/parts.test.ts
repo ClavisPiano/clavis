@@ -95,6 +95,29 @@ describe("allocate", () => {
     });
   });
 
+  it("gives the warm-up's share to ear when orient is skipped", () => {
+    const a = allocate({
+      budgetSec: 720,
+      mode: "instrument",
+      readHasContent: true,
+      applyHasContent: true,
+      orient: false,
+    });
+    expect(a).toMatchObject({ orientSec: 0, earSec: 288, readSec: 180, applySec: 252 });
+    expect(a.notes).toContain("orient skipped: not the first session of the day");
+    expect(a.orientSec + a.earSec + a.readSec + a.applySec).toBe(720);
+    // Left out or true, the warm-up stays.
+    expect(
+      allocate({
+        budgetSec: 720,
+        mode: "instrument",
+        readHasContent: true,
+        applyHasContent: true,
+        orient: true,
+      }).orientSec,
+    ).toBe(72);
+  });
+
   it("moves empty read and apply shares to ear", () => {
     const a = allocate({
       budgetSec: 720,
