@@ -17,6 +17,9 @@ import {
   makeKey,
   midiToDegree,
   progression,
+  romanChord,
+  romansForMode,
+  isRomanInMode,
   relativeMajor,
   relativeMinor,
   scaleMidi,
@@ -444,9 +447,82 @@ describe("progression", () => {
     );
   });
 
-  it("rejects minor keys, unknown numerals and an empty list", () => {
-    expect(() => progression(makeKey("A", "minor"), ["i"])).toThrow(RangeError);
-    expect(() => progression(makeKey("C", "major"), ["I", "bVII"])).toThrow(RangeError);
+  it("rejects numerals of the other mode, unknown numerals and an empty list", () => {
+    expect(() => progression(makeKey("A", "minor"), ["I"])).toThrow(RangeError);
+    expect(() => progression(makeKey("C", "major"), ["i"])).toThrow(RangeError);
+    expect(() => progression(makeKey("C", "major"), ["I", "bII"])).toThrow(RangeError);
     expect(() => progression(makeKey("C", "major"), [])).toThrow(RangeError);
+  });
+
+  // Table: key, numeral, expected pitch classes (root first).
+  it.each([
+    ["C", "major", "V/V", [2, 6, 9]],
+    ["C", "major", "iv", [5, 8, 0]],
+    ["C", "major", "bVII", [10, 2, 5]],
+    ["C", "major", "vi", [9, 0, 4]],
+    ["A", "minor", "i", [9, 0, 4]],
+    ["A", "minor", "iv", [2, 5, 9]],
+    ["A", "minor", "v", [4, 7, 11]],
+    ["A", "minor", "V", [4, 8, 11]],
+    ["A", "minor", "VI", [5, 9, 0]],
+    ["A", "minor", "III", [0, 4, 7]],
+    ["A", "minor", "VII", [7, 11, 2]],
+    ["Eb", "major", "V/V", [5, 9, 0]],
+  ] as const)("romanChord in %s %s: %s is %j", (tonic, mode, roman, expected) => {
+    expect(romanChord(makeKey(tonic, mode), roman)).toEqual(expected);
+    // The voiced chord has the same pitch classes, with the root in the bass.
+    const [chord] = progression(makeKey(tonic, mode), [roman]);
+    const voiced = [chord?.bass ?? 0, ...(chord?.upper ?? [])].map((n) => n % 12);
+    expect(voiced[0]).toBe(expected[0]);
+    expect([...new Set(voiced)].sort((a, b) => a - b)).toEqual([...expected].sort((a, b) => a - b));
+  });
+
+  it("voices every progression the content uses in every key of its mode", () => {
+    const sets: Record<"major" | "minor", string[][]> = {
+      major: [
+        ["I", "V", "vi", "IV"],
+        ["I", "IV", "V"],
+        ["ii", "V", "I"],
+        ["vi", "IV", "I", "V"],
+        ["I", "ii", "V", "I"],
+        ["I", "ii", "IV", "I"],
+        ["I", "ii", "I", "V"],
+        ["I", "ii", "V", "vi"],
+        ["I", "V/V", "V", "I"],
+        ["I", "IV", "iv", "I"],
+        ["I", "bVII", "IV", "I"],
+      ],
+      minor: [
+        ["i", "iv", "v"],
+        ["i", "VI", "III", "VII"],
+        ["i", "VII", "VI", "V"],
+      ],
+    };
+    for (const key of ALL_KEYS) {
+      for (const romans of sets[key.mode]) {
+        const out = progression(key, romans);
+        expect(out).toHaveLength(romans.length);
+        out.forEach((ch) => {
+          expect(ch.bass).toBeLessThan(ch.upper[0] ?? 0);
+        });
+      }
+    }
+  });
+
+  it("lists the numerals of each mode", () => {
+    expect(romansForMode("major")).toEqual([
+      "I",
+      "ii",
+      "iii",
+      "IV",
+      "V",
+      "vi",
+      "iv",
+      "bVII",
+      "V/V",
+    ]);
+    expect(romansForMode("minor")).toEqual(["i", "iv", "v", "VI", "III", "VII", "V"]);
+    expect(isRomanInMode("major", "V/V")).toBe(true);
+    expect(isRomanInMode("major", "toString")).toBe(false);
   });
 });

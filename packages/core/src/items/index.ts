@@ -10,6 +10,7 @@ export * from "./note-read.js";
 export * from "./bass-note-read.js";
 export * from "./bass-motion.js";
 export * from "./chord-quality.js";
+export * from "./progression-id.js";
 export * from "./treble-note-read.js";
 export * from "./piece-ear.js";
 export * from "./piece-line.js";

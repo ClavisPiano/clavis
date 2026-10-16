@@ -317,8 +317,12 @@ export function targetOnly(spec: StimulusSpec): StimulusSpec {
   return { ...spec, events: targets.map((e) => ({ ...e, atSec: e.atSec - first })) };
 }
 
-/** "Major or minor?" or "Major, minor or diminished?" from the option labels. */
+/**
+ * "Major or minor?" or "Major, minor or diminished?" from the option labels. Labels that are not
+ * plain words (progressions such as "I-V-vi-IV") ask "Which one did you hear?" instead.
+ */
 export function choiceQuestion(options: readonly ChoiceOption[]): string {
+  if (options.some((o) => !/^[A-Z][a-z]+$/.test(o.label))) return "Which one did you hear?";
   const labels = options.map((o, i) => (i === 0 ? o.label : o.label.toLowerCase()));
   const last = labels[labels.length - 1] ?? "";
   return `${labels.slice(0, -1).join(", ")} or ${last}?`;
@@ -780,7 +784,10 @@ export class SessionMachine {
     const needsMic = this.#items.some(({ planned }) =>
       d.graph.generators.find((g) => g.id === planned.generator)?.requires.includes("mic"),
     );
-    if (d.mode === "away" && d.input.source !== "mic" && needsMic && d.createSingInput) {
+    // Sung answers always use the mic. Away mode (keys only) and a MIDI keyboard have none of their
+    // own, so they open one only for plans that need it (items that require "mic").
+    const keysOnly = d.mode === "away" || d.input.source === "midi";
+    if (keysOnly && d.input.source !== "mic" && needsMic && d.createSingInput) {
       this.#singInput = d.createSingInput();
     }
     const micUsed = d.input.source === "mic" || this.#singInput !== undefined;
@@ -1129,7 +1136,10 @@ export class SessionMachine {
   }
 
   #tailMs(): number {
-    const mic = this.#d.input.source !== "tap" || this.#singInput !== undefined;
+    // Exact-key inputs (keys, MIDI) hear no speaker bleed, so only the mic needs the tail.
+    const mic =
+      (this.#d.input.source !== "tap" && this.#d.input.source !== "midi") ||
+      this.#singInput !== undefined;
     if (!mic) return 0;
     const tails = this.#d.gateTailMs ?? DEFAULT_GATE_TAIL_MS;
     return this.#headphones === true ? tails.headphones : tails.speakers;
@@ -1307,6 +1317,7 @@ export class SessionMachine {
   #offset(source: InputSource): number {
     if (source === "tap") return this.#latency.tapMs ?? 0;
     if (source === "mic") return this.#latency.micMs ?? 0;
+    // MIDI timestamps come from the device driver, so there is nothing to calibrate (R3).
     return 0;
   }
 
