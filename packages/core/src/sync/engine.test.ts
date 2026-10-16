@@ -186,8 +186,9 @@ describe("syncOnce", () => {
     expect(await a.store.listUnsynced()).toEqual([]);
   });
 
-  it("stops on a 400 without marking anything synced and reports the batch", async () => {
+  it("stops pushing on a 400 without marking anything synced, reports the batch, still pulls", async () => {
     const rejected: number[] = [];
+    let pulls = 0;
     const a = await new Client("A", new FakeServer()).init();
     await a.add(T, 700);
     const r = await syncOnce({
@@ -196,12 +197,16 @@ describe("syncOnce", () => {
       cursorStore: metaCursorStore(a.store),
       transport: {
         push: () => Promise.reject(new SyncRejectedError(400)),
-        pull: () => Promise.reject(new Error("unreachable")),
+        pull: () => {
+          pulls++;
+          return Promise.resolve({ events: [], lastSeq: 0, hasMore: false });
+        },
       },
       onRejected: (batch) => rejected.push(batch.length),
     });
     expect(r.outcome).toBe("error");
     expect(rejected).toEqual([1]);
+    expect(pulls).toBe(1);
     expect((await a.store.listUnsynced()).length).toBe(1);
   });
 

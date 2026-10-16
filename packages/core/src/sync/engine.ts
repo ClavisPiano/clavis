@@ -22,7 +22,8 @@ import {
  *   `error`. Nothing is marked synced and the same batch is retried on the next trigger. A
  *   permanently bad event therefore blocks pushing newer ones (it never loops within a run);
  *   this is deliberate, since silently dropping or reordering would lose data. The rejected
- *   batch is passed to `onRejected` for logging, and T4.4 can surface the error.
+ *   batch is passed to `onRejected` for logging, and T4.4 can surface the error. The pull still
+ *   runs, so the device keeps receiving other devices' events.
  * - Anything else thrown by the transport (network failure, 5xx): outcome `offline`; retry later.
  */
 
@@ -99,8 +100,16 @@ const describe = (e: unknown): string => (e instanceof Error ? e.message : Strin
 export async function syncOnce(deps: SyncDeps): Promise<SyncResult> {
   const result: SyncResult = { outcome: "ok", pushed: 0, pulledNew: 0, skipped: 0 };
   try {
-    await pushAll(deps, result);
+    let rejected: SyncRejectedError | undefined;
+    try {
+      await pushAll(deps, result);
+    } catch (error) {
+      if (!(error instanceof SyncRejectedError)) throw error;
+      // A rejected batch must not cut this device off from other devices' events.
+      rejected = error;
+    }
     await pullAll(deps, result);
+    if (rejected) throw rejected;
   } catch (error) {
     if (error instanceof SyncAuthError) result.outcome = "signedOut";
     else if (error instanceof SyncRejectedError) {

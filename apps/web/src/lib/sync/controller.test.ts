@@ -193,6 +193,11 @@ describe("fetch transport", () => {
     await expect(withStatus(401).pull({ after: 0 })).rejects.toBeInstanceOf(SyncAuthError);
     await expect(withStatus(400).push({ events: [] })).rejects.toBeInstanceOf(SyncRejectedError);
     await expect(withStatus(503).pull({ after: 0 })).rejects.not.toBeInstanceOf(SyncRejectedError);
+    for (const retryable of [408, 429]) {
+      await expect(withStatus(retryable).push({ events: [] })).rejects.not.toBeInstanceOf(
+        SyncRejectedError,
+      );
+    }
     await expect(
       createFetchTransport(() => Promise.resolve(json({ nope: 1 }))).pull({ after: 0 }),
     ).rejects.toThrow("unexpected pull response");

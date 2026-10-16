@@ -18,7 +18,11 @@ export function createFetchTransport(
   async function call(url: string, init: RequestInit): Promise<unknown> {
     const res = await fetchFn(url, { ...init, credentials: "include" });
     if (res.status === 401) throw new SyncAuthError("not signed in");
-    if (res.status >= 400 && res.status < 500) throw new SyncRejectedError(res.status);
+    // 408 and 429 are "try again later", not a verdict on the batch.
+    const retryable = res.status === 408 || res.status === 429;
+    if (res.status >= 400 && res.status < 500 && !retryable) {
+      throw new SyncRejectedError(res.status);
+    }
     if (!res.ok) throw new Error(`sync server error ${String(res.status)}`);
     try {
       return (await res.json()) as unknown;
