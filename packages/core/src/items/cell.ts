@@ -3,7 +3,14 @@ import { at } from "../theory/util.js";
 import type { SkillNode } from "../graph/schema.js";
 import { degreeToMidi, tonicMidiForRange } from "../theory/degrees.js";
 import { tonicChroma, type Key, type VoiceRange } from "../theory/keys.js";
-import { cadenceStimulus, chooseKey, degreeLabels, keyToJson, latencyField } from "./build.js";
+import {
+  cadenceStimulus,
+  chooseKey,
+  degreeLabels,
+  keyToJson,
+  latencyField,
+  registerNearCadence,
+} from "./build.js";
 import { itemId } from "./ids.js";
 import {
   DEFAULT_KEYBOARD_RANGE,
@@ -95,7 +102,12 @@ export const cellEcho: Generator = {
     const key = chooseKey(np.mode, ctx.preferredKey, rng);
     const seed = rng.int(0, 0x7fffffff);
 
-    const played = fitRegister(key, ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE, cell);
+    const range = ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE;
+    // Near the cadence's last chord when the cell fits, so it is heard against the chord it follows.
+    const near = registerNearCadence(key, cell, range, undefined, true);
+    const played = near
+      ? { tonicMidi: near.tonicMidi, midi: near.midi }
+      : fitRegister(key, range, cell);
 
     const cad = cadenceStimulus(key);
     const stimulus = {

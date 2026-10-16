@@ -252,6 +252,73 @@ describe("item generation", { timeout: 30000 }, () => {
     }
   });
 
+  it("sounds the target in the register of the cadence's last chord, in every key", () => {
+    const node = nodeFor("ear.degrees.major.135");
+    const diatonic: SkillNode = {
+      ...node,
+      id: "ear.degrees.major.diatonic",
+      params: { mode: "major", degrees: [1, 2, 3, 4, 5, 6, 7] },
+    };
+    for (const key of ALL_KEYS.filter((k) => k.mode === "major")) {
+      const lastChord = cadence(key).chords.at(-1);
+      const upper = [...(lastChord?.upper ?? [])].sort((a, b) => a - b);
+      const centre = at(upper, 1);
+      for (let degree = 1; degree <= 7; degree++) {
+        const inst = getGenerator("degreeId").generate(
+          diatonic,
+          { degree },
+          ctx(2, { preferredKey: key, keyboardRange: KEYBOARD }),
+        );
+        const target = inst.stimulus.events.find((e) => e.role === "target")?.midi[0] ?? -1;
+        const label = `${key.tonic} degree ${String(degree)}`;
+        // Within a tritone of the chord's middle voice, and inside the keyboard.
+        expect(Math.abs(target - centre), label).toBeLessThanOrEqual(6);
+        expect(target, label).toBeGreaterThanOrEqual(KEYBOARD.low);
+        expect(target, label).toBeLessThanOrEqual(KEYBOARD.high);
+        // The tonic is the one beside the chord, and the target is the right degree of the key.
+        expect(
+          Math.abs((inst.presentation.tonicMidi as number) - centre),
+          label,
+        ).toBeLessThanOrEqual(6);
+        expect(target, label).toBe(
+          degreeToMidi(key, degree, inst.presentation.tonicMidi as number) +
+            12 *
+              Math.round(
+                (centre - degreeToMidi(key, degree, inst.presentation.tonicMidi as number)) / 12,
+              ),
+        );
+        expect(inst.presentation.degree).toBe(degree);
+      }
+    }
+  });
+
+  it("puts 1, 3 and 5 in one octave, so the early skill is heard in one place", () => {
+    const node = nodeFor("ear.degrees.major.135");
+    for (const key of ALL_KEYS.filter((k) => k.mode === "major")) {
+      const targets = [1, 3, 5].map((degree) => {
+        const inst = getGenerator("degreeId").generate(
+          node,
+          { degree },
+          ctx(3, { preferredKey: key, keyboardRange: KEYBOARD }),
+        );
+        return inst.stimulus.events.find((e) => e.role === "target")?.midi[0] ?? -1;
+      });
+      expect(Math.max(...targets) - Math.min(...targets), key.tonic).toBeLessThanOrEqual(7);
+    }
+  });
+
+  it("falls back to the range's centre when the keyboard cannot hold the cadence register", () => {
+    const node = nodeFor("ear.degrees.major.135");
+    const inst = getGenerator("degreeId").generate(
+      node,
+      { degree: 5 },
+      ctx(4, { preferredKey: { tonic: "G", mode: "major" }, keyboardRange: { low: 36, high: 59 } }),
+    );
+    const target = inst.stimulus.events.find((e) => e.role === "target")?.midi[0] ?? -1;
+    expect(target % 12).toBe(2);
+    expect(target).toBeLessThanOrEqual(59 + 12);
+  });
+
   it("stimuli start with a cadence in the presentation key (except rhythm)", () => {
     for (const { node, g, params } of ALL) {
       if (g === "rhythmEcho") continue;

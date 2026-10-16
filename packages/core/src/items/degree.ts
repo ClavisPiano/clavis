@@ -4,7 +4,14 @@ import { degreeToMidi, tonicMidiForRange } from "../theory/degrees.js";
 import type { MinorVariant } from "../theory/keys.js";
 import { tonicChroma } from "../theory/keys.js";
 import type { ExpectedResponse } from "./expected.js";
-import { cadenceStimulus, chooseKey, degreeLabels, keyToJson, latencyField } from "./build.js";
+import {
+  cadenceStimulus,
+  chooseKey,
+  degreeLabels,
+  keyToJson,
+  latencyField,
+  registerNearCadence,
+} from "./build.js";
 import { itemId } from "./ids.js";
 import {
   DEFAULT_KEYBOARD_RANGE,
@@ -50,13 +57,14 @@ function make(id: GeneratorId): Generator {
           : undefined;
       const seed = rng.int(0, 0x7fffffff);
 
-      const tonicMidi = tonicMidiForRange(
-        key,
-        ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE,
-        { low: degree, high: degree },
-        opt(variant),
-      ).tonicMidi;
-      const targetMidi = degreeToMidi(key, degree, tonicMidi, opt(variant));
+      const range = ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE;
+      // The target sounds in the register of the cadence before it, so the ear does not have to
+      // follow an octave change as well as the degree. Another range falls back to its centre.
+      const near = registerNearCadence(key, [degree], range, opt(variant));
+      const tonicMidi =
+        near?.tonicMidi ??
+        tonicMidiForRange(key, range, { low: degree, high: degree }, opt(variant)).tonicMidi;
+      const targetMidi = near?.midi[0] ?? degreeToMidi(key, degree, tonicMidi, opt(variant));
       const labels = degreeLabels(key, opt(variant));
 
       const cad = cadenceStimulus(key);

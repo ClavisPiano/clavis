@@ -70,6 +70,33 @@ describe("guide keyboard", () => {
 });
 
 describe("practice step", () => {
+  it("is always offered in a practice round, even for a fluent skill", async () => {
+    const first = await makeHarness({ budgetSec: 90 });
+    await toFirstItem(first);
+    const expected = first.machine.debug().expected;
+    if (!expected) throw new Error("no expected response");
+    playCorrect(first.input, expected, first.clock.ctxMs + 200);
+    await until(first, (s) => s.kind === "feedback");
+    first.machine.finish();
+    await first.machine.settled();
+    const history = await first.log();
+
+    const h = await makeHarness({
+      budgetSec: 90,
+      practice: true,
+      practiceStep: true,
+      history,
+      idSalt: 55,
+    });
+    atStage(h, DEGREES, "fluent");
+    await h.machine.start();
+    await until(h, (s) => s.kind === "listening");
+    expect(h.machine.state).toMatchObject({ kind: "listening", practice: true });
+    // Ready opens the answer, as in a regular session.
+    h.machine.ready();
+    expect(h.machine.state).toMatchObject({ kind: "listening", practice: false });
+  });
+
   it("is skipped once the skill is fluent", async () => {
     const h = await makeHarness({ budgetSec: 90, practiceStep: true });
     atStage(h, DEGREES, "fluent");
