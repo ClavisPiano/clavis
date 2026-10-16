@@ -78,3 +78,9 @@ melodies an octave lower.
 | Frère Jacques (left hand) | Traditional French round | Public domain |
 
 New pieces need a row here before they are added to the library (a test checks every title).
+
+## fflate
+
+- Version 0.8.3, MIT licence (https://github.com/101arrowz/fflate). Pure-JavaScript zip and
+  deflate, about 8 KB gzipped, no dependencies. Used by `packages/notation` to unzip `.mxl`
+  (compressed MusicXML) files, and in tests to build one.
