@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInput, resolveInputKind, type FakeInputHook } from "./input";
+import { createInput, parseMidiInputId, resolveInputKind, type FakeInputHook } from "./input";
 import { isBlackKey, keySlots, noteName, normalizeRange } from "./keyboard";
 
 const q = (s: string) => new URLSearchParams(s);
@@ -17,7 +17,13 @@ describe("resolveInputKind", () => {
   });
 
   it("ignores unknown values", () => {
-    expect(resolveInputKind("instrument", q("input=midi"), "bogus")).toBe("mic");
+    expect(resolveInputKind("instrument", q("input=bogus"), "bogus")).toBe("mic");
+  });
+
+  it("accepts midi from the query and from storage", () => {
+    expect(resolveInputKind("instrument", q("input=midi"))).toBe("midi");
+    expect(resolveInputKind("instrument", q(""), "midi")).toBe("midi");
+    expect(resolveInputKind("instrument", q("input=tap"), "midi")).toBe("tap");
   });
 });
 
@@ -46,6 +52,22 @@ describe("createInput", () => {
     tap.press(60, performance.now());
     expect(onsets[0]).toBeGreaterThanOrEqual(5100);
     expect(onsets[0]).toBeLessThanOrEqual(5200);
+  });
+});
+
+describe("MIDI input", () => {
+  it("builds a MIDI adapter that reports the midi source", () => {
+    const handle = createInput("midi", { midiInputId: "kb-1" });
+    expect(handle.kind).toBe("midi");
+    expect(handle.adapter.source).toBe("midi");
+    expect(handle.tap).toBeUndefined();
+  });
+
+  it("reads the remembered device id leniently", () => {
+    expect(parseMidiInputId("kb-1")).toBe("kb-1");
+    expect(parseMidiInputId("")).toBeUndefined();
+    expect(parseMidiInputId(null)).toBeUndefined();
+    expect(parseMidiInputId(7)).toBeUndefined();
   });
 });
 
