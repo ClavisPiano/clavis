@@ -12,6 +12,7 @@ export * from "./bass-motion.js";
 export * from "./chord-quality.js";
 export * from "./progression-id.js";
 export * from "./treble-note-read.js";
+export * from "./by-ear-phrase.js";
 export * from "./piece-ear.js";
 export * from "./piece-line.js";
 export * from "./registry.js";
