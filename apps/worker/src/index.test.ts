@@ -77,7 +77,10 @@ const ev = (n: number) => ({
 const future = () => Math.floor(Date.now() / 1000) + 3600;
 const tokenFor = (sub: string, secret = SECRET, exp = future()) =>
   signSession({ sub, exp }, secret);
-const bearer = async (sub: string) => ({ authorization: `Bearer ${await tokenFor(sub)}` });
+const bearer = async (sub: string) => ({
+  authorization: `Bearer ${await tokenFor(sub)}`,
+  "content-type": "application/json",
+});
 
 const push = async (env: Env, sub: string, events: unknown[]) =>
   call("/api/sync/push", env, {
@@ -104,6 +107,31 @@ describe("sync routes", () => {
     }>();
     expect(body.events.map((e) => e.event)).toEqual([ev(1), ev(2)]);
     expect(body).toMatchObject({ lastSeq: 2, hasMore: false });
+  });
+
+  it("rejects a push that is not application/json with 415 (CSRF)", async () => {
+    const { env } = makeEnv();
+    for (const type of ["text/plain", "application/x-www-form-urlencoded", ""]) {
+      const res = await call("/api/sync/push", env, {
+        method: "POST",
+        headers: { cookie: `clavis_session=${await tokenFor("u1")}`, "content-type": type },
+        body: JSON.stringify({ events: [ev(1)] }),
+      });
+      expect(res.status).toBe(415);
+    }
+    expect(await (await pull(env, "u1", "after=0")).json()).toMatchObject({ events: [] });
+  });
+
+  it("turns a Durable Object failure into a JSON 500", async () => {
+    const failing = {
+      idFromName: (name: string) => name,
+      get: () => ({ fetch: () => Promise.reject(new Error("storage")) }),
+    } as unknown as DurableObjectNamespace;
+    const { env } = makeEnv({ USER_EVENTS: failing });
+    const res = await pull(env, "u1", "after=0");
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "internal" });
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
   it("accepts the token from the clavis_session cookie", async () => {

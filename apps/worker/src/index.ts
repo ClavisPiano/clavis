@@ -52,14 +52,25 @@ function userStub(env: Env, userId: string): DurableObjectStub {
   return env.USER_EVENTS.get(env.USER_EVENTS.idFromName(userId));
 }
 
-async function relay(res: Response): Promise<Response> {
-  return new Response(await res.text(), { status: res.status, headers: API_HEADERS });
+/** Forward to the user's DO; a throw there becomes a JSON 500 with the API headers. */
+async function relay(call: () => Promise<Response>): Promise<Response> {
+  try {
+    const res = await call();
+    return new Response(await res.text(), { status: res.status, headers: API_HEADERS });
+  } catch {
+    return json({ error: "internal" }, 500);
+  }
 }
 
 async function handlePush(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") return methodNotAllowed("POST");
   const userId = await authenticate(request, env);
   if (userId === null) return unauthorized();
+  // A cross-site form can send the cookie with text/plain but not with application/json.
+  const type = request.headers.get("content-type") ?? "";
+  if (!/^application\/json\s*(;|$)/i.test(type)) {
+    return json({ error: "unsupported_media_type" }, 415);
+  }
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > MAX_BODY_BYTES) return json({ error: "payload_too_large" }, 413);
   const raw = await request.arrayBuffer();
@@ -72,11 +83,12 @@ async function handlePush(request: Request, env: Env): Promise<Response> {
   }
   const parsed = PushRequest.safeParse(body);
   if (!parsed.success) return json({ error: "invalid_request" }, 400);
-  const res = await userStub(env, userId).fetch("https://user-events/push", {
-    method: "POST",
-    body: JSON.stringify(parsed.data),
-  });
-  return relay(res);
+  return relay(() =>
+    userStub(env, userId).fetch("https://user-events/push", {
+      method: "POST",
+      body: JSON.stringify(parsed.data),
+    }),
+  );
 }
 
 async function handlePull(request: Request, url: URL, env: Env): Promise<Response> {
@@ -89,8 +101,7 @@ async function handlePull(request: Request, url: URL, env: Env): Promise<Respons
     after: String(parsed.data.after),
     limit: String(parsed.data.limit ?? DEFAULT_PULL_LIMIT),
   });
-  const res = await userStub(env, userId).fetch(`https://user-events/pull?${query.toString()}`);
-  return relay(res);
+  return relay(() => userStub(env, userId).fetch(`https://user-events/pull?${query.toString()}`));
 }
 
 async function handleApi(request: Request, url: URL, env: Env): Promise<Response> {
