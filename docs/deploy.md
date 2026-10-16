@@ -32,6 +32,18 @@ pnpm --filter @clavis/worker deploy
 
 Local preview of the full stack: `pnpm --filter @clavis/worker dev` (builds the web app, then runs `wrangler dev`).
 
+## Secrets and Durable Objects
+
+- `SESSION_SECRET` signs session tokens (HMAC-SHA256) for `/api/sync/*`. Never put it in `wrangler.jsonc` or the repo. Generate a long random value and set it once per environment:
+
+  ```sh
+  openssl rand -base64 48 | pnpm --filter @clavis/worker exec wrangler secret put SESSION_SECRET
+  ```
+
+  Rotating it signs every user out. For local `wrangler dev`, put `SESSION_SECRET=...` in `apps/worker/.dev.vars` (git-ignored).
+- Each user's events live in a `UserEvents` Durable Object with SQLite storage (binding `USER_EVENTS`). The first deploy applies the `v1` migration in `wrangler.jsonc` (`new_sqlite_classes`). Add new classes or renames as new migration tags, never edit a shipped one.
+- Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `clavis_session` cookie. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
+
 ## Finding the workers.dev URL
 
 The deploy log ends with `https://clavis.<your-subdomain>.workers.dev`. It is also shown in the dashboard under Workers & Pages, clavis. The subdomain is chosen once per account under Workers & Pages, Account details.

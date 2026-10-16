@@ -156,3 +156,6 @@ test-results/
 *.tsbuildinfo
 .claude/worktrees/
 apps/web/build/
+
+# Local Worker secrets for wrangler dev
+.dev.vars
