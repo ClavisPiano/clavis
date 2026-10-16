@@ -236,6 +236,16 @@ Follow-ups, deliberately out of MP: hands-together pieces (M5 alignment, MIDI fi
 - R2 upload endpoint for recordings, keyed `userId/...`, with a local size cap.
 - Risk: DO free-tier write limits under batch pushes. Mitigation: batch per request, measure in staging.
 
+Tasks (filed when started; later rows may be revised once T4.1 lands):
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T4.1 | **Sync protocol and per-user Durable Object.** `core/sync` zod schemas for push and pull; `UserEvents` DO on SQLite storage with `INSERT OR IGNORE` and `serverSeq`; `/api/sync/push` and `/api/sync/pull` behind an HMAC session token (`SESSION_SECRET`); no token issuing yet, so every request is 401 until T4.2 | - | Idempotent duplicate push; distinct increasing seqs; paginated pull with `hasMore`; 400 on invalid events; 401 on missing, expired or tampered tokens; users isolated |
+| T4.2 | **Passkey auth.** `@simplewebauthn/server` register and login (options and verify), short-lived challenges, D1 tables for users, credentials and hashed recovery codes; issues the T4.1 session cookie; recovery-code login; add a second passkey while signed in; sign out; `/api/me` | T4.1 | Worker tests with fixture attestation and assertion responses; replayed or expired challenge rejected; recovery code works once |
+| T4.3 | **Client sync loop.** Push unsynced events in batches, pull after the stored `serverSeq`, append pulled events idempotently, refold from the snapshot before the earliest new event; triggers on session end, foreground and an online interval; claiming is the first authenticated push (R7) | T4.1 | Two in-memory clients against a fake server converge to identical state (`fast-check` over interleavings); offline sessions sync later; no duplicate events |
+| T4.4 | **Account UI.** Settings: create account with a passkey, show recovery codes once, sign in, add a passkey, sign out, sync status | T4.2, T4.3 | Playwright (Chromium) with a CDP virtual authenticator: sign up, sync, sign in on a fresh profile, same state |
+| T4.5 | **Recordings upload.** R2 endpoint keyed `userId/...` with a size cap; local IndexedDB copies with a cap | T4.2 | Worker tests for auth, key prefixing and size limits |
+
 ### M5: Hands
 
 - Web MIDI adapter (Chromium/Android/desktop).
@@ -246,6 +256,12 @@ Follow-ups, deliberately out of MP: hands-together pieces (M5 alignment, MIDI fi
 - Apply block in the composer; placement HANDS section.
 - Risk: polyphonic mic accuracy. S1 results decide whether mic-based HANDS ships in v1 or HANDS is MIDI-first.
 
+Tasks (first slice; the rest are planned after S1):
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T5.1 | **Web MIDI input adapter.** `MidiAdapter` over Web MIDI (`source: "midi"`, note off and velocity 0, channel filter, hot-plug, graceful absence on iOS); settings option and device picker; no latency calibration for MIDI | - | Unit tests with a fake `MIDIAccess`; Playwright (Chromium) with a stubbed `requestMIDIAccess` grades a played answer |
+
 ### M6: Progress
 
 - Skill map (graph view with node states), consistency calendar, weekly target, fluency trends, capability milestones (from fold diffs, R4).
@@ -253,12 +269,30 @@ Follow-ups, deliberately out of MP: hands-together pieces (M5 alignment, MIDI fi
 - Practice cue push notifications (Web Push from the Worker; iOS requires home-screen install).
 - Self-assessment flow (spec 8.4) and calibration metric.
 
+Tasks:
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T6.1 | **Progress page.** Pure `core/progress` helpers (practice days and minutes by learner-local day, weekly progress, per-strand weekly accuracy and median latency); weekly target as `settings.changed` v3 with an upcaster; `/progress` with the consistency calendar, weekly target and trends | - | Table tests across time zones; `fast-check` order independence; schema and upcaster tests; Playwright: calendar and target shown, target persists |
+| T6.2 | **Skill map.** Graph view of nodes by strand with states, tap a node for its card and mastery criteria | T6.1 | Component tests; Playwright: a seeded learner's states appear on the map |
+| T6.3 | **Capability milestones.** Plain statements per meaningful node in content; derived from node-state fold diffs (R4); shown in the session summary and on `/progress` | T6.1 | Content tests; reducer tests: one milestone per first mastery, refold order independent |
+| T6.4 | **Practice cue.** Web Push from the Worker with a learner-chosen time and habit; iOS needs home-screen install | T4.2 | Worker tests for subscription storage and scheduling |
+| T6.5 | **Monthly benchmark and self-assessment.** Benchmark recording with side-by-side replay (R2 storage); self-assessment flow and calibration metric | T4.5 | Tests per sub-feature |
+
 ### M7: By ear and import
 
 - EAR progression nodes and generators (`progressionId`; `bassMotion` and `chordQuality` move to MP, TP.1), minor and colour progressions.
 - `byEarPhrase` staged loop (spec 9) with stage gating.
 - Import: MusicXML/MXL (primary), MIDI, ABC (via Verovio conversion), audio with loop regions; phrase splitting and difficulty estimate; private R2 storage.
 - `ear.real.phrase` content sourcing (public domain first).
+
+Tasks:
+
+| ID | Task | Deps | Accept |
+|---|---|---|---|
+| T7.1 | **Progression and cadence ear.** `progressionId` for `ear.prog.core`, `ear.cadence`, `ear.prog.minor` and `ear.prog.colour`: hear a progression or cadence in a random key, choose it by tap; cards; enable | TP.1 | Seeded tests (chords match the answer, ids stable across keys, universe sizes); card coverage; Playwright: answer by tap |
+| T7.2 | **`byEarPhrase` staged loop.** Spec 9 stages with gating, generalising TP.6 beyond known pieces | TP.6 | Machine tests per stage; Playwright |
+| T7.3 | **MusicXML import.** MusicXML and MXL to `ScoreSpec`, phrase splitting and difficulty estimate; stored locally, R2 later | T3.4 | Fixture imports round-trip; phrase splits tile the score |
 
 ---
 
