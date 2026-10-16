@@ -227,7 +227,7 @@ export interface NodeProgress {
   accuracy: number | undefined;
   /** Median latency of correct answers in the window, undefined with none. */
   medianLatencyMs: number | undefined;
-  /** Distinct sessions in the window. */
+  /** Sessions in the window that count: distinct sessions and distinct days, whichever is fewer. */
   sessions: number;
 }
 
@@ -245,6 +245,10 @@ export function nodeProgress(node: SkillNode, state: Pick<LearnerState, "attempt
     windowAttempts: window.length,
     accuracy: window.length === 0 ? undefined : windowAccuracy(window, node.mastery.windowAttempts),
     medianLatencyMs: correct.length === 0 ? undefined : median(correct),
-    sessions: new Set(window.map((a) => a.sessionId)).size,
+    // Mastery needs that many sessions on that many different days, so count the smaller of both.
+    sessions: Math.min(
+      new Set(window.map((a) => a.sessionId)).size,
+      new Set(window.map((a) => a.day)).size,
+    ),
   };
 }

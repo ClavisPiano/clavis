@@ -189,10 +189,11 @@ describe("nodeProgress", () => {
     correct: boolean,
     mode: "instrument" | "away",
     s: string,
+    day = `2026-10-1${s.slice(1)}`,
   ): StoredAttempt => ({
     at: i,
     sessionId: s,
-    day: "2026-10-14",
+    day,
     mode,
     correct,
     latencyMs: 1000 + i * 100,
@@ -225,5 +226,13 @@ describe("nodeProgress", () => {
       medianLatencyMs: 1200,
       sessions: 3,
     });
+  });
+
+  it("counts sessions on the same day once, like the mastery rule", () => {
+    const attempts = [
+      at(0, true, "instrument", "s1", "2026-10-14"),
+      at(1, true, "instrument", "s2", "2026-10-14"),
+    ];
+    expect(nodeProgress(n, { attempts: { a: attempts } }).sessions).toBe(1);
   });
 });

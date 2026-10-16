@@ -135,6 +135,9 @@
     color: var(--color-text);
     font: inherit;
     text-align: left;
+  }
+
+  button.example {
     cursor: pointer;
   }
 
