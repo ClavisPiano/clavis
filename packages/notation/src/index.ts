@@ -11,3 +11,9 @@ export {
   difficultyFeatures,
   type DifficultyFeatures,
 } from "./import/analysis.js";
+export {
+  inspectMusicXml,
+  inspectMxl,
+  type ScoreInfo,
+  type ScorePartInfo,
+} from "./import/inspect.js";

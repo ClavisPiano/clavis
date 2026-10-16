@@ -2,6 +2,13 @@ import { z } from "zod";
 import { GeneratorIdSchema } from "../graph/schema.js";
 import { InputSourceSchema } from "../input/types.js";
 import { JsonObjectSchema } from "../json.js";
+import {
+  IMPORTED_PIECE_SOURCE,
+  PhraseSchema,
+  USER_PIECE_ID_REGEX,
+  UserPieceSchema,
+} from "../pieces/schema.js";
+import { ScoreSpecSchema } from "../score/schema.js";
 import { isValidKey } from "../theory/keys.js";
 import { envelopeShape } from "./envelope.js";
 import { ULID_REGEX } from "./ulid.js";
@@ -126,6 +133,54 @@ export const PieceCompletedV1 = z
     message: "correctPhrases cannot exceed phrases",
     path: ["correctPhrases"],
   });
+
+/** What a piece import came from. */
+export const ImportSourceSchema = z.enum(["musicxml", "mxl"]);
+
+/**
+ * A learner imported a score as a personal piece (T7.4, spec 15). The event is self-contained: it
+ * holds the converted score, its phrases and difficulty, so replay never needs the file again
+ * (R2). `partIndex` and `staff` record which part of the file was read. The payload must make a
+ * valid user piece (full measures, one line, a key and a meter), so a pickup bar is rejected here
+ * and the importer reports it before anything is written.
+ */
+export const ContentImportedV1 = z
+  .strictObject({
+    ...envelopeShape,
+    type: z.literal("content.imported"),
+    v: z.literal(1),
+    pieceId: z.string().regex(USER_PIECE_ID_REGEX, "must be a user piece id"),
+    title: z.string().min(1).max(120),
+    source: ImportSourceSchema,
+    score: ScoreSpecSchema,
+    phrases: z.array(PhraseSchema).min(1),
+    difficulty: z.int().min(1).max(10),
+    partIndex: z.int().min(0),
+    staff: z.int().min(1),
+  })
+  .superRefine((e, ctx) => {
+    const piece = UserPieceSchema.safeParse(importedPiece(e));
+    if (piece.success) return;
+    for (const issue of piece.error.issues) {
+      ctx.addIssue({ code: "custom", message: issue.message, path: issue.path });
+    }
+  });
+export type ContentImported = z.infer<typeof ContentImportedV1>;
+
+/** The piece an import event describes. Source text is fixed, the learner's file is not provenance. */
+export function importedPiece(
+  e: Pick<ContentImported, "pieceId" | "title" | "score" | "phrases" | "difficulty">,
+): z.input<typeof UserPieceSchema> {
+  return {
+    id: e.pieceId,
+    title: e.title,
+    source: IMPORTED_PIECE_SOURCE,
+    score: e.score,
+    phrases: e.phrases,
+    requiredNodeIds: [],
+    difficulty: e.difficulty,
+  };
+}
 
 export const SessionEndedV1 = z.strictObject({
   ...envelopeShape,

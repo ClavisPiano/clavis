@@ -1,4 +1,5 @@
 import { cloneJson } from "./clone.js";
+import { importedPiece } from "../events/learning.js";
 import type { LearningEvent } from "../events/schema.js";
 import { compareEvents } from "../events/validate.js";
 import { combineFamilyStates } from "../grading/families.js";
@@ -9,6 +10,7 @@ import { isNodeEnabled } from "../graph/validate.js";
 import type { JsonObject } from "../json.js";
 import { learnerDay } from "../learning/day.js";
 import { isValidKey, keyFamily, type KeyFamily } from "../theory/keys.js";
+import type { Piece } from "../pieces/schema.js";
 import type {
   DailyRecord,
   FoldContext,
@@ -18,7 +20,7 @@ import type {
 } from "./types.js";
 
 /** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
-export const REDUCER_VERSION = 3;
+export const REDUCER_VERSION = 4;
 
 export const DURATION_WINDOW = 20;
 /** Fewer samples than this and the graph seed is used instead of the median. */
@@ -49,6 +51,7 @@ export function initialState(ctx: FoldContext): LearnerState {
     nodes: {},
     attempts: {},
     pieces: {},
+    imported: {},
     sessions: {},
     presented: {},
     durations: {},
@@ -226,6 +229,20 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
       if (event.correctPhrases === event.phrases) {
         rec.completedAt = Math.min(rec.completedAt ?? event.at, event.at);
       }
+      return;
+    }
+    case "content.imported": {
+      // Last write by (at, id) wins, whatever order the events arrive in.
+      const prev = state.imported[event.pieceId];
+      if (prev !== undefined && compareEvents({ at: prev.at, id: prev.eventId }, event) > 0) return;
+      state.imported[event.pieceId] = {
+        piece: cloneJson<Piece>(importedPiece(event)),
+        source: event.source,
+        partIndex: event.partIndex,
+        staff: event.staff,
+        at: event.at,
+        eventId: event.id,
+      };
       return;
     }
     case "placement.completed": {
