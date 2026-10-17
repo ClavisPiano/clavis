@@ -4,7 +4,8 @@ import worker from "../index";
 import { signSession } from "../auth/session";
 import type { Env } from "../env";
 import { ORIGIN, SECRET, fakeD1, makeEnv } from "../test-support";
-import { isAcceptableEndpoint } from "./handlers";
+import { isAcceptableEndpoint } from "./endpoint";
+import { MAX_SUBSCRIPTIONS_PER_USER } from "./repo";
 
 const NOW = Date.UTC(2026, 9, 12, 0, 0, 0);
 
@@ -59,7 +60,7 @@ async function call(env: Env, method: string, path: string, body?: unknown, opts
 const P256DH = "B" + "A".repeat(86);
 const AUTH = "A".repeat(22);
 
-const subscribeBody = (endpoint = "https://push.example.com/a", over: object = {}) => ({
+const subscribeBody = (endpoint = "https://fcm.googleapis.com/fcm/send/a", over: object = {}) => ({
   subscription: { endpoint, keys: { p256dh: P256DH, auth: AUTH } },
   cue: { time: "08:00", weekdays: [1, 2, 3], habit: "  After my morning coffee " },
   tzOffsetMin: 600,
@@ -92,7 +93,7 @@ describe("PUT /api/push/subscription", () => {
     expect(res.status).toBe(200);
     expect(rows()).toMatchObject([
       {
-        endpoint: "https://push.example.com/a",
+        endpoint: "https://fcm.googleapis.com/fcm/send/a",
         user_id: "u1",
         time_local: "08:00",
         weekdays: 0b0001110,
@@ -111,7 +112,7 @@ describe("PUT /api/push/subscription", () => {
       env,
       "PUT",
       "/api/push/subscription",
-      subscribeBody("https://push.example.com/a", {
+      subscribeBody("https://fcm.googleapis.com/fcm/send/a", {
         cue: { time: "19:30", weekdays: [0], habit: "" },
         tzOffsetMin: -300,
       }),
@@ -147,7 +148,7 @@ describe("PUT /api/push/subscription", () => {
       "bad key length",
       {
         subscription: {
-          endpoint: "https://push.example.com/a",
+          endpoint: "https://fcm.googleapis.com/fcm/send/a",
           keys: { p256dh: "AAAA", auth: AUTH },
         },
       },
@@ -189,7 +190,7 @@ describe("DELETE /api/push/subscription", () => {
     const { env, rows } = setup();
     await call(env, "PUT", "/api/push/subscription", subscribeBody());
     const res = await call(env, "DELETE", "/api/push/subscription", {
-      endpoint: "https://push.example.com/a",
+      endpoint: "https://fcm.googleapis.com/fcm/send/a",
     });
     expect(res.status).toBe(200);
     expect(rows()).toHaveLength(0);
@@ -202,7 +203,7 @@ describe("DELETE /api/push/subscription", () => {
       env,
       "DELETE",
       "/api/push/subscription",
-      { endpoint: "https://push.example.com/a" },
+      { endpoint: "https://fcm.googleapis.com/fcm/send/a" },
       { user: "u2" },
     );
     expect(res.status).toBe(200);
@@ -222,14 +223,78 @@ describe("DELETE /api/push/subscription", () => {
   });
 });
 
+describe("per-user subscription cap", () => {
+  const endpoint = (i: number) =>
+    `https://fcm.googleapis.com/fcm/send/d${String(i).padStart(2, "0")}`;
+
+  it("replaces the user's oldest device when a new one goes over the cap", async () => {
+    const { env, rows } = setup();
+    for (let i = 0; i < MAX_SUBSCRIPTIONS_PER_USER; i++) {
+      env.now = () => NOW + i;
+      expect(
+        (await call(env, "PUT", "/api/push/subscription", subscribeBody(endpoint(i)))).status,
+      ).toBe(200);
+    }
+    await call(
+      env,
+      "PUT",
+      "/api/push/subscription",
+      subscribeBody("https://fcm.googleapis.com/fcm/send/x"),
+      {
+        user: "u2",
+      },
+    );
+    env.now = () => NOW + 100;
+    const res = await call(env, "PUT", "/api/push/subscription", subscribeBody(endpoint(99)));
+    expect(res.status).toBe(200);
+    const mine = rows()
+      .filter((r) => r.user_id === "u1")
+      .map((r) => r.endpoint);
+    expect(mine).toHaveLength(MAX_SUBSCRIPTIONS_PER_USER);
+    expect(mine).not.toContain(endpoint(0));
+    expect(mine).toContain(endpoint(99));
+    // Other users are untouched.
+    expect(rows().filter((r) => r.user_id === "u2")).toHaveLength(1);
+  });
+
+  it("re-saving an existing device at the cap keeps every device", async () => {
+    const { env, rows } = setup();
+    for (let i = 0; i < MAX_SUBSCRIPTIONS_PER_USER; i++) {
+      env.now = () => NOW + i;
+      await call(env, "PUT", "/api/push/subscription", subscribeBody(endpoint(i)));
+    }
+    env.now = () => NOW + 100;
+    await call(env, "PUT", "/api/push/subscription", subscribeBody(endpoint(0)));
+    expect(rows().map((r) => r.endpoint)).toEqual(
+      Array.from({ length: MAX_SUBSCRIPTIONS_PER_USER }, (_, i) => endpoint(i)),
+    );
+  });
+});
+
 describe("POST /api/push/practised", () => {
   it("records the day on all of the user's devices only", async () => {
     const { env, rows } = setup();
-    await call(env, "PUT", "/api/push/subscription", subscribeBody("https://push.example.com/a"));
-    await call(env, "PUT", "/api/push/subscription", subscribeBody("https://push.example.com/b"));
-    await call(env, "PUT", "/api/push/subscription", subscribeBody("https://push.example.com/c"), {
-      user: "u2",
-    });
+    await call(
+      env,
+      "PUT",
+      "/api/push/subscription",
+      subscribeBody("https://fcm.googleapis.com/fcm/send/a"),
+    );
+    await call(
+      env,
+      "PUT",
+      "/api/push/subscription",
+      subscribeBody("https://fcm.googleapis.com/fcm/send/b"),
+    );
+    await call(
+      env,
+      "PUT",
+      "/api/push/subscription",
+      subscribeBody("https://fcm.googleapis.com/fcm/send/c"),
+      {
+        user: "u2",
+      },
+    );
     const res = await call(env, "POST", "/api/push/practised", { day: "2026-10-12" });
     expect(res.status).toBe(200);
     expect(rows().map((r) => [r.user_id, r.last_practised_day])).toEqual([
@@ -272,6 +337,15 @@ describe("isAcceptableEndpoint", () => {
   it.each([
     ["https://fcm.googleapis.com/fcm/send/abc", true],
     ["https://web.push.apple.com/QAbc", true],
+    ["https://updates.push.services.mozilla.com/wpush/v2/abc", true],
+    ["https://wns2-par02p.notify.windows.com/w/?token=abc", true],
+    ["https://FCM.GoogleAPIs.com/fcm/send/abc", true],
+    ["https://push.example.com/x", false],
+    ["https://fcm.googleapis.com.evil.example/x", false],
+    ["https://evilfcm.googleapis.com/x", false],
+    ["https://googleapis.com/x", false],
+    ["https://apple.com/x", false],
+    ["https://fcm.googleapis.com:8443/x", false],
     ["http://fcm.googleapis.com/x", false],
     ["https://localhost/x", false],
     ["https://127.0.0.1/x", false],

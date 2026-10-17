@@ -6,29 +6,11 @@ import { d1Sql } from "../auth/sql";
 import { nowMs, type Env } from "../env";
 import { csrfFailure, json, methodNotAllowed } from "../http";
 import { weekdaysToMask } from "./due";
+import { isAcceptableEndpoint } from "./endpoint";
 import { createPushRepo } from "./repo";
 
 const MAX_BODY_BYTES = 16 * 1024;
 export const MAX_HABIT_CHARS = 60;
-
-/**
- * The endpoint is a URL we will POST to from the Worker, so refuse anything that is not a plain
- * public https URL: no credentials, no custom port, no IP literal, no single-label or local host.
- */
-export function isAcceptableEndpoint(text: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(text);
-  } catch {
-    return false;
-  }
-  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") return false;
-  if (url.port !== "") return false;
-  const host = url.hostname;
-  if (!host.includes(".") || host.endsWith(".local") || host.endsWith(".internal")) return false;
-  if (host.startsWith("[") || /^[\d.]+$/.test(host)) return false;
-  return true;
-}
 
 const Endpoint = z.string().max(2048).refine(isAcceptableEndpoint);
 const Key = (bytes: number) =>

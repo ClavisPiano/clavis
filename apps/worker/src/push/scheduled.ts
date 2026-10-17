@@ -2,13 +2,14 @@ import { learnerDay } from "@clavis/core";
 import { d1Sql } from "../auth/sql";
 import type { Env } from "../env";
 import { dueSubscriptions } from "./due";
+import { isAcceptableEndpoint } from "./endpoint";
 import { createPushRepo } from "./repo";
 import { sendWebPush, type VapidKeys } from "./webpush";
 
 /**
  * Each push is one subrequest, and the free plan allows 50 per invocation (the D1 reads and the one
- * batched write count too). Anything over the cap is picked up by the next tick if still in its
- * window. Raise this when moving to a paid plan.
+ * batched write count too). Anything over the cap is sent by the next run, because a cue stays due
+ * for two runs (`CUE_WINDOW_MIN`). Raise this when moving to a paid plan.
  */
 export const MAX_SENDS_PER_RUN = 40;
 
@@ -40,11 +41,16 @@ export async function runPracticeCues(env: Env, options: CueRunOptions): Promise
     subject: env.VAPID_SUBJECT,
   };
   const repo = createPushRepo(d1Sql(env.DB));
-  const due = dueSubscriptions(await repo.listAll(), options.nowMs);
+  const rows = await repo.listAll();
+  // Rows stored before the push service allowlist existed: never send to them, just drop them.
+  const gone = rows.filter((r) => !isAcceptableEndpoint(r.endpoint)).map((r) => r.endpoint);
+  const due = dueSubscriptions(
+    rows.filter((r) => isAcceptableEndpoint(r.endpoint)),
+    options.nowMs,
+  );
   result.due = due.length;
   const batch = due.slice(0, MAX_SENDS_PER_RUN);
   const sent: { endpoint: string; day: string }[] = [];
-  const gone: string[] = [];
   const outcomes = await Promise.all(
     batch.map((sub) =>
       sendWebPush(sub, { title: CUE_TITLE, body: sub.habit || CUE_DEFAULT_BODY, url: "/" }, keys, {
