@@ -113,9 +113,10 @@ function make(id: GeneratorId): Generator {
 }
 
 /**
- * Play the degree by ear (the Away tap variant too). The learner no longer sings: the answer is
- * played on the keyboard. `degreeSing` is kept as an id so earlier events and plans still resolve,
- * and behaves exactly like `degreeId` (R14: same item universe and ids).
+ * Play the degree by ear (the Away tap variant too). Nothing is sung or graded as sung (R29): the
+ * answer is played on the keyboard, or tapped on the on-screen keys in Away mode. `degreeSing` is
+ * a historical name, kept as an id because FSRS cards and event history are keyed on it. It
+ * behaves exactly like `degreeId` (R14: same item universe and ids).
  */
 export const degreeSing: Generator = make("degreeSing");
 export const degreeId: Generator = make("degreeId");

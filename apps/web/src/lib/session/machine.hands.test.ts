@@ -231,7 +231,7 @@ describe("a left-hand chord item", () => {
     expect(attempt?.outcome.correct).toBe(false);
     expect(attempt?.errors?.[0]).toMatchObject({
       code: "chord.wrong-tone",
-      detail: { index: 1, part: "play" },
+      detail: { index: 1 },
     });
     expect(r.notation.marks.at(-1)?.map((m) => m.kind)).toEqual([
       "target",

@@ -17,6 +17,7 @@
   import { appPieces } from "../lib/pieces";
   import { pieceCard } from "../lib/piece-card";
   import { PLACEMENT_SKIPPED_META_KEY, shouldOfferPlacement } from "../lib/placement";
+  import { benchmarkMonth, needsBenchmark } from "@clavis/core";
 
   const learner = useLearner();
   let now = $state(Date.now());
@@ -85,6 +86,10 @@
       ? pieceCard(appPieces(snap), snap, learner.ctx.graph)
       : undefined,
   );
+  /** Once a month (T6.5): prompt for a benchmark while this month has none. */
+  const benchmarkDue = $derived(
+    snap && !firstRun ? needsBenchmark(snap, benchmarkMonth(now, deviceTzOffsetMin())) : false,
+  );
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
   const week = $derived(weekProgress(cells, settings.weeklyTargetDays));
 
@@ -123,11 +128,11 @@
   <section class="card" data-testid="welcome" aria-labelledby="welcome-h">
     <h2 id="welcome-h">Welcome</h2>
     <p>
-      A session is a short, focused run of ear and piano exercises. You sing or play, Clavis
-      listens, and it picks what to practise next. A few minutes a day is enough.
+      A session is a short, focused run of ear and piano exercises. You listen, then play it back.
+      Clavis checks what you played and picks what to practise next. A few minutes a day is enough.
     </p>
     <p>
-      Before you start, check your comfortable singing range in
+      Choose how you play (a MIDI keyboard, the microphone or the on-screen keys) in
       <a href={resolve("/settings")}>Settings</a>.
     </p>
   </section>
@@ -207,6 +212,19 @@
 
 {#if pieces}
   <PieceCard card={pieces} />
+{/if}
+
+{#if benchmarkDue}
+  <section class="card" data-testid="benchmark-prompt" aria-labelledby="benchmark-h">
+    <h2 id="benchmark-h">Monthly benchmark</h2>
+    <p>
+      Record yourself playing one piece, start to finish. Next to earlier months, you can hear how
+      far you have come.
+    </p>
+    <a href={resolve("/progress/benchmarks/record")} data-testid="benchmark-record-link"
+      >Record this month's benchmark</a
+    >
+  </section>
 {/if}
 
 {#if snap && today && !firstRun}

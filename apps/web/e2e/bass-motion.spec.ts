@@ -5,8 +5,7 @@ import { seedLearner } from "./read-helpers";
  * Bass motion (TP.1) in an Away session: hear a progression, then give its four bass roots. The
  * learner has `ear.bass.I-IV-V-vi` introduced, so the session draws its items. Fake input lets the
  * spec read what the item expects from the session hook and answer it, because the mic cannot be
- * opened headless; the sung items that share the session are skipped. In Away mode the only item
- * with a pitch-class sequence to play and nothing to sing is bassMotion.
+ * opened headless. In Away mode the only item with a pitch-class sequence to play is bassMotion.
  */
 
 const SESSION_URL = "/session?mode=away&input=fake&budget=120";

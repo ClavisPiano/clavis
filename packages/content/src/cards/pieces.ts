@@ -35,13 +35,13 @@ export const PIECE_CARDS_V1: unknown[] = [
     nodeIds: ["apply.piece-ear"],
     title: "Playing a tune by ear",
     body: [
-      "Once you can read every phrase of a tune, you can try it the other way round: listen first, with no music in front of you, then sing it and play it from memory.",
-      "Singing first makes you hear the tune in your head before your fingers move. Both parts count: a wrong sung note is a miss, even if the notes you play are right.",
+      "Once you can read every phrase of a tune, you can try it the other way round: listen first, with no music in front of you, then play it from memory.",
+      "Singing or humming it first, out loud or in your head, makes you hear the tune before your fingers move. Nothing listens to your voice: only the notes you play are marked.",
       "Afterwards the score appears so you can check what you did against what is written.",
     ],
     howTo: [
       "Four clicks set the pulse, then the phrase plays. Replay it if you need to.",
-      "Sing it back. You can sing in your own octave.",
+      "Sing or hum it, out loud or in your head, then press Ready. Nothing is timed or marked at this step.",
       "Now play it on your piano. Every note must be in the exact octave, and your rhythm is judged against your own pace.",
       "The score is shown with the notes you got right and wrong marked.",
     ],

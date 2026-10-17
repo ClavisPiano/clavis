@@ -214,7 +214,7 @@ describe("choice prompts", () => {
       responseWindowMs: 8000,
     };
     for (const mode of ["away", "instrument"] as const) {
-      expect(promptFor("play", ["play"], expected, mode)).toBe("Major or minor?");
+      expect(promptFor(expected, mode)).toBe("Major or minor?");
     }
   });
 });

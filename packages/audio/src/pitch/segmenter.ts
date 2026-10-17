@@ -4,7 +4,7 @@ import type { EnergySample } from "./tracker.js";
 
 export interface NoteSegmenterOptions {
   /**
-   * Register the learner is expected to play or sing in. Detections are folded by whole octaves
+   * Register the learner is expected to play in. Detections are folded by whole octaves
    * into `[minMidi - 0.5, maxMidi + 0.5]` before they are used for note pitch. This repairs the
    * usual octave errors of MPM on piano (a strong second harmonic reported an octave high, or a
    * subharmonic an octave low) when the true note is inside the hint. It cannot help when the true

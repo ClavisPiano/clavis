@@ -24,7 +24,6 @@ const MAJOR_KEYS = ALL_KEYS.filter((k) => k.mode === "major");
 
 const ctx = (seed: number, extra: Partial<GenerateContext> = {}): GenerateContext => ({
   rng: createRng(seed),
-  voiceRange: { low: 48, high: 72 },
   mode: "instrument",
   ...extra,
 });

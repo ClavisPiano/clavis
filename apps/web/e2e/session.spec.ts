@@ -30,9 +30,9 @@ test.describe("session runner", () => {
     await expect(page.getByTestId("key")).toContainText("C major");
 
     const answered = await runToSummary(page);
-    // Degree items are played at the instrument; nothing is sung.
+    // Degree items are played at the instrument; nothing is sung or graded as sung.
     expect(answered).toContain("listening-play");
-    expect(answered).not.toContain("listening-sing");
+    expect(answered.every((p) => p === "listening-play")).toBe(true);
 
     await expect(page.getByTestId("summary")).toBeVisible();
     await expect(page.getByTestId("summary-items")).toHaveText("3");

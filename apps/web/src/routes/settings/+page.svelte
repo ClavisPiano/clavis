@@ -8,17 +8,11 @@
   import {
     AWAY_BUDGET_OPTIONS_MIN,
     BUDGET_OPTIONS_MIN,
-    PICKER_MIDI_MAX,
-    PICKER_MIDI_MIN,
-    RANGE_PRESETS,
     NEW_ITEMS_PER_DAY_MAX,
     NEW_ITEMS_PER_DAY_MIN,
     WEEKLY_TARGET_OPTIONS,
     clampNewItems,
     effectiveSettings,
-    noteName,
-    presetFor,
-    rangeError,
     settingsDiff,
     type EffectiveSettings,
   } from "../../lib/home";
@@ -79,11 +73,6 @@
   let cueBusy = $state(false);
   let cueMessage = $state("");
   let cueSaved = $state(false);
-
-  const notes = Array.from(
-    { length: PICKER_MIDI_MAX - PICKER_MIDI_MIN + 1 },
-    (_, i) => PICKER_MIDI_MIN + i,
-  );
 
   /** List the connected keyboards (asks the browser for MIDI access the first time). */
   async function probeMidi(): Promise<void> {
@@ -244,25 +233,15 @@
   );
 
   const current = $derived(learner.state ? effectiveSettings(learner.state.settings) : undefined);
-  const error = $derived(draft ? rangeError(draft.voiceRangeLow, draft.voiceRangeHigh) : undefined);
-  const preset = $derived(draft ? presetFor(draft.voiceRangeLow, draft.voiceRangeHigh) : undefined);
 
   function touch(): void {
     saved = false;
     saveError = "";
   }
 
-  function applyPreset(id: string): void {
-    const p = RANGE_PRESETS.find((r) => r.id === id);
-    if (!p || !draft) return;
-    draft.voiceRangeLow = p.low;
-    draft.voiceRangeHigh = p.high;
-    touch();
-  }
-
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (!draft || !current || error) return;
+    if (!draft || !current) return;
     saveError = "";
     try {
       const patch = settingsDiff(current, draft);
@@ -405,58 +384,6 @@
     </fieldset>
 
     <fieldset>
-      <legend>Voice range</legend>
-      <label>
-        Preset
-        <select
-          data-testid="range-preset"
-          value={preset?.id ?? "custom"}
-          onchange={(e) => {
-            applyPreset(e.currentTarget.value);
-          }}
-        >
-          {#each RANGE_PRESETS as p (p.id)}
-            <option value={p.id}>{p.label}</option>
-          {/each}
-          {#if !preset}<option value="custom">Custom</option>{/if}
-        </select>
-      </label>
-      <label>
-        Lowest note
-        <select
-          data-testid="range-low"
-          value={String(draft.voiceRangeLow)}
-          onchange={(e) => {
-            if (draft) draft.voiceRangeLow = Number(e.currentTarget.value);
-            touch();
-          }}
-        >
-          {#each notes as n (n)}
-            <option value={String(n)}>{noteName(n)}</option>
-          {/each}
-        </select>
-      </label>
-      <label>
-        Highest note
-        <select
-          data-testid="range-high"
-          value={String(draft.voiceRangeHigh)}
-          onchange={(e) => {
-            if (draft) draft.voiceRangeHigh = Number(e.currentTarget.value);
-            touch();
-          }}
-        >
-          {#each notes as n (n)}
-            <option value={String(n)}>{noteName(n)}</option>
-          {/each}
-        </select>
-      </label>
-      {#if error}
-        <p role="alert" class="error" data-testid="range-error">{error}</p>
-      {/if}
-    </fieldset>
-
-    <fieldset>
       <legend>After a correct answer</legend>
       <label>
         Move on to the next exercise
@@ -538,17 +465,15 @@
           {:else if !midiProbed}
             Allow MIDI access in the browser to list your keyboards.
           {:else}
-            Played answers use this keyboard. Singing still uses the microphone, and the on-screen
-            keys keep working. No latency calibration is needed.
+            Played answers use this keyboard, and the on-screen keys keep working. No latency
+            calibration is needed.
           {/if}
         </p>
       {/if}
     </fieldset>
 
     <div class="save-row">
-      <button type="submit" class="button" data-testid="save" disabled={error !== undefined}>
-        Save
-      </button>
+      <button type="submit" class="button" data-testid="save"> Save </button>
       {#if saved}
         <span role="status" data-testid="saved">Saved</span>
       {/if}

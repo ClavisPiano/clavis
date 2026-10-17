@@ -22,6 +22,8 @@ import type {
  *   `accid.ges` (the key signature, or an earlier accidental in the bar, implies it).
  * - The key signature is computed here from the tonic and mode (no runtime core import).
  * - A percussion staff is `lines="1"` with `clef.shape="perc"`.
+ * - A grand staff (two staves, treble over bass) is one `staffGrp` with `symbol="brace"` and
+ *   `bar.thru="true"`. A single staff's `staffGrp` has no attributes.
  */
 
 const MEI_NS = "http://www.music-encoding.org/ns/mei";
@@ -155,7 +157,13 @@ export function toMei(score: ScoreSpec): string {
   out += `<mei xmlns="${MEI_NS}" meiversion="5.0">\n`;
   out += `  <meiHead>\n    <fileDesc>\n      <titleStmt>\n        <title/>\n      </titleStmt>\n      <pubStmt/>\n    </fileDesc>\n  </meiHead>\n`;
   out += `  <music>\n    <body>\n      <mdiv>\n        <score>\n`;
-  out += `          <scoreDef${attrs(scoreDefAttrs)}>\n            <staffGrp>\n`;
+  // A grand staff (R27) is joined by a brace, with bar lines drawn through both staves.
+  const grand = score.staves.length > 1;
+  const staffGrpAttrs: Attrs = [
+    ["symbol", grand ? "brace" : undefined],
+    ["bar.thru", grand ? "true" : undefined],
+  ];
+  out += `          <scoreDef${attrs(scoreDefAttrs)}>\n            <staffGrp${attrs(staffGrpAttrs)}>\n`;
   score.staves.forEach((staff, i) => {
     const clef = CLEFS[staff.clef];
     out += `              <staffDef${attrs([

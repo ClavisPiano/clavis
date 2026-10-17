@@ -1,11 +1,11 @@
 {
-  "contentVersion": "2026.10.12",
+  "contentVersion": "2026.10.13",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
       "strand": "EAR",
       "title": "Degrees 1, 3, 5",
-      "description": "Sing or play scale degrees 1, 3 and 5 after a cadence.",
+      "description": "Hear scale degrees 1, 3 and 5 after a cadence, then play them.",
       "prerequisites": [],
       "itemGenerators": ["degreeSing", "degreeId"],
       "params": {
@@ -706,7 +706,7 @@
       "id": "apply.piece-ear",
       "strand": "APPLY",
       "title": "Pieces by ear",
-      "description": "Hear a phrase of a tune you can read, sing it, play it, then check it against the score.",
+      "description": "Hear a phrase of a tune you can read, sing or hum it in your head, play it, then check it against the score.",
       "prerequisites": [],
       "itemGenerators": ["pieceEar"],
       "params": {},
@@ -801,7 +801,7 @@
       "implemented": true,
       "seedDurationSec": 60,
       "awayEligible": false,
-      "requires": ["mic", "keys", "notation"]
+      "requires": ["keys", "notation"]
     },
     {
       "id": "bassChordRead",
@@ -843,7 +843,7 @@
       "implemented": true,
       "seedDurationSec": 90,
       "awayEligible": false,
-      "requires": ["mic", "keys", "notation"]
+      "requires": ["keys", "notation"]
     },
     {
       "id": "byEarHarmonise",

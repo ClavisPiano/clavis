@@ -19,3 +19,4 @@ export * from "./sync/index.js";
 export * from "./blobs/index.js";
 export * from "./progress/index.js";
 export * from "./milestones/index.js";
+export * from "./benchmark/index.js";
