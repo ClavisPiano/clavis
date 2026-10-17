@@ -11,6 +11,11 @@ import { findStableSegments, segmentSungNotes } from "@clavis/scoring";
 export const SEQUENCE_QUIET_MS = 800;
 /** A sung sequence is done when enough notes were sung and the voice stopped for this long. */
 export const SUNG_QUIET_MS = 300;
+/**
+ * A chord line with some tones still to come is given up on after this much silence. Longer than
+ * a chord is held at the slow tempo, so a learner working out the next chord is not cut off.
+ */
+export const CHORD_GIVE_UP_MS = 5000;
 /** A single played note is abandoned after this many wrong notes. */
 export const MAX_WRONG_NOTES = 3;
 
@@ -51,6 +56,16 @@ export function checkPlayDone(
     case "line":
       if (!last || sorted.length < target.midi.length) return NOT_DONE;
       return quiet(last.onsetMs, nowMs, SEQUENCE_QUIET_MS);
+    case "chordLine": {
+      // Every tone struck and the hand lifted, or a long pause with some still missing.
+      if (!last) return NOT_DONE;
+      const total = target.chords.reduce((n, c) => n + c.midi.length, 0);
+      return quiet(
+        last.onsetMs,
+        nowMs,
+        sorted.length >= total ? SEQUENCE_QUIET_MS : CHORD_GIVE_UP_MS,
+      );
+    }
     case "rhythm": {
       if (!last || sorted.length < target.onsetsBeats.length) return NOT_DONE;
       return quiet(last.onsetMs, nowMs, 60000 / target.tempoBpm);

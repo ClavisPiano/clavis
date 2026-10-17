@@ -94,7 +94,7 @@ describe("v1 skill graph", () => {
   });
 
   it("lists every generator once and implements exactly the core registry", () => {
-    expect(graph.generators).toHaveLength(20);
+    expect(graph.generators).toHaveLength(21);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
     // `pieceLine` and `pieceEar` are built over the piece library, so the app injects them; the
     // core registry has the rest.
@@ -133,6 +133,9 @@ describe("v1 skill graph", () => {
       "apply.pieces",
       "apply.piece-ear",
     ]);
+    // T5.3: lhPattern enables the root-position chord node only. The other nodes that listed it
+    // moved to the unimplemented lhPatternVariants, so they stay disabled.
+    expect(enabled.filter((id) => id.startsWith("hands."))).toEqual(["hands.lh.triads.root"]);
     // T7.2: the melody stage is the only by-ear task that exists. Harmonising and real recordings
     // have their own generators, so `ear.real.phrase` and the later BYEAR nodes stay disabled.
     expect(enabled.filter((id) => id.startsWith("byear."))).toEqual(["byear.melody.simple"]);
@@ -143,9 +146,30 @@ describe("v1 skill graph", () => {
           id.startsWith("ear.") ||
           id.startsWith("read.") ||
           id.startsWith("apply.") ||
+          id.startsWith("hands.") ||
           id === "byear.melody.simple",
       ),
     ).toBe(true);
+  });
+
+  it("serves the other lhPattern nodes with an unimplemented generator (T5.3)", () => {
+    const variants = graph.nodes.filter((n) => n.itemGenerators.includes("lhPatternVariants"));
+    expect(variants.map((n) => n.id)).toEqual([
+      "hands.lh.inversions",
+      "hands.lh.broken",
+      "hands.lh.pop",
+      "hands.minor.leadingTone",
+    ]);
+    expect(
+      graph.nodes.filter((n) => n.itemGenerators.includes("lhPattern")).map((n) => n.id),
+    ).toEqual(["hands.lh.triads.root"]);
+    for (const id of ["lhPattern", "lhPatternVariants"]) {
+      const info = graph.generators.find((g) => g.id === id);
+      expect(info?.requires).toContain("polyphonic");
+      expect(info?.awayEligible).toBe(false);
+    }
+    expect(graph.generators.find((g) => g.id === "lhPatternVariants")?.implemented).toBe(false);
+    expect(graph.generators.find((g) => g.id === "lhPattern")?.requires).toContain("notation");
   });
 
   it("every enabled node's generators can enumerate and generate items", () => {

@@ -49,6 +49,11 @@ export async function answerCurrentPhase(page: Page): Promise<void> {
         play.midi.forEach((midi, i) =>
           fake.emitNote(midi, { onsetMs: base + (play.onsetsBeats[i] ?? 0) * beatMs }),
         );
+      } else if (play.kind === "chordLine") {
+        const beatMs = 60000 / play.tempoBpm;
+        for (const c of play.chords) {
+          for (const midi of c.midi) fake.emitNote(midi, { onsetMs: base + c.onsetBeats * beatMs });
+        }
       } else {
         const beatMs = 60000 / play.tempoBpm;
         for (const beat of play.onsetsBeats) {

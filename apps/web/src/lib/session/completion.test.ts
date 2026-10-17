@@ -1,6 +1,7 @@
 import type { NoteEvent, PitchFrame, PlayTarget, SingTarget } from "@clavis/core";
 import { describe, expect, it } from "vitest";
 import {
+  CHORD_GIVE_UP_MS,
   MAX_WRONG_NOTES,
   SEQUENCE_QUIET_MS,
   SUNG_QUIET_MS,
@@ -113,5 +114,37 @@ describe("checkSingDone", () => {
     expect(check.done).toBe(false);
     expect(check.recheckInMs).toBe(1700 + SUNG_QUIET_MS - 1800);
     expect(checkSingDone(seq, both, 1700 + SUNG_QUIET_MS).done).toBe(true);
+  });
+});
+
+describe("checkPlayDone for a chord line", () => {
+  const chordLine: PlayTarget = {
+    kind: "chordLine",
+    chords: [
+      { roman: "I", symbol: "C", midi: [48, 52, 55], onsetBeats: 0, durationBeats: 2 },
+      { roman: "V", symbol: "G", midi: [43, 47, 50], onsetBeats: 2, durationBeats: 2 },
+    ],
+    tempoBpm: 60,
+    beatsPerBar: 4,
+  };
+  const chord = (midi: number[], at: number): NoteEvent[] => midi.map((m) => note(m, at));
+
+  it("is not done before anything is played", () => {
+    expect(checkPlayDone(chordLine, [], 10_000).done).toBe(false);
+  });
+
+  it("is done once every tone is struck and the hand has been still for a moment", () => {
+    const all = [...chord([48, 52, 55], 1000), ...chord([43, 47, 50], 3000)];
+    const check = checkPlayDone(chordLine, all, 3100);
+    expect(check.done).toBe(false);
+    expect(check.recheckInMs).toBe(3000 + SEQUENCE_QUIET_MS - 3100);
+    expect(checkPlayDone(chordLine, all, 3000 + SEQUENCE_QUIET_MS).done).toBe(true);
+  });
+
+  it("waits a long pause when tones are still to come, so a slow chord change is not cut off", () => {
+    const first = chord([48, 52, 55], 1000);
+    expect(checkPlayDone(chordLine, first, 1000 + SEQUENCE_QUIET_MS).done).toBe(false);
+    expect(checkPlayDone(chordLine, first, 1000 + CHORD_GIVE_UP_MS - 1).done).toBe(false);
+    expect(checkPlayDone(chordLine, first, 1000 + CHORD_GIVE_UP_MS).done).toBe(true);
   });
 });

@@ -277,6 +277,14 @@
   </p>
 {/snippet}
 
+{#snippet chordLabels(chords: { roman: string; symbol: string }[])}
+  <p class="chord-labels" data-testid="chord-labels" aria-label="Chords to play">
+    {#each chords as c, i (i)}
+      <span class="chord"><span class="deg">{c.roman}</span> {c.symbol}</span>
+    {/each}
+  </p>
+{/snippet}
+
 {#snippet nextStepLinks()}
   {#if steps && (steps.keepGoing || steps.learn)}
     <h2>Keep going?</h2>
@@ -436,6 +444,10 @@
     {:else if view.kind === "presenting"}
       <section class="card" data-testid="presenting">
         <p class="prompt" aria-live="polite">{view.prompt}</p>
+        {#if view.item.chords}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render chordLabels(view.item.chords)}
+        {/if}
         {#if view.item.keyNotes}
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
           {@render keyNotesLine(view.item.keyNotes)}
@@ -463,6 +475,10 @@
           <p class="eyebrow">Step {view.phaseIndex + 1} of {view.phaseCount}</p>
         {/if}
         <p class="prompt" aria-live="polite" data-testid="prompt">{view.prompt}</p>
+        {#if view.item.chords}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render chordLabels(view.item.chords)}
+        {/if}
         {#if showPad}
           <button
             type="button"
@@ -566,6 +582,10 @@
         <p class="result" class:good={view.feedback.correct} data-testid="result">
           {view.feedback.correct ? "Correct" : "Not quite"}
         </p>
+        {#if view.item.chords}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render chordLabels(view.item.chords)}
+        {/if}
         {#if view.feedback.answer}
           <p class="answer" data-testid="answer">{view.feedback.answer}</p>
         {/if}
@@ -845,7 +865,8 @@
     font-size: 1.15rem;
   }
 
-  .key-notes {
+  .key-notes,
+  .chord-labels {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
@@ -853,7 +874,8 @@
     font-size: 1.15rem;
   }
 
-  .key-note .deg {
+  .key-note .deg,
+  .chord .deg {
     color: var(--color-text-muted);
     font-size: 0.9rem;
   }
