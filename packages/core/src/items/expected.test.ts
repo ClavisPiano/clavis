@@ -34,6 +34,27 @@ describe("ExpectedResponseSchema", () => {
     expect(ok({ kind: "choice", options: [options[0], options[0]], correct: "major" })).toBe(false);
   });
 
+  it("accepts a performance and rejects bad ones", () => {
+    const note = (id: string, hand: string, onsetBeats = 0) => ({
+      id,
+      midi: hand === "rh" ? 67 : 43,
+      onsetBeats,
+      durationBeats: 1,
+      hand,
+    });
+    const ok = (notes: unknown[], extra: object = {}) =>
+      ExpectedResponseSchema.safeParse({
+        play: { kind: "performance", notes, tempoBpm: 60, beatsPerBar: 4, ...extra },
+        responseWindowMs: 20000,
+      }).success;
+    expect(ok([note("n1", "rh"), note("n2.0", "lh"), note("n2.1", "lh")])).toBe(true);
+    expect(ok([])).toBe(false);
+    expect(ok([note("n1", "rh"), note("n1", "lh")])).toBe(false);
+    expect(ok([note("n1", "both")])).toBe(false);
+    expect(ok([note("n1", "rh", -1)])).toBe(false);
+    expect(ok([note("n1", "rh")], { beatsPerBar: 0 })).toBe(false);
+  });
+
   it("rejects an empty response", () => {
     expect(ExpectedResponseSchema.safeParse({ responseWindowMs: 1000 }).success).toBe(false);
   });

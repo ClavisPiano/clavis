@@ -271,3 +271,40 @@ describe("chord line errors", () => {
     );
   });
 });
+
+describe("performance errors (R27)", () => {
+  const NAMES = new Map([
+    [48, "C3"],
+    [50, "D3"],
+    [72, "C5"],
+  ]);
+  const names = (midi: number): string => NAMES.get(midi) ?? `n${String(midi)}`;
+  const at = (measure: number, hand: string) => ({ id: "n7", measure, beat: 1, hand });
+  const table: [AttemptError, string][] = [
+    [
+      { code: "note.wrong", detail: { ...at(2, "lh"), expected: 50, played: 48, part: "play" } },
+      "Bar 2: LH played C3 instead of D3",
+    ],
+    [{ code: "note.missed", detail: { ...at(3, "rh"), expected: 72 } }, "Bar 3: RH missed C5"],
+    [
+      { code: "note.extra", detail: { measure: 1, beat: 2, hand: "rh", played: 72 } },
+      "Bar 1: RH extra note",
+    ],
+    [{ code: "note.early", detail: { ...at(4, "rh"), ms: 300 } }, "Bar 4: RH early"],
+    [{ code: "note.late", detail: { ...at(3, "lh"), ms: 300 } }, "Bar 3: LH late"],
+  ];
+
+  it.each(table)("%j", (error, line) => {
+    expect(describeError(error, names)).toBe(line);
+  });
+
+  it("falls back to the bar and hand alone when notes cannot be named", () => {
+    expect(
+      describeError({ code: "note.wrong", detail: { ...at(2, "lh"), expected: 50, played: 48 } }),
+    ).toBe("Bar 2: LH wrong note");
+    expect(describeError({ code: "note.missed", detail: at(2, "rh") })).toBe(
+      "Bar 2: RH missed a note",
+    );
+    expect(describeError({ code: "note.late" })).toBe("A note late");
+  });
+});

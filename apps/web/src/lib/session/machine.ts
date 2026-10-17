@@ -355,6 +355,10 @@ export function promptFor(
     if (play.kind === "sequence") return "Play these notes";
     if (play.kind === "line") return "Play this phrase";
     if (play.kind === "chordLine") return "Play these chords with your left hand";
+    if (play.kind === "performance") {
+      const hands = new Set(play.notes.map((n) => n.hand));
+      return hands.size > 1 ? "Play this with both hands" : "Play this phrase";
+    }
   }
   if (play?.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
   return mode === "away" ? "Tap it on the keyboard" : "Play it";
@@ -1753,6 +1757,12 @@ export function feedbackMarks(
       e.code === "chord.missed";
     const id = marksNote && typeof index === "number" ? ids[index] : undefined;
     if (id !== undefined) wrong.add(id);
+    // A performance (R27) names the note by id; a chord tone `n3.1` marks its chord `n3`.
+    const noteId = e.detail?.id;
+    if ((e.code === "note.wrong" || e.code === "note.missed") && typeof noteId === "string") {
+      const base = noteId.split(".")[0] ?? noteId;
+      if (ids.includes(base)) wrong.add(base);
+    }
   }
   return ids.map((noteId) => ({ noteId, kind: wrong.has(noteId) ? "wrong" : "target" }));
 }

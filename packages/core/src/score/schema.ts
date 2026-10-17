@@ -59,8 +59,8 @@ export const ScoreRestSchema = z.strictObject({
 export type ScoreRest = z.infer<typeof ScoreRestSchema>;
 
 /**
- * One staff. Measures live on the staff (not on the score) so that a later multi-staff
- * score can hold different content per staff.
+ * One staff. Measures live on the staff (not on the score) so that a grand staff can hold
+ * different content per staff.
  */
 export const StaffSpecSchema = z
   .strictObject({
@@ -74,10 +74,21 @@ export const StaffSpecSchema = z
   });
 export type StaffSpec = z.infer<typeof StaffSpecSchema>;
 
+/** Length of a measure in whole notes, so staves can be compared without a meter. */
+function measureWholes(measure: StaffSpec["measures"][number]): number {
+  return measure.reduce(
+    (sum, el) => sum + (1 / el.duration.value) * (el.duration.dots === 1 ? 1.5 : 1),
+    0,
+  );
+}
+
 export const ScoreSpecSchema = z
   .strictObject({
-    // M3 renders a single staff. M5 widens this to a grand staff and more.
-    staves: z.array(StaffSpecSchema).length(1),
+    /**
+     * One staff, or a grand staff (R27): treble then bass, joined by a brace, with the same
+     * number of measures and each measure as long on both staves.
+     */
+    staves: z.array(StaffSpecSchema).min(1).max(2),
     key: z.strictObject({ tonic: z.string(), mode: z.enum(["major", "minor"]) }).nullable(),
     meter: z
       .strictObject({
@@ -92,7 +103,37 @@ export const ScoreSpecSchema = z
       return new Set(ids).size === ids.length;
     },
     { message: "note ids must be unique across the score", path: ["staves"] },
-  );
+  )
+  .superRefine((s, ctx) => {
+    const [upper, lower] = s.staves;
+    if (upper === undefined || lower === undefined) return;
+    if (upper.clef !== "treble" || lower.clef !== "bass") {
+      ctx.addIssue({
+        code: "custom",
+        message: "a grand staff is a treble staff above a bass staff",
+        path: ["staves"],
+      });
+    }
+    if (upper.measures.length !== lower.measures.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "both staves of a grand staff need the same number of measures",
+        path: ["staves", 1, "measures"],
+      });
+      return;
+    }
+    upper.measures.forEach((m, i) => {
+      const other = lower.measures[i] ?? [];
+      // Durations are sums of powers of two, so the comparison is exact.
+      if (measureWholes(m) !== measureWholes(other)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `measure ${String(i + 1)} has a different length on each staff`,
+          path: ["staves", 1, "measures", i],
+        });
+      }
+    });
+  });
 export type ScoreSpec = z.infer<typeof ScoreSpecSchema>;
 
 /** Note ids in document order (staff by staff, measure by measure). */

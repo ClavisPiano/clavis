@@ -132,3 +132,42 @@ describe("replay of chords", () => {
     for (const e of events.slice(0, 3)) expect(e.durationSec).toBeGreaterThan(0.5);
   });
 });
+
+describe("replay of a two-hand performance", () => {
+  const performanceInstance = {
+    presentation: {},
+    display: {},
+    stimulus: {
+      tempoBpm: 60,
+      events: [0, 1, 2, 3].map((atSec) => ({
+        atSec,
+        midi: [84],
+        durationSec: 0.1,
+        velocity: 0.4,
+        role: "count-in",
+      })),
+    },
+    expected: {
+      responseWindowMs: 20000,
+      play: {
+        kind: "performance",
+        notes: [
+          { id: "n1", midi: 67, onsetBeats: 0, durationBeats: 1, hand: "rh" },
+          { id: "n3.0", midi: 43, onsetBeats: 0, durationBeats: 2, hand: "lh" },
+          { id: "n3.1", midi: 47, onsetBeats: 0, durationBeats: 2, hand: "lh" },
+          { id: "n2", midi: 69, onsetBeats: 1, durationBeats: 1, hand: "rh" },
+        ],
+        tempoBpm: 60,
+        beatsPerBar: 4,
+      },
+    },
+  } as unknown as ItemInstance;
+
+  it("plays the count-in, then both hands of each onset together", () => {
+    const spec = buildReplaySpec(performanceInstance, { notes: [], frames: [] });
+    const targets = spec.events.filter((e) => e.role === "target");
+    expect(targets.map((e) => e.midi)).toEqual([[67, 43, 47], [69]]);
+    expect((targets[1]?.atSec ?? 0) - (targets[0]?.atSec ?? 0)).toBeCloseTo(1, 5);
+    expect(spec.events.filter((e) => e.role === "count-in")).toHaveLength(4);
+  });
+});

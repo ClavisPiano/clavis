@@ -89,6 +89,28 @@ function displayTargetEvents(instance: ItemInstance): StimulusEvent[] {
         })),
       ];
     }
+    case "performance": {
+      // Both hands after the count-in, the notes of each onset struck together.
+      const beatSec = 60 / play.tempoBpm;
+      const countInEnd = countIn.reduce((end, e) => Math.max(end, e.atSec + beatSec), 0);
+      const onsets = [...new Set(play.notes.map((n) => n.onsetBeats))].sort((a, b) => a - b);
+      return [
+        ...countIn,
+        ...onsets.map((b) => {
+          const notes = play.notes.filter((n) => n.onsetBeats === b);
+          return {
+            atSec: countInEnd + b * beatSec,
+            midi: notes.map((n) => n.midi),
+            durationSec: Math.min(
+              TARGET_NOTE_SEC,
+              Math.min(...notes.map((n) => n.durationBeats)) * beatSec * 0.9,
+            ),
+            velocity: TARGET_VELOCITY,
+            role: "target" as const,
+          };
+        }),
+      ];
+    }
     case "rhythm": {
       const beatSec = 60 / play.tempoBpm;
       const countInEnd = countIn.reduce((end, e) => Math.max(end, e.atSec + beatSec), 0);

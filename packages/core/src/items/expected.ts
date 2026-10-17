@@ -98,6 +98,41 @@ export const ChordLineTargetSchema = z.strictObject({
 });
 export type ChordLineTarget = z.infer<typeof ChordLineTargetSchema>;
 
+/** The hand that plays a note: `rh` for the treble staff, `lh` for the bass staff (R27). */
+export const HandSchema = z.enum(["lh", "rh"]);
+export type Hand = z.infer<typeof HandSchema>;
+
+/**
+ * A grand-staff performance (R27): every note of both hands, octave exact and in time, graded by
+ * performance alignment (`alignPerformance` in scoring), so it needs polyphonic input (MIDI). Each
+ * note keeps its score id and its hand so errors can name the bar, beat and hand ("bar 3: LH
+ * late") and mark the note on the staff.
+ */
+export const PerformanceTargetSchema = z
+  .strictObject({
+    kind: z.literal("performance"),
+    notes: z
+      .array(
+        z.strictObject({
+          /** The score note id (`n3`), or `n3.1` for a tone of a chord, as `expectedFromScore`. */
+          id: z.string().min(1),
+          midi,
+          /** Onset in beats from the downbeat of the first bar, so bar and beat follow from it. */
+          onsetBeats: z.number().min(0),
+          durationBeats: z.number().positive(),
+          hand: HandSchema,
+        }),
+      )
+      .min(1),
+    tempoBpm: z.number().positive(),
+    beatsPerBar: z.int().positive(),
+  })
+  .refine((p) => new Set(p.notes.map((n) => n.id)).size === p.notes.length, {
+    message: "performance note ids must be unique",
+    path: ["notes"],
+  });
+export type PerformanceTarget = z.infer<typeof PerformanceTargetSchema>;
+
 export const ChoiceOptionSchema = z.strictObject({
   /** Stable id, recorded in errors: "major", "minor". */
   id: z.string().min(1),
@@ -132,6 +167,7 @@ export const PlayTargetSchema = z.discriminatedUnion("kind", [
   RhythmTargetSchema,
   LineTargetSchema,
   ChordLineTargetSchema,
+  PerformanceTargetSchema,
   ChoiceTargetSchema,
 ]);
 export type PlayTarget = z.infer<typeof PlayTargetSchema>;
