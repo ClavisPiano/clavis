@@ -22,7 +22,6 @@ const node: SkillNode = {
 
 const ctx = (seed = 1): GenerateContext => ({
   rng: createRng(seed),
-  voiceRange: { low: 48, high: 72 },
   mode: "instrument",
 });
 

@@ -6,9 +6,9 @@ import { z } from "zod";
  * types. Everything scoring needs is therefore precomputed here as data, for
  * example degree labels, so scoring never calls theory functions.
  *
- * R12: an attempt can have a sung part and a played part. At the instrument
- * both must be right for the attempt to be correct; in Away mode the single
- * part (`sing`, or `play` via taps) decides.
+ * R29: only the played part is graded, so every generator emits `play` and none emits `sing`.
+ * The `sing` targets are kept so that anything written under R12 (a sung part and a played part,
+ * both of which had to be right) still parses. Nothing reads them.
  */
 
 const midi = z.int().min(0).max(127);
@@ -172,6 +172,7 @@ export const PlayTargetSchema = z.discriminatedUnion("kind", [
 ]);
 export type PlayTarget = z.infer<typeof PlayTargetSchema>;
 
+/** Legacy (R29): no generator emits sung targets and scoring ignores them. Parse-only. */
 export const SungPitchTargetSchema = z.strictObject({
   kind: z.literal("sungPitch"),
   /** Octave-agnostic: the sung pitch class must be within tolerance of this note's. */
@@ -188,6 +189,7 @@ export const SungSequenceTargetSchema = z.strictObject({
   degreeLabels: DegreeLabelsSchema.optional(),
 });
 
+/** Legacy (R29): parse-only, see `SungPitchTargetSchema`. */
 export const SingTargetSchema = z.discriminatedUnion("kind", [
   SungPitchTargetSchema,
   SungSequenceTargetSchema,
@@ -196,6 +198,7 @@ export type SingTarget = z.infer<typeof SingTargetSchema>;
 
 export const ExpectedResponseSchema = z
   .strictObject({
+    /** Legacy (R12). Never set for new items and never graded. */
     sing: SingTargetSchema.optional(),
     play: PlayTargetSchema.optional(),
     /** How long after stimulus end a response is accepted before timing out. */

@@ -24,9 +24,6 @@ test("settings persist across reload as a settings.changed event", async ({ page
   await expect(page.getByTestId("budget")).toHaveValue("12");
 
   await page.getByTestId("budget").selectOption("20");
-  await page.getByTestId("range-preset").selectOption("low");
-  await expect(page.getByTestId("range-low")).toHaveValue("40");
-  await expect(page.getByTestId("range-high")).toHaveValue("64");
   await page.getByTestId("headphones-yes").check();
   await page.getByTestId("input-mode").selectOption("tap");
   await page.getByTestId("save").click();
@@ -34,8 +31,6 @@ test("settings persist across reload as a settings.changed event", async ({ page
 
   await page.reload();
   await expect(page.getByTestId("budget")).toHaveValue("20");
-  await expect(page.getByTestId("range-low")).toHaveValue("40");
-  await expect(page.getByTestId("range-high")).toHaveValue("64");
   await expect(page.getByTestId("headphones-yes")).toBeChecked();
   await expect(page.getByTestId("input-mode")).toHaveValue("tap");
 
@@ -62,14 +57,13 @@ test("about shows which build is running", async ({ page }) => {
   );
 });
 
-test("an inverted voice range is blocked", async ({ page }) => {
+test("there is no voice range control: singing is not graded (R29)", async ({ page }) => {
   await page.goto("/settings");
-  await page.getByTestId("range-low").selectOption("70");
-  await page.getByTestId("range-high").selectOption("60");
-  await expect(page.getByTestId("range-error")).toBeVisible();
-  await expect(page.getByTestId("save")).toBeDisabled();
-  await page.getByTestId("range-high").selectOption("72");
-  await expect(page.getByTestId("range-error")).toHaveCount(0);
+  await expect(page.getByTestId("budget")).toBeVisible();
+  await expect(page.getByTestId("range-preset")).toHaveCount(0);
+  await expect(page.getByTestId("range-low")).toHaveCount(0);
+  await expect(page.getByTestId("range-high")).toHaveCount(0);
+  await expect(page.getByText("Voice range")).toHaveCount(0);
   await expect(page.getByTestId("save")).toBeEnabled();
 });
 

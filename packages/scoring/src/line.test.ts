@@ -133,7 +133,7 @@ describe("scoreAttempt with a line target", () => {
     expect(r.subScores).toEqual({ play: 1 });
   });
 
-  it("tags errors as played", () => {
+  it("reports errors without a part tag (R29)", () => {
     const r = scoreAttempt({
       expected,
       notes: played(MIDI.slice(0, 3)),
@@ -141,7 +141,8 @@ describe("scoreAttempt with a line target", () => {
       source: "midi",
     });
     expect(r.outcome.correct).toBe(false);
-    expect(r.errors.every((e) => e.detail?.part === "play")).toBe(true);
+    expect(r.errors.length).toBeGreaterThan(0);
+    expect(r.errors.every((e) => e.detail?.part === undefined)).toBe(true);
   });
 });
 

@@ -361,7 +361,6 @@ describe("composeSession READ rules", () => {
       const inst = gen.generate(node, i.params, {
         rng: { next: () => 0.5, int: () => 0, pick: (x) => at(x, 0) },
         preferredKey: i.key,
-        voiceRange: { low: 36, high: 60 },
         mode: "instrument",
       });
       expect(inst.itemId).toBe(i.itemId);

@@ -7,9 +7,6 @@ import {
   isFirstRun,
   lastDays,
   minutesLabel,
-  noteName,
-  presetFor,
-  rangeError,
   settingsDiff,
   todaySummary,
   weekProgress,
@@ -37,33 +34,11 @@ function state(daily: Record<string, number>, sessions: Record<string, object> =
   } as unknown as LearnerState;
 }
 
-describe("noteName and presets", () => {
-  it("names MIDI notes", () => {
-    expect(noteName(60)).toBe("C4");
-    expect(noteName(40)).toBe("E2");
-    expect(noteName(69)).toBe("A4");
-    expect(noteName(70)).toBe("A#4");
-    expect(noteName(21)).toBe("A0");
-  });
-  it("maps presets both ways", () => {
-    expect(presetFor(40, 64)?.id).toBe("low");
-    expect(presetFor(45, 69)?.id).toBe("mid");
-    expect(presetFor(48, 72)?.id).toBe("high");
-    expect(presetFor(48, 73)).toBeUndefined();
-  });
-  it("blocks low >= high", () => {
-    expect(rangeError(60, 60)).toBeDefined();
-    expect(rangeError(61, 60)).toBeDefined();
-    expect(rangeError(48, 72)).toBeUndefined();
-  });
-});
-
 describe("settings", () => {
   it("applies defaults", () => {
     const e = effectiveSettings({});
     expect(e.budgetSec).toBe(720);
     expect(e.awayBudgetSec).toBe(300);
-    expect([e.voiceRangeLow, e.voiceRangeHigh]).toEqual([48, 72]);
     expect(e.weeklyTargetDays).toBe(5);
     expect(e.newItemsPerDay).toBe(5);
     expect(effectiveSettings({ newItemsPerDay: 9 }).newItemsPerDay).toBe(9);
@@ -80,13 +55,17 @@ describe("settings", () => {
     expect(hasStartedItems({ cards: {} } as unknown as LearnerState)).toBe(false);
     expect(hasStartedItems({ cards: { a: {} } } as unknown as LearnerState)).toBe(true);
   });
+  it("ignores a voice range stored before singing stopped being graded (R29)", () => {
+    const stored = { voiceRangeLow: 40, voiceRangeHigh: 64, budgetSec: 900 };
+    const e = effectiveSettings(stored);
+    expect(e).not.toHaveProperty("voiceRangeLow");
+    expect(e.budgetSec).toBe(900);
+    expect(settingsDiff(e, e)).toBeUndefined();
+  });
   it("diffs only changed keys", () => {
     const cur = effectiveSettings({});
     expect(settingsDiff(cur, cur)).toBeUndefined();
-    expect(settingsDiff(cur, { ...cur, budgetSec: 900, voiceRangeLow: 45 })).toEqual({
-      budgetSec: 900,
-      voiceRangeLow: 45,
-    });
+    expect(settingsDiff(cur, { ...cur, budgetSec: 900 })).toEqual({ budgetSec: 900 });
     expect(settingsDiff(cur, { ...cur, headphones: false })).toEqual({ headphones: false });
     expect(
       settingsDiff({ ...cur, headphones: true }, { ...cur, headphones: true }),

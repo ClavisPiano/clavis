@@ -1,22 +1,17 @@
 import { req } from "./util";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { ExpectedResponse, InputSource, NoteEvent, PitchFrame } from "@clavis/core";
+import type { ExpectedResponse, InputSource, NoteEvent } from "@clavis/core";
 import {
   RHYTHM_TOLERANCE_MS,
   align,
   analyseRhythm,
-  combineParts,
   compareSequences,
-  findStableSegments,
   scoreAttempt,
   scoreExactPitch,
   scorePitchClass,
   scoreRhythm,
   scoreSequence,
-  scoreSungPitch,
-  scoreSungSequence,
-  segmentSungNotes,
 } from "./index";
 
 // Degree labels in C major: C=1 ... A=6, B=7, chromatic degrees flat/sharp.
@@ -30,26 +25,6 @@ const note = (pitch: number, onsetMs: number, source: InputSource = "midi"): Not
   confidence: 1,
   source,
 });
-
-const hz = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
-
-/** Frames every 10 ms at a fractional midi pitch. */
-function frames(
-  midi: number,
-  fromMs: number,
-  toMs: number,
-  opts: { confidence?: number; hz?: number | null } = {},
-): PitchFrame[] {
-  const out: PitchFrame[] = [];
-  for (let t = fromMs; t <= toMs; t += 10) {
-    out.push({
-      hz: opts.hz === undefined ? hz(midi) : opts.hz,
-      confidence: opts.confidence ?? 0.95,
-      atMs: t,
-    });
-  }
-  return out;
-}
 
 describe("pitch class", () => {
   const base = {
@@ -113,96 +88,6 @@ describe("exact pitch", () => {
     const r = scoreExactPitch({ ...base, notes: [note(62, END + 500)] });
     expect(r.outcome.correct).toBe(false);
     expect(r.errors[0]?.code).toBe("pitch.wrong");
-  });
-});
-
-describe("sung pitch", () => {
-  const base = {
-    targetMidi: 69,
-    toleranceCents: 50,
-    stimulusEndMs: END,
-    responseWindowMs: WINDOW,
-    degreeLabels: LABELS,
-  };
-
-  it("accepts an in-tune pitch in any octave", () => {
-    const r = scoreSungPitch({ ...base, frames: frames(57, END + 400, END + 900) });
-    expect(r.outcome).toEqual({ correct: true, latencyMs: 400, retries: 0 });
-    expect(r.errors).toEqual([]);
-  });
-
-  it("accepts 30 cents flat", () => {
-    const r = scoreSungPitch({ ...base, frames: frames(69 - 0.3, END + 300, END + 800) });
-    expect(r.outcome.correct).toBe(true);
-  });
-
-  it("rejects 70 cents sharp with sing.sharp", () => {
-    const r = scoreSungPitch({ ...base, frames: frames(69.7, END + 300, END + 800) });
-    expect(r.outcome.correct).toBe(false);
-    expect(r.errors).toEqual([{ code: "sing.sharp", detail: { cents: 70 } }]);
-  });
-
-  it("reports sing.flat with cents", () => {
-    const r = scoreSungPitch({ ...base, frames: frames(68.4, END + 300, END + 800) });
-    expect(r.errors).toEqual([{ code: "sing.flat", detail: { cents: -60 } }]);
-  });
-
-  it("reports sing.none for low-confidence frames", () => {
-    const r = scoreSungPitch({
-      ...base,
-      frames: frames(69, END + 300, END + 1200, { confidence: 0.5 }),
-    });
-    expect(r.outcome).toEqual({ correct: false, latencyMs: WINDOW, retries: 0 });
-    expect(r.errors.map((e) => e.code)).toEqual(["sing.none"]);
-  });
-
-  it("reports sing.none for unvoiced frames and for too-short segments", () => {
-    expect(
-      scoreSungPitch({ ...base, frames: frames(69, END + 300, END + 1200, { hz: null }) }).errors[0]
-        ?.code,
-    ).toBe("sing.none");
-    expect(
-      scoreSungPitch({ ...base, frames: frames(69, END + 300, END + 450) }).errors[0]?.code,
-    ).toBe("sing.none");
-  });
-
-  it("reports sing.none for an unstable (gliding) voice", () => {
-    const glide: PitchFrame[] = [];
-    for (let t = 0; t <= 600; t += 10) {
-      glide.push({ hz: hz(60 + t / 50), confidence: 0.95, atMs: END + 100 + t });
-    }
-    expect(scoreSungPitch({ ...base, frames: glide }).errors[0]?.code).toBe("sing.none");
-  });
-
-  it("names a degree confusion when a 5th is sung for the 6th", () => {
-    const r = scoreSungPitch({ ...base, frames: frames(67, END + 300, END + 800) });
-    expect(r.outcome.correct).toBe(false);
-    expect(r.errors[0]?.code).toBe("degree.confusion.6-5");
-  });
-
-  it("falls back to pitch.wrong without labels", () => {
-    const r = scoreSungPitch({
-      ...base,
-      degreeLabels: undefined,
-      frames: frames(67, END + 300, END + 800),
-    });
-    expect(r.errors[0]?.code).toBe("pitch.wrong");
-  });
-
-  it("ignores frames before the stimulus end and skips a short blip to find a stable segment", () => {
-    const f = [
-      ...frames(60, END - 500, END - 100),
-      ...frames(75, END + 100, END + 150),
-      ...frames(69, END + 500, END + 900),
-    ];
-    const r = scoreSungPitch({ ...base, frames: f });
-    expect(r.outcome).toEqual({ correct: true, latencyMs: 500, retries: 0 });
-  });
-
-  it("finds stable segments with configurable confidence", () => {
-    const f = frames(69, 0, 400, { confidence: 0.7 });
-    expect(findStableSegments(f)).toHaveLength(0);
-    expect(findStableSegments(f, { minConfidence: 0.6 })).toHaveLength(1);
   });
 });
 
@@ -279,42 +164,6 @@ describe("sequence", () => {
     const r = run([]);
     expect(r.outcome).toEqual({ correct: false, latencyMs: WINDOW, retries: 0, partial: 0 });
     expect(r.errors[0]?.code).toBe("response.timeout");
-  });
-});
-
-describe("sung sequence", () => {
-  const sing = (midis: number[], gapMs = 50) => {
-    const f: PitchFrame[] = [];
-    let t = END + 300;
-    for (const m of midis) {
-      f.push(...frames(m, t, t + 300));
-      t += 300 + gapMs;
-    }
-    return f;
-  };
-  const base = { midi: [60, 62, 64], stimulusEndMs: END, responseWindowMs: WINDOW };
-
-  it("splits notes by gap and by pitch change", () => {
-    expect(segmentSungNotes(sing([60, 62, 64]))).toHaveLength(3);
-    expect(segmentSungNotes(sing([60, 62, 64], 0))).toHaveLength(3);
-  });
-
-  it("scores a perfect sung sequence in another octave", () => {
-    const r = scoreSungSequence({ ...base, frames: sing([48, 50, 52]) });
-    expect(r.outcome).toEqual({ correct: true, latencyMs: 300, retries: 0, partial: 1 });
-  });
-
-  it("flags a wrong sung note and a missing one", () => {
-    const wrong = scoreSungSequence({ ...base, frames: sing([60, 63, 64]) });
-    expect(wrong.errors.map((e) => e.code)).toEqual(["sequence.wrong-note"]);
-    const missing = scoreSungSequence({ ...base, frames: sing([60, 64]) });
-    expect(missing.errors.map((e) => e.code)).toEqual(["sequence.missing"]);
-  });
-
-  it("reports sing.none when silent", () => {
-    const r = scoreSungSequence({ ...base, frames: [] });
-    expect(r.errors[0]?.code).toBe("sing.none");
-    expect(r.outcome.partial).toBe(0);
   });
 });
 
@@ -437,88 +286,48 @@ describe("rhythm", () => {
 });
 
 describe("scoreAttempt", () => {
-  const degreeSing: ExpectedResponse = {
-    sing: { kind: "sungPitch", targetMidi: 69, toleranceCents: 50 },
+  const degree: ExpectedResponse = {
     play: { kind: "pitchClass", targetMidi: 69, degreeLabels: LABELS },
     responseWindowMs: WINDOW,
   };
 
-  it("is incorrect when the sung part is wrong, even with the right played note (R12)", () => {
-    const r = scoreAttempt({
-      expected: degreeSing,
+  it("grades the played part only (R29)", () => {
+    const right = scoreAttempt({
+      expected: degree,
       notes: [note(57, END + 900)],
-      frames: frames(69.7, END + 300, END + 800),
       stimulusEndMs: END,
       source: "midi",
     });
-    expect(r.outcome).toEqual({ correct: false, latencyMs: 900, retries: 0 });
-    expect(r.subScores).toEqual({ sing: 0, play: 1 });
-    expect(r.errors).toEqual([{ code: "sing.sharp", detail: { cents: 70, part: "sing" } }]);
+    expect(right.outcome).toEqual({ correct: true, latencyMs: 900, retries: 0 });
+    expect(right.subScores).toEqual({ play: 1 });
+    expect(right.errors).toEqual([]);
   });
 
-  it("is correct when both parts are right, with latency from the played part", () => {
+  it("names a degree confusion without any sung wording", () => {
     const r = scoreAttempt({
-      expected: degreeSing,
-      notes: [note(57, END + 900)],
-      frames: frames(69, END + 300, END + 800),
-      stimulusEndMs: END,
-      source: "midi",
-    });
-    expect(r.outcome).toEqual({ correct: true, latencyMs: 900, retries: 0 });
-    expect(r.errors).toEqual([]);
-  });
-
-  it("names sung confusion with labels from the play target", () => {
-    const r = scoreAttempt({
-      expected: degreeSing,
+      expected: degree,
       notes: [note(67, END + 600), note(69, END + 1500)],
-      frames: frames(67, END + 300, END + 800),
       stimulusEndMs: END,
       source: "midi",
     });
     expect(r.outcome.retries).toBe(1);
-    // Play and sing both report the same confusion with different detail; play comes first.
     expect(r.errors[0]?.code).toBe("degree.confusion.6-5");
+    expect(JSON.stringify(r.errors)).not.toMatch(/sing|sung/i);
   });
 
-  it("uses sing for the outcome when only a sung part exists (Away)", () => {
+  it("ignores a legacy sung target on the expected response", () => {
+    const legacy: ExpectedResponse = {
+      ...degree,
+      sing: { kind: "sungPitch", targetMidi: 60, toleranceCents: 50 },
+    };
     const r = scoreAttempt({
-      expected: { sing: degreeSing.sing, responseWindowMs: WINDOW },
-      notes: [],
-      frames: frames(69, END + 400, END + 900),
+      expected: legacy,
+      notes: [note(57, END + 900)],
       stimulusEndMs: END,
-      source: "mic",
+      source: "midi",
     });
-    expect(r.outcome).toEqual({ correct: true, latencyMs: 400, retries: 0 });
-    expect(r.subScores).toEqual({ sing: 1 });
-  });
-
-  it("names a sung confusion from the sing target's own labels (Away, sing only)", () => {
-    const r = scoreAttempt({
-      expected: {
-        sing: { kind: "sungPitch", targetMidi: 69, toleranceCents: 50, degreeLabels: LABELS },
-        responseWindowMs: WINDOW,
-      },
-      notes: [],
-      frames: frames(67, END + 400, END + 900),
-      stimulusEndMs: END,
-      source: "mic",
-    });
-    expect(r.outcome.correct).toBe(false);
-    expect(r.errors[0]?.code).toBe("degree.confusion.6-5");
-  });
-
-  it("honours part to score only singing", () => {
-    const r = scoreAttempt({
-      expected: degreeSing,
-      notes: [],
-      frames: frames(69, END + 400, END + 900),
-      stimulusEndMs: END,
-      source: "mic",
-      part: "sing",
-    });
-    expect(r.subScores).toEqual({ sing: 1 });
     expect(r.outcome.correct).toBe(true);
+    expect(r.subScores).toEqual({ play: 1 });
   });
 
   it("scores Away-style play via taps (rhythm)", () => {
@@ -554,14 +363,16 @@ describe("scoreAttempt", () => {
     expect(r.subScores.play).toBeCloseTo(2 / 3);
   });
 
-  it("throws when the requested part is not expected", () => {
+  it("throws when the item has no play target", () => {
     expect(() =>
       scoreAttempt({
-        expected: { sing: degreeSing.sing, responseWindowMs: WINDOW },
+        expected: {
+          sing: { kind: "sungPitch", targetMidi: 69, toleranceCents: 50 },
+          responseWindowMs: WINDOW,
+        },
         notes: [],
         stimulusEndMs: END,
         source: "midi",
-        part: "play",
       }),
     ).toThrow(RangeError);
   });
@@ -651,51 +462,5 @@ describe("properties", () => {
         },
       ),
     );
-  });
-});
-
-describe("combineParts (R12)", () => {
-  const part = (
-    correct: boolean,
-    latencyMs: number,
-    errors: { code: string }[] = [],
-    partial?: number,
-  ) => ({
-    outcome: { correct, latencyMs, retries: 0, ...(partial === undefined ? {} : { partial }) },
-    errors,
-  });
-
-  it.each([
-    ["both right", true, true, true],
-    ["sung wrong", false, true, false],
-    ["played wrong", true, false, false],
-    ["both wrong", false, false, false],
-  ] as const)("%s -> correct %s", (_name, sing, play, correct) => {
-    const r = combineParts({ sing: part(sing, 300), play: part(play, 900) });
-    expect(r.outcome).toEqual({ correct, latencyMs: 900, retries: 0 });
-  });
-
-  it("averages sub-scores into partial when a part has partial credit", () => {
-    const r = combineParts({ sing: part(false, 300, [], 0.5), play: part(true, 900) });
-    expect(r.outcome.partial).toBe(0.75);
-  });
-
-  it("uses a single part as is", () => {
-    expect(combineParts({ sing: part(true, 400) }).outcome).toEqual({
-      correct: true,
-      latencyMs: 400,
-      retries: 0,
-    });
-  });
-
-  it("tags errors with their part, played first", () => {
-    const r = combineParts({
-      sing: part(false, 300, [{ code: "degree.confusion.1-5" }]),
-      play: part(false, 900, [{ code: "degree.confusion.1-5" }]),
-    });
-    expect(r.errors).toEqual([
-      { code: "degree.confusion.1-5", detail: { part: "play" } },
-      { code: "degree.confusion.1-5", detail: { part: "sing" } },
-    ]);
   });
 });

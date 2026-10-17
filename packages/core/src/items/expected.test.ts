@@ -4,7 +4,7 @@ import { ExpectedResponseSchema } from "./expected.js";
 const labels = ["1", "b2", "2", "b3", "3", "4", "#4", "5", "b6", "6", "b7", "7"];
 
 describe("ExpectedResponseSchema", () => {
-  it("accepts a sing-then-play degree item", () => {
+  it("still parses a sing-then-play item written under R12", () => {
     const r = ExpectedResponseSchema.safeParse({
       sing: { kind: "sungPitch", targetMidi: 64, toleranceCents: 50 },
       play: { kind: "pitchClass", targetMidi: 64, degreeLabels: labels },

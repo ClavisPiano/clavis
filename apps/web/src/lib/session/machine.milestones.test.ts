@@ -1,11 +1,11 @@
 import { createUlidGenerator, type LearningEvent } from "@clavis/core";
 import { describe, expect, it } from "vitest";
-import { T0, makeHarness, playCorrect, singCorrect, type Harness } from "./test-harness";
+import { T0, makeHarness, playCorrect, type Harness } from "./test-harness";
 
 /* T6.3: the summary names the capability milestones first earned in the session. */
 
 const NODE = "ear.degrees.major.135";
-const STATEMENT = "You can hear and sing scale degrees 1, 3 and 5 in any major key.";
+const STATEMENT = "You can hear scale degrees 1, 3 and 5 in any major key and play them.";
 const DAY = 86_400_000;
 
 /**
@@ -86,7 +86,7 @@ async function until(h: Harness, pred: () => boolean, maxMs = 60_000): Promise<v
   if (!pred()) throw new Error(`stuck in ${JSON.stringify(h.machine.state)}`);
 }
 
-/** From presenting to feedback, answering every phase correctly (as machine.test.ts does). */
+/** From presenting to feedback, answering correctly (as machine.test.ts does). */
 async function playItem(h: Harness): Promise<void> {
   for (;;) {
     for (let t = 0; t < 60_000; t += 50) {
@@ -99,16 +99,11 @@ async function playItem(h: Harness): Promise<void> {
     if (s.kind !== "listening") throw new Error(`stuck in ${s.kind}`);
     const expected = h.machine.debug().expected;
     if (!expected) throw new Error("no expected response");
-    const start = h.clock.ctxMs + 200;
-    if (s.phase === "sing") singCorrect(h.input, expected, start);
-    else playCorrect(h.input, expected, start);
+    if (s.cue) h.machine.ready();
+    playCorrect(h.input, expected, h.clock.ctxMs + 200);
     await h.machine.settled();
     if (h.machine.state.kind === "feedback") return;
-    const phase = s.phase;
-    await until(h, () => {
-      const x = h.machine.state;
-      return !(x.kind === "listening" && x.phase === phase);
-    });
+    await until(h, () => h.machine.state.kind !== "listening");
   }
 }
 

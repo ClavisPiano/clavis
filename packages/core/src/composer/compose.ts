@@ -53,7 +53,7 @@ type Registry = Partial<Record<GeneratorId, Generator>>;
 /** New piece phrases offered in one session (MP). Later phrases wait for the next one. */
 export const APPLY_NEW_PHRASES_PER_SESSION = 2;
 
-/** New phrases to play by ear in a session (TP.6): hearing and singing is slower than reading. */
+/** New phrases to play by ear in a session (TP.6): hearing and recalling is slower than reading. */
 export const APPLY_NEW_EAR_PHRASES_PER_SESSION = 1;
 
 /** New left-hand chord items (HANDS, T5.3) offered in one session. Each takes a while to play. */
@@ -140,8 +140,9 @@ function buildInfo(
 
 /**
  * Generator for the next item of a node (R14). The default is the node's first usable generator.
- * Degree nodes offer both `degreeSing` and `degreeId`; they alternate (sing first) with each item
- * the node contributes to the plan, so a block mixes production modes.
+ * Degree nodes offer both `degreeSing` and `degreeId`; they alternate (`degreeSing` first) with each
+ * item the node contributes to the plan. Since R29 both generate the same play-only item, so the
+ * alternation is kept only so that plans and golden tests stay stable.
  */
 const RHYTHM_GENERATORS: readonly GeneratorId[] = ["rhythmEcho", "rhythmRead"];
 

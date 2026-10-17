@@ -38,8 +38,6 @@ const RHYTHM_TIMING =
 const RHYTHM_EXTRA = "Listen for the silences too: a rest still takes up its beat.";
 const RHYTHM_TEMPO =
   "Feel the beat under the rhythm and keep it steady. The gaps are measured against your own tempo.";
-const SING_NONE =
-  'Sing on an open vowel such as "ah", loud enough to be heard, and hold the note steady for about a second.';
 
 const PITCH_OCTAVE =
   "Right letter, wrong octave. Count ledger lines from middle C, or up and down from the F line, and check which register your hand is in.";
@@ -91,8 +89,6 @@ function tipFor(error: AttemptError, mode: TipMode, opts?: TipOptions): ConceptT
       return { text: PITCH_OCTAVE };
     case "pitch.wrong":
       return opts?.reading === true ? { text: READ_PITCH_WRONG } : undefined;
-    case "sing.none":
-      return { text: SING_NONE };
     default:
       return undefined;
   }
