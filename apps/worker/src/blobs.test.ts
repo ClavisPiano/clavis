@@ -151,6 +151,27 @@ describe("blob routes", () => {
     expect(bucket.keys()).toEqual([]);
   });
 
+  it("rejects a non-numeric content-length with 400", async () => {
+    const { env, bucket } = setup();
+    // undici computes content-length from the body, so hand the Worker a header it cannot parse.
+    const req = new Request(`${ORIGIN}/api/blobs/n.webm`, {
+      method: "PUT",
+      headers: await auth("u1", { "content-type": "audio/webm", origin: ORIGIN }),
+      body: new Uint8Array([1, 2, 3]),
+    });
+    const headers = new Headers(req.headers);
+    headers.set("content-length", "abc");
+    const res = await worker.fetch(
+      new Proxy(req, {
+        get: (target, prop): unknown =>
+          prop === "headers" ? headers : (Reflect.get(target, prop, target) as unknown),
+      }),
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect(bucket.keys()).toEqual([]);
+  });
+
   it("accepts a body exactly at the limit", async () => {
     const { env } = setup();
     expect((await put(env, "u1", "max.webm", new Uint8Array(MAX_BLOB_BYTES))).status).toBe(200);

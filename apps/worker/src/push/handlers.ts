@@ -59,6 +59,26 @@ async function readBody<S extends z.ZodType>(
 
 const invalidRequest = (): Response => json({ error: "invalid_request" }, 400);
 
+const EndpointOnly = z.object({ subscription: z.object({ endpoint: z.string().max(2048) }) });
+
+/** The host of a well-formed https endpoint that the allowlist refused, else undefined. */
+async function rejectedEndpointHost(request: Request): Promise<string | undefined> {
+  const body = await readBody(request, EndpointOnly);
+  if (!body || isAcceptableEndpoint(body.subscription.endpoint)) return undefined;
+  try {
+    const url = new URL(body.subscription.endpoint);
+    return url.protocol === "https:" ? url.hostname : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** True for a real `YYYY-MM-DD` date: `Date.parse` alone would accept 2026-02-31 on some runtimes. */
+export function isCalendarDay(day: string): boolean {
+  const ms = Date.parse(`${day}T00:00:00Z`);
+  return !Number.isNaN(ms) && new Date(ms).toISOString().slice(0, 10) === day;
+}
+
 /** Routes `/api/push/*`. */
 export async function handlePush(request: Request, url: URL, env: Env): Promise<Response> {
   if (url.pathname === "/api/push/key") {
@@ -79,8 +99,15 @@ export async function handlePush(request: Request, url: URL, env: Env): Promise<
   const repo = createPushRepo(d1Sql(env.DB));
 
   if (isSubscription && request.method === "PUT") {
+    const copy = request.clone();
     const body = await readBody(request, SubscribeBody);
-    if (!body) return invalidRequest();
+    if (!body) {
+      // A browser moving to a push service not in the allowlist shows up here, so log the host
+      // (never the full endpoint: its path is a bearer capability for that device).
+      const host = await rejectedEndpointHost(copy);
+      if (host) console.warn(`push subscribe: endpoint host not allowed: ${host}`);
+      return invalidRequest();
+    }
     await repo.upsert(
       {
         endpoint: body.subscription.endpoint,
@@ -104,7 +131,7 @@ export async function handlePush(request: Request, url: URL, env: Env): Promise<
     return json({ ok: true });
   }
   const body = await readBody(request, PractisedBody);
-  if (!body || Number.isNaN(Date.parse(body.day))) return invalidRequest();
+  if (!body || !isCalendarDay(body.day)) return invalidRequest();
   // Any real time zone is within a day of UTC, so a day far from now is a bad clock or a probe.
   if (Math.abs(daysBetween(learnerDay(nowMs(env), 0), body.day)) > 2) return invalidRequest();
   await repo.markPractised(userId, body.day);

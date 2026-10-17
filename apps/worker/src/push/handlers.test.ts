@@ -1,10 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import worker from "../index";
 import { signSession } from "../auth/session";
 import type { Env } from "../env";
 import { ORIGIN, SECRET, fakeD1, makeEnv } from "../test-support";
 import { isAcceptableEndpoint } from "./endpoint";
+import { isCalendarDay } from "./handlers";
 import { MAX_SUBSCRIPTIONS_PER_USER } from "./repo";
 
 const NOW = Date.UTC(2026, 9, 12, 0, 0, 0);
@@ -330,6 +331,52 @@ describe("POST /api/push/practised", () => {
       { user: null },
     );
     expect(res.status).toBe(401);
+  });
+});
+
+describe("isCalendarDay", () => {
+  it.each([
+    ["2026-10-12", true],
+    ["2024-02-29", true],
+    ["2026-02-29", false],
+    ["2026-02-31", false],
+    ["2026-04-31", false],
+    ["2026-13-01", false],
+    ["2026-1-01", false],
+  ])("%s", (day, ok) => {
+    expect(isCalendarDay(day)).toBe(ok);
+  });
+});
+
+describe("subscribe logging", () => {
+  it("logs the host, never the endpoint path, when the allowlist refuses an endpoint", async () => {
+    const { env } = setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const res = await call(
+      env,
+      "PUT",
+      "/api/push/subscription",
+      subscribeBody("https://push.newbrowser.example/secret-token"),
+    );
+    expect(res.status).toBe(400);
+    expect(warn).toHaveBeenCalledOnce();
+    const message = String(warn.mock.calls[0]?.[0]);
+    expect(message).toContain("push.newbrowser.example");
+    expect(message).not.toContain("secret-token");
+    warn.mockRestore();
+  });
+
+  it("does not log other invalid bodies", async () => {
+    const { env } = setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await call(
+      env,
+      "PUT",
+      "/api/push/subscription",
+      subscribeBody(undefined, { tzOffsetMin: 9999 }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 
