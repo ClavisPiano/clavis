@@ -61,7 +61,7 @@ pnpm --filter @clavis/worker exec wrangler d1 migrations apply clavis --remote
 pnpm --filter @clavis/worker exec wrangler d1 migrations apply clavis --local
 ```
 
-- Set `RP_ID` (bare host, for example `clavis.me.workers.dev`) and `EXPECTED_ORIGIN` (`https://clavis.me.workers.dev`) in `vars` in `wrangler.jsonc`. They default to localhost values. A passkey is bound to `RP_ID`, so changing it later orphans existing passkeys; pick the final host first (moving to a custom domain means a new RP id, so users re-register or use recovery codes).
+- Set `RP_ID` (bare host, for example `clavis.me.workers.dev`) and `EXPECTED_ORIGIN` (`https://clavis.me.workers.dev`) in `vars` in `wrangler.jsonc`. They are set to the production host (`clavis.clavis-7fc.workers.dev`); for `wrangler dev`, override them in `apps/worker/.dev.vars` with `RP_ID=localhost` and `EXPECTED_ORIGIN=http://localhost:8787`. A passkey is bound to `RP_ID`, so changing it later orphans existing passkeys; pick the final host first (moving to a custom domain means a new RP id, so users re-register or use recovery codes).
 - `SESSION_SECRET` (above) must be set before any login works.
 - Migrations are numbered files in `apps/worker/migrations/`. Never edit a shipped one; add the next number.
 - `@simplewebauthn/server` runs on Workers without `nodejs_compat`: it only uses WebCrypto (`globalThis.crypto`) and pure JS dependencies, and imports no Node built-ins. No compatibility flag is set. If a future upgrade starts importing `node:` modules, `wrangler deploy --dry-run` will fail and `nodejs_compat` must be added.
