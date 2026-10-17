@@ -337,6 +337,29 @@ export function choiceQuestion(options: readonly ChoiceOption[]): string {
   return `${labels.slice(0, -1).join(", ")} or ${last}?`;
 }
 
+/** A single-line left-hand pattern (broken, Alberti, pop), T5.7. */
+function isLeftHandLine(instance: ItemInstance): boolean {
+  return instance.generator === "lhPatternVariants" && instance.expected.play?.kind === "line";
+}
+
+/**
+ * Chord labels shown beside the staff: each chord of a chord line (T5.3), or the chords a left-hand
+ * pattern line is built on, from its presentation (T5.7).
+ */
+function chordLabelsOf(instance: ItemInstance): { chords?: { roman: string; symbol: string }[] } {
+  const play = instance.expected.play;
+  if (play?.kind === "chordLine") {
+    return { chords: play.chords.map((c) => ({ roman: c.roman, symbol: c.symbol })) };
+  }
+  const { prog, symbols } = instance.presentation;
+  const strings = (v: unknown): v is string[] =>
+    Array.isArray(v) && v.every((x) => typeof x === "string");
+  if (isLeftHandLine(instance) && strings(prog) && strings(symbols)) {
+    return { chords: prog.map((roman, i) => ({ roman, symbol: symbols[i] ?? "" })) };
+  }
+  return {};
+}
+
 export function promptFor(
   phase: Phase,
   phases: readonly Phase[],
@@ -1141,14 +1164,7 @@ export class SessionMachine {
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
-      ...(cur.instance.expected.play?.kind === "chordLine"
-        ? {
-            chords: cur.instance.expected.play.chords.map((c) => ({
-              roman: c.roman,
-              symbol: c.symbol,
-            })),
-          }
-        : {}),
+      ...chordLabelsOf(cur.instance),
     };
   }
 
@@ -1235,6 +1251,10 @@ export class SessionMachine {
   }
 
   #promptFor(cur: Current, phase: Phase): string {
+    // Broken and pop left-hand patterns (T5.7) are lines, but the hand matters.
+    if (isLeftHandLine(cur.instance) && phase === "play" && this.#d.mode === "instrument") {
+      return "Play this pattern with your left hand";
+    }
     return promptFor(
       phase,
       cur.phases,

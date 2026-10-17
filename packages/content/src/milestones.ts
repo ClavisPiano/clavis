@@ -58,6 +58,20 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can play root position I, IV, V and vi chords with your left hand in any key.",
   },
   {
+    nodeId: "hands.lh.inversions",
+    statement:
+      "You can move between I, IV, V and vi chords with your left hand using inversions, keeping shared notes still.",
+  },
+  {
+    nodeId: "hands.lh.broken",
+    statement: "You can play broken chords and an Alberti bass with your left hand in any key.",
+  },
+  {
+    nodeId: "hands.lh.pop",
+    statement:
+      "You can play root, fifth and octave patterns, straight and syncopated, with your left hand.",
+  },
+  {
     nodeId: "ear.degrees.minor",
     statement: "You can hear and sing the degrees of a minor scale in any key.",
   },
