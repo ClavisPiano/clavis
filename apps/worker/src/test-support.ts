@@ -1,7 +1,51 @@
 import { DatabaseSync } from "node:sqlite";
 import type { SqlLike } from "./event-log";
 import { UserEvents } from "./user-events";
-import type { Env } from "./index";
+import type { Env } from "./env";
+import migration from "../migrations/0001_auth.sql?raw";
+
+/** SQLite wants Uint8Array for BLOBs; D1 binds ArrayBuffer. */
+const toSqliteValue = (v: unknown): unknown => (v instanceof ArrayBuffer ? new Uint8Array(v) : v);
+
+/**
+ * Fake `D1Database` over Node SQLite with the migrations applied. Implements just the calls the
+ * `d1Sql` adapter makes: `prepare().bind().run()/all()` and `batch()` (atomic).
+ */
+export function fakeD1(db: DatabaseSync = new DatabaseSync(":memory:")): D1Database {
+  db.exec(migration);
+  const prepare = (query: string) => ({
+    bind: (...bindings: unknown[]) => {
+      const values = bindings.map(toSqliteValue);
+      const stmt = {
+        run: () => {
+          db.prepare(query).run(...values);
+          return Promise.resolve({ success: true });
+        },
+        all: () => Promise.resolve({ success: true, results: db.prepare(query).all(...values) }),
+        exec: () => db.prepare(query).run(...values),
+      };
+      return stmt;
+    },
+  });
+  const d1 = {
+    prepare,
+    batch: (statements: { exec: () => void }[]) => {
+      db.exec("BEGIN");
+      try {
+        for (const s of statements) s.exec();
+        db.exec("COMMIT");
+        return Promise.resolve([]);
+      } catch (error) {
+        db.exec("ROLLBACK");
+        return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    },
+  };
+  return d1 as unknown as D1Database;
+}
+
+export const RP_ID = "clavis.example";
+export const ORIGIN = "https://clavis.example";
 
 /** `SqlLike` over an in-memory Node SQLite database (same engine family as DO storage). */
 export function nodeSql(db: DatabaseSync = new DatabaseSync(":memory:")): SqlLike {
@@ -69,6 +113,9 @@ export function makeEnv(overrides: Partial<Env> = {}): { env: Env; seen: string[
     VERSION: "abc123",
     USER_EVENTS: fakeNamespace(),
     SESSION_SECRET: SECRET,
+    DB: fakeD1(),
+    RP_ID,
+    EXPECTED_ORIGIN: ORIGIN,
     ...overrides,
   };
   return { env, seen };

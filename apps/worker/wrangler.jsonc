@@ -12,7 +12,24 @@
   },
   "vars": {
     "VERSION": "dev",
+    // WebAuthn relying party. RP_ID is the bare host, EXPECTED_ORIGIN the exact origin the app is
+    // served from (checked on every auth POST). Set to the production workers.dev host; for
+    // `wrangler dev`, override both in apps/worker/.dev.vars (RP_ID=localhost,
+    // EXPECTED_ORIGIN=http://localhost:8787), or passkeys will not verify locally.
+    "RP_ID": "clavis.clavis-7fc.workers.dev",
+    "EXPECTED_ORIGIN": "https://clavis.clavis-7fc.workers.dev",
   },
+  // Accounts and passkeys. The production database was created with
+  //   pnpm --filter @clavis/worker exec wrangler d1 create clavis
+  // Apply migrations with `wrangler d1 migrations apply clavis --remote` (see docs/deploy.md).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clavis",
+      "database_id": "9bba0857-9b94-47f9-8190-53c3612dea0e",
+      "migrations_dir": "migrations",
+    },
+  ],
   // SESSION_SECRET is a secret, never put it here: `wrangler secret put SESSION_SECRET`.
   "durable_objects": {
     "bindings": [{ "name": "USER_EVENTS", "class_name": "UserEvents" }],
