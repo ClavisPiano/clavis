@@ -123,11 +123,11 @@
   <section class="card" data-testid="welcome" aria-labelledby="welcome-h">
     <h2 id="welcome-h">Welcome</h2>
     <p>
-      A session is a short, focused run of ear and piano exercises. You sing or play, Clavis
-      listens, and it picks what to practise next. A few minutes a day is enough.
+      A session is a short, focused run of ear and piano exercises. You listen, then play it back.
+      Clavis checks what you played and picks what to practise next. A few minutes a day is enough.
     </p>
     <p>
-      Before you start, check your comfortable singing range in
+      Choose how you play (a MIDI keyboard, the microphone or the on-screen keys) in
       <a href={resolve("/settings")}>Settings</a>.
     </p>
   </section>

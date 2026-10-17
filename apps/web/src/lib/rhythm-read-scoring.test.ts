@@ -22,7 +22,6 @@ describe("rhythmRead against scoreRhythm", () => {
     for (const params of items) {
       const inst = rhythmRead.generate(node, params, {
         rng: createRng(7),
-        voiceRange: { low: 48, high: 72 },
         mode: "instrument",
       });
       const play = inst.expected.play;

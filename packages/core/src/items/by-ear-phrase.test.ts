@@ -17,7 +17,7 @@ import {
 import { ExpectedResponseSchema } from "./expected.js";
 import { itemId } from "./ids.js";
 import { lineNotes } from "./piece-line.js";
-import type { GenerateContext } from "./types.js";
+import { DEFAULT_KEYBOARD_RANGE, type GenerateContext } from "./types.js";
 
 const NODE: SkillNode = {
   id: "byear.melody.simple",
@@ -29,10 +29,9 @@ const NODE: SkillNode = {
   mastery: { minAccuracy: 0.8, windowAttempts: 5, distinctSessions: 2 },
   keyDependent: false,
 };
-const VOICE: VoiceRange = { low: 48, high: 72 };
+const KEYBOARD: VoiceRange = { low: 48, high: 84 };
 const ctx = (seed: number, extra: Partial<GenerateContext> = {}): GenerateContext => ({
   rng: createRng(seed),
-  voiceRange: VOICE,
   mode: "instrument",
   ...extra,
 });
@@ -149,7 +148,7 @@ describe("byEarPhrase.generate", () => {
     }
   });
 
-  it("plays diatonic notes in the key, in the voice range, after the cadence", () => {
+  it("plays diatonic notes in the key, in the keyboard range, after the cadence", () => {
     fc.assert(
       fc.property(
         fc.constantFrom(...items),
@@ -162,8 +161,8 @@ describe("byEarPhrase.generate", () => {
           const midi = inst.presentation.targetMidi as number[];
           expect(midi).toEqual(degrees.map((d) => degreeToMidi(key, d, tonicMidi)));
           for (const m of midi) {
-            expect(m).toBeGreaterThanOrEqual(VOICE.low);
-            expect(m).toBeLessThanOrEqual(VOICE.high);
+            expect(m).toBeGreaterThanOrEqual(DEFAULT_KEYBOARD_RANGE.low);
+            expect(m).toBeLessThanOrEqual(DEFAULT_KEYBOARD_RANGE.high);
           }
           const cadence = inst.stimulus.events.filter((e) => e.role === "cadence");
           const targets = inst.stimulus.events.filter((e) => e.role === "target");
@@ -174,6 +173,27 @@ describe("byEarPhrase.generate", () => {
         },
       ),
       { numRuns: 120 },
+    );
+  });
+
+  it("follows a narrower keyboard range when one is given", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...items),
+        fc.constantFrom(...MAJOR_KEYS),
+        fc.integer({ min: 0, max: 1000 }),
+        (p, key, seed) => {
+          const inst = byEarPhrase.generate(
+            NODE,
+            p,
+            ctx(seed, { preferredKey: key, keyboardRange: KEYBOARD }),
+          );
+          const midi = inst.presentation.targetMidi as number[];
+          expect(Math.min(...midi)).toBeGreaterThanOrEqual(KEYBOARD.low);
+          expect(Math.max(...midi)).toBeLessThanOrEqual(KEYBOARD.high);
+        },
+      ),
+      { numRuns: 60 },
     );
   });
 
@@ -189,11 +209,12 @@ describe("byEarPhrase.generate", () => {
     expect(inst.display).toBeUndefined();
   });
 
-  it("expects a sung sequence, then the same line played (R12)", () => {
+  it("expects only the played line, with an ungraded sing cue (R29)", () => {
     const inst = byEarPhrase.generate(NODE, first, ctx(1));
     const { sing, play } = inst.expected;
-    if (sing?.kind !== "sungSequence" || play?.kind !== "line") throw new Error("shape");
-    expect(sing.midi).toEqual(play.midi);
+    expect(sing).toBeUndefined();
+    expect(inst.cue).toBe(true);
+    if (play?.kind !== "line") throw new Error("shape");
     expect(play.midi).toEqual(inst.presentation.targetMidi);
     expect(play.onsetsBeats[0]).toBe(0);
     expect(play.beatsPerBar).toBe(4);

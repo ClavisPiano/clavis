@@ -17,8 +17,6 @@ export interface GenerateContext {
   rng: Rng;
   /** Key of the day. Used when its mode matches the item's mode (spec 6.3). */
   preferredKey?: Key;
-  /** Singable range, for sung items. */
-  voiceRange: VoiceRange;
   /** Range for played items. Defaults to C3..C6. */
   keyboardRange?: VoiceRange;
   mode: SessionMode;
@@ -54,6 +52,12 @@ export interface ItemInstance {
   reveal?: ScoreSpec;
   /** Playable range for the on-screen keyboard or MIDI input, when it differs from the default. */
   inputRange?: VoiceRange;
+  /**
+   * Audiate before playing (R29): once the stimulus has ended the learner is asked to sing or hum
+   * it, out loud or in their head, and answers when ready. Ungraded and untimed: nothing listens
+   * to the voice, and the answer window opens at Ready.
+   */
+  cue?: true;
 }
 
 export interface Generator {

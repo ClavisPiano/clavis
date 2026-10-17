@@ -257,9 +257,9 @@ describe("prompts and the item view", () => {
       play: { kind: "exactPitch", targetMidi: 54 },
       responseWindowMs: 5000,
     };
-    expect(promptFor("play", ["play"], expected, "instrument")).toBe("Play it");
-    expect(promptFor("play", ["play"], expected, "away")).toBe("Tap it on the keyboard");
-    expect(promptFor("sing", ["sing", "play"], expected, "instrument", true)).toBe("Sing it");
+    expect(promptFor(expected, "instrument")).toBe("Play it");
+    expect(promptFor(expected, "away")).toBe("Tap it on the keyboard");
+    expect(promptFor(expected, "instrument", true)).toBe("Play this note");
   });
 });
 

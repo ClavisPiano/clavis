@@ -8,7 +8,7 @@ import { MilestoneSchema, type Milestone } from "@clavis/core";
 const MILESTONES_V1: unknown[] = [
   {
     nodeId: "ear.degrees.major.135",
-    statement: "You can hear and sing scale degrees 1, 3 and 5 in any major key.",
+    statement: "You can hear scale degrees 1, 3 and 5 in any major key and play them.",
   },
   {
     nodeId: "ear.rhythm.echo",
@@ -16,11 +16,11 @@ const MILESTONES_V1: unknown[] = [
   },
   {
     nodeId: "ear.degrees.major.diatonic",
-    statement: "You can hear and sing all seven degrees of a major scale in any key.",
+    statement: "You can hear all seven degrees of a major scale in any key and play them.",
   },
   {
     nodeId: "ear.cells.major.2-4",
-    statement: "You can listen to a short tune of two to four notes and sing it back.",
+    statement: "You can listen to a short tune of two to four notes and play it back.",
   },
   {
     nodeId: "ear.bass.I-IV-V-vi",
@@ -51,7 +51,7 @@ const MILESTONES_V1: unknown[] = [
   },
   {
     nodeId: "byear.melody.simple",
-    statement: "You can hear a short melody, sing it back and then play it on the piano.",
+    statement: "You can hear a short melody, hold it in your head and then play it on the piano.",
   },
   {
     nodeId: "hands.lh.triads.root",
@@ -59,7 +59,7 @@ const MILESTONES_V1: unknown[] = [
   },
   {
     nodeId: "ear.degrees.minor",
-    statement: "You can hear and sing the degrees of a minor scale in any key.",
+    statement: "You can hear the degrees of a minor scale in any key and play them.",
   },
   {
     nodeId: "read.bass.landmarks",
@@ -104,7 +104,7 @@ const MILESTONES_V1: unknown[] = [
   },
   {
     nodeId: "apply.piece-ear",
-    statement: "You can learn a short tune by ear, then sing it and play it from memory.",
+    statement: "You can learn a short tune by ear, then play it from memory.",
   },
 ];
 

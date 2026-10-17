@@ -1,5 +1,4 @@
-import type { NoteEvent, PitchFrame, PlayTarget, SingTarget } from "@clavis/core";
-import { findStableSegments, segmentSungNotes } from "@clavis/scoring";
+import type { NoteEvent, PlayTarget } from "@clavis/core";
 
 /*
  * Response completion: when has the learner finished answering? The listening phase also ends at
@@ -9,8 +8,6 @@ import { findStableSegments, segmentSungNotes } from "@clavis/scoring";
 
 /** A sequence is done when enough notes arrived and the player went quiet for this long. */
 export const SEQUENCE_QUIET_MS = 800;
-/** A sung sequence is done when enough notes were sung and the voice stopped for this long. */
-export const SUNG_QUIET_MS = 300;
 /**
  * A chord line with some tones still to come is given up on after this much silence. Longer than
  * a chord is held at the slow tempo, so a learner working out the next chord is not cut off.
@@ -74,19 +71,4 @@ export function checkPlayDone(
       // Ended by the learner picking a button, or by the response window.
       return NOT_DONE;
   }
-}
-
-/** Sung response. `frames` must already be limited to this phase. */
-export function checkSingDone(
-  target: SingTarget,
-  frames: readonly PitchFrame[],
-  nowMs: number,
-): DoneCheck {
-  if (target.kind === "sungPitch") {
-    return findStableSegments(frames).length > 0 ? { done: true } : NOT_DONE;
-  }
-  const segments = segmentSungNotes(frames);
-  const last = segments[segments.length - 1];
-  if (!last || segments.length < target.midi.length) return NOT_DONE;
-  return quiet(last.endMs, nowMs, SUNG_QUIET_MS);
 }

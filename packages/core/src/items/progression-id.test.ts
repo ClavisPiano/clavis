@@ -71,7 +71,6 @@ const CADENCE_PAIRS: Record<string, string[]> = {
 
 const ctx = (seed: number, extra: Partial<GenerateContext> = {}): GenerateContext => ({
   rng: createRng(seed),
-  voiceRange: { low: 48, high: 72 },
   mode: "instrument",
   ...extra,
 });

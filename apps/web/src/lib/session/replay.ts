@@ -1,16 +1,9 @@
-import type {
-  ItemInstance,
-  NoteEvent,
-  PitchFrame,
-  StimulusEvent,
-  StimulusSpec,
-} from "@clavis/core";
-import { segmentSungNotes } from "@clavis/scoring";
+import type { ItemInstance, NoteEvent, StimulusEvent, StimulusSpec } from "@clavis/core";
 
 /*
  * Replay (spec 8.5): the reference target followed by the learner's own attempt, both as piano
  * notes. The reference is the item's target notes (and count-in clicks for rhythm), without the
- * cadence. The attempt comes from played notes, or from sung segments converted to MIDI.
+ * cadence. The attempt is the learner's played notes.
  */
 
 export const REPLAY_GAP_SEC = 0.9;
@@ -22,7 +15,6 @@ const CHORD_SPREAD_MS = 80;
 
 export interface Attempt {
   notes: readonly NoteEvent[];
-  frames: readonly PitchFrame[];
 }
 
 const TARGET_VELOCITY = 0.8;
@@ -141,14 +133,7 @@ function tonicEvent(instance: ItemInstance, reference: StimulusEvent[]): Stimulu
 /** Attempt notes as stimulus events starting at 0 (relative timing kept). */
 export function attemptEvents(attempt: Attempt): StimulusEvent[] {
   const played = [...attempt.notes].sort((a, b) => a.onsetMs - b.onsetMs);
-  const timed: { midi: number; startMs: number; endMs: number | undefined }[] =
-    played.length > 0
-      ? played.map((n) => ({ midi: n.pitch, startMs: n.onsetMs, endMs: n.offsetMs }))
-      : segmentSungNotes(attempt.frames).map((s) => ({
-          midi: Math.round(s.midi),
-          startMs: s.startMs,
-          endMs: s.endMs,
-        }));
+  const timed = played.map((n) => ({ midi: n.pitch, startMs: n.onsetMs, endMs: n.offsetMs }));
   const first = timed[0];
   if (!first) return [];
   return timed.map((n, i) => {

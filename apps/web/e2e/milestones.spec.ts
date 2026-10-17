@@ -13,7 +13,7 @@ test.setTimeout(150_000);
 
 const NODE = "ear.degrees.major.135";
 const DEVICE = "seed-device";
-const STATEMENT = "You can hear and sing scale degrees 1, 3 and 5 in any major key.";
+const STATEMENT = "You can hear scale degrees 1, 3 and 5 in any major key and play them.";
 let seq = 0;
 const eid = (): string => `01JBX0000000000000002${String(++seq).padStart(5, "0")}`;
 

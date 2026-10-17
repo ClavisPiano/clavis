@@ -18,16 +18,13 @@ import type { Generator, ItemInstance, ItemParams } from "./types.js";
 /** The graph node whose items are phrases played by ear. Separate from `apply.pieces` (MP, TP.6). */
 export const PIECE_EAR_NODE_ID = "apply.piece-ear";
 
-/** Sung notes must be within this many cents of the tune (spec 7). */
-const SUNG_TOLERANCE_CENTS = 50;
-
 /** A little air between repeated notes so each one is heard as a new note. */
 const NOTE_GAP = 0.9;
 
 /**
  * Play it by ear (MP, TP.6): one item per phrase of every piece in `pieces`. The learner hears the
- * phrase with no notation, sings it, then plays it (R12: both parts must be right), and only then
- * is the score revealed (`reveal`, drawn with the feedback). The audio is a one bar count-in and
+ * phrase with no notation, is cued to sing or hum it (ungraded, R29), then plays it, and only then
+ * is the score revealed (`reveal`, drawn with the feedback). Only the played line is graded. The audio is a one bar count-in and
  * the phrase at the piece's slow tempo. Which phrases are offered, and when, is the composer's
  * call: it only offers the phrases of pieces the learner has already read.
  */
@@ -91,8 +88,8 @@ export function createPieceEar(pieces: readonly Piece[]): Generator {
         stimulus: { events, tempoBpm },
         reveal,
         inputRange,
+        cue: true,
         expected: {
-          sing: { kind: "sungSequence", midi, toleranceCents: SUNG_TOLERANCE_CENTS },
           play: { kind: "line", midi, onsetsBeats, tempoBpm, beatsPerBar },
           responseWindowMs: responseWindowMs(onsetsBeats, tempoBpm),
         },

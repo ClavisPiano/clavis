@@ -21,11 +21,6 @@ function noteLabel(detail: AttemptError["detail"]): string {
   return i === undefined ? "A note" : `Note ${String(i + 1)}`;
 }
 
-/** "sang" for errors from the sung part, "played" otherwise (scoring tags each error). */
-function verb(detail: AttemptError["detail"]): string {
-  return detail?.part === "sing" ? "sang" : "played";
-}
-
 function text(detail: AttemptError["detail"], key: string): string | undefined {
   const v = detail?.[key];
   return typeof v === "string" ? v : undefined;
@@ -91,13 +86,13 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
     const played = num(detail, "played");
     if (expected !== undefined && played !== undefined) {
       if (code === "pitch.wrong") {
-        return `You ${verb(detail)} ${names(played)}. This note is ${names(expected)}.`;
+        return `You played ${names(played)}. This note is ${names(expected)}.`;
       }
       if (code === "pitch.octave") {
-        return `Right note, wrong octave. You ${verb(detail)} ${names(played)}. This note is ${names(expected)}.`;
+        return `Right note, wrong octave. You played ${names(played)}. This note is ${names(expected)}.`;
       }
       if (code === "sequence.wrong-note") {
-        return `${noteLabel(detail)}: you ${verb(detail)} ${names(played)}; the target was ${names(expected)}`;
+        return `${noteLabel(detail)}: you played ${names(played)}; the target was ${names(expected)}`;
       }
     }
   }
@@ -105,11 +100,9 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
   if (code.startsWith(CONFUSION_PREFIX)) {
     const [expected, played] = code.slice(CONFUSION_PREFIX.length).split("-");
     if (expected !== undefined && played !== undefined && expected !== "" && played !== "") {
-      return `You ${verb(detail)} ${played}; the target was ${expected}`;
+      return `You played ${played}; the target was ${expected}`;
     }
-    return detail?.part === "sing"
-      ? "You sang a different note from the target"
-      : "That was a different note from the target";
+    return "That was a different note from the target";
   }
   switch (code) {
     case "pitch.wrong":
@@ -128,12 +121,6 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
       return "No answer was heard in time";
     case "response.skipped":
       return "Skipped";
-    case "sing.flat":
-      return "A little flat";
-    case "sing.sharp":
-      return "A little sharp";
-    case "sing.none":
-      return "No steady sung note was heard";
     case "rhythm.late":
       return `${noteLabel(detail)} was late`;
     case "rhythm.early":
@@ -151,7 +138,7 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
       const expected = detail?.expectedDegree;
       const played = detail?.playedDegree;
       if (typeof expected === "string" && typeof played === "string") {
-        return `${noteLabel(detail)}: you ${verb(detail)} ${played}; the target was ${expected}`;
+        return `${noteLabel(detail)}: you played ${played}; the target was ${expected}`;
       }
       return `${noteLabel(detail)} was not the target`;
     }
@@ -208,7 +195,7 @@ export interface FeedbackView {
   /**
    * One-line concept explanation for a listed issue (spec 13), shown with a link to the node's
    * card. Only on detailed attempts before the node is mastered. An attempt can be correct
-   * overall and still carry an issue (a wrong sung note before a right played one).
+   * overall and still carry an issue (a wrong note before the right one).
    */
   tip?: string;
   /** After a miss: the right answer in words, such as "The note was 3, which is B in G major." */

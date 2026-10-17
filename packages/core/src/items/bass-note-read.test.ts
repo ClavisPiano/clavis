@@ -46,7 +46,6 @@ const minor: SkillNode = {
 
 const ctx = (seed: number, preferredKey?: Key): GenerateContext => ({
   rng: createRng(seed),
-  voiceRange: { low: 48, high: 72 },
   mode: "instrument",
   ...(preferredKey === undefined ? {} : { preferredKey }),
 });

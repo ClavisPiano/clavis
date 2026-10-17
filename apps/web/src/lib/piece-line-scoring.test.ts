@@ -25,7 +25,7 @@ const node: SkillNode = {
   mastery: { minAccuracy: 0.8, windowAttempts: 5, distinctSessions: 2 },
   keyDependent: false,
 };
-const ctx = { rng: createRng(1), voiceRange: { low: 48, high: 72 }, mode: "instrument" as const };
+const ctx = { rng: createRng(1), mode: "instrument" as const };
 const END = 1000;
 
 function line(expected: ReturnType<typeof generator.generate>["expected"]) {

@@ -22,7 +22,6 @@ const node: SkillNode = {
 };
 const ctx: GenerateContext = {
   rng: createRng(1),
-  voiceRange: { low: 48, high: 72 },
   mode: "instrument",
 };
 
@@ -72,14 +71,11 @@ describe("pieceEar", () => {
     expect(lineNotes(i.reveal ?? PIECE.score).map((n) => n.midi)).toEqual([64, 62, 60]);
   });
 
-  it("expects a sung sequence, then the same notes played as a line", () => {
+  it("expects only the notes played as a line, with an ungraded sing cue (R29)", () => {
     const i = item(1);
     expect(ExpectedResponseSchema.safeParse(i.expected).success).toBe(true);
-    expect(i.expected.sing).toEqual({
-      kind: "sungSequence",
-      midi: [60, 62, 64],
-      toleranceCents: 50,
-    });
+    expect(i.expected.sing).toBeUndefined();
+    expect(i.cue).toBe(true);
     expect(i.expected.play).toEqual({
       kind: "line",
       midi: [60, 62, 64],
