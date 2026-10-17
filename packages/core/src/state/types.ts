@@ -105,6 +105,21 @@ export interface ImportedPieceRecord {
   eventId: string;
 }
 
+/** The benchmark kept for one month (T6.5, R28): the latest `benchmark.recorded` for it. */
+export interface BenchmarkRecord {
+  benchmarkId: string;
+  pieceId: string;
+  /** Learner-local month, "YYYY-MM". */
+  month: string;
+  blobKey: string;
+  contentType: string;
+  durationMs: number;
+  sizeBytes: number;
+  /** The `(at, id)` of the event that wrote this record: the later one wins. */
+  at: number;
+  eventId: string;
+}
+
 export interface LearnerState {
   cards: Record<string, CardRecord>;
   nodes: Record<string, NodeRecord>;
@@ -113,6 +128,8 @@ export interface LearnerState {
   pieces: Record<string, PieceRecord>;
   /** Pieces the learner imported, by piece id (T7.4). Unlocked from the start, see `listPieces`. */
   imported: Record<string, ImportedPieceRecord>;
+  /** Monthly benchmarks by month ("YYYY-MM"), one per month (T6.5). */
+  benchmarks: Record<string, BenchmarkRecord>;
   sessions: Record<string, SessionRecord>;
   /** Key `${sessionId}:${itemId}`. Pruned when the session ends. */
   presented: Record<string, PresentationRecord>;

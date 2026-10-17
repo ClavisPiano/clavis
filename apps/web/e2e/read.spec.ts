@@ -163,6 +163,7 @@ test.describe("reading is enabled", () => {
             keyOfDayHistory: [],
             pieces: {},
             imported: {},
+            benchmarks: {},
             settings: {},
             lastEvent: { at: last.at, id: last.id },
             eventCount: 999,

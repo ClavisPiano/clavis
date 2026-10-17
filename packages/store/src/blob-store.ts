@@ -32,6 +32,8 @@ export interface PutBlobInput {
   contentType?: string;
   createdAt?: number;
   pinned?: boolean;
+  /** True when the server already holds these bytes (a download), so the queue skips them. */
+  uploaded?: boolean;
 }
 
 export interface BlobStore {
@@ -116,7 +118,7 @@ export class DexieBlobStore implements BlobStore {
       size: input.blob.size,
       createdAt: input.createdAt ?? this.now(),
       pinned: input.pinned ?? false,
-      uploaded: false,
+      uploaded: input.uploaded ?? false,
     };
     return this.db.transaction("rw", this.table, async () => {
       await this.table.put(row);
