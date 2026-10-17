@@ -54,6 +54,10 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can hear a short melody, sing it back and then play it on the piano.",
   },
   {
+    nodeId: "hands.lh.triads.root",
+    statement: "You can play root position I, IV, V and vi chords with your left hand in any key.",
+  },
+  {
     nodeId: "ear.degrees.minor",
     statement: "You can hear and sing the degrees of a minor scale in any key.",
   },
