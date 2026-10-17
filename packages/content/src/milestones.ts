@@ -31,6 +31,29 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can hear whether a triad is major or minor.",
   },
   {
+    nodeId: "ear.prog.core",
+    statement: "You can tell I-V-vi-IV, I-IV-V, ii-V-I and vi-IV-I-V apart by ear in any key.",
+  },
+  {
+    nodeId: "ear.cadence",
+    statement:
+      "You can hear whether a phrase ends with a perfect, plagal, imperfect or deceptive cadence.",
+  },
+  {
+    nodeId: "ear.prog.minor",
+    statement:
+      "You can recognise the common minor key progressions, including the Andalusian cadence.",
+  },
+  {
+    nodeId: "ear.prog.colour",
+    statement:
+      "You can hear a secondary dominant, a borrowed minor iv and a flat seven chord in a progression.",
+  },
+  {
+    nodeId: "byear.melody.simple",
+    statement: "You can hear a short melody, sing it back and then play it on the piano.",
+  },
+  {
     nodeId: "ear.degrees.minor",
     statement: "You can hear and sing the degrees of a minor scale in any key.",
   },

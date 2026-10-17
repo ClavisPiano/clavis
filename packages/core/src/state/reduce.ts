@@ -20,7 +20,7 @@ import type {
 } from "./types.js";
 
 /** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
-export const REDUCER_VERSION = 4;
+export const REDUCER_VERSION = 5;
 
 export const DURATION_WINDOW = 20;
 /** Fewer samples than this and the graph seed is used instead of the median. */
