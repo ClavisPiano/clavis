@@ -166,6 +166,12 @@ test.describe("Pieces", () => {
           .getByTestId("continue")
           .click({ timeout: 2_000 })
           .catch(() => undefined);
+      } else if (state === "selfAssess") {
+        // Mastered reading phrases are sometimes self-assessed first (R28).
+        await page
+          .getByTestId("self-assess-right")
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
       } else if (state === "feedback") {
         await page
           .getByTestId("next")
@@ -208,6 +214,12 @@ test.describe("Pieces", () => {
       } else if (state === "orient" || state === "intro") {
         await page
           .getByTestId("continue")
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
+      } else if (state === "selfAssess") {
+        // Mastered reading phrases are sometimes self-assessed first (R28).
+        await page
+          .getByTestId("self-assess-right")
           .click({ timeout: 2_000 })
           .catch(() => undefined);
       } else if (state === "feedback") {

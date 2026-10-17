@@ -3,6 +3,8 @@
   import { resolve } from "$app/paths";
   import { loadMilestones } from "@clavis/content";
   import {
+    CALIBRATION_WINDOW_DAYS,
+    calibration,
     fluencyTrends,
     learnerDay,
     milestones,
@@ -63,6 +65,17 @@
       : [],
   );
   const hasPractice = $derived(days.some((d) => d.practised));
+  const calib = $derived(events ? calibration(events, today, CALENDAR_WEEKS) : undefined);
+  const calibSpark = $derived(
+    calib
+      ? sparkline(
+          calib.trend.map((w) => w.agreement),
+          SPARK_W,
+          SPARK_H,
+          { min: 0, max: 1 },
+        )
+      : undefined,
+  );
   const barScale = $derived(Math.max(7, settings.weeklyTargetDays));
 
   const strandRows = $derived(
@@ -262,6 +275,42 @@
       </ul>
     {/if}
   </section>
+
+  {#if calib?.enough && calibSpark}
+    <section class="card" aria-labelledby="calib-h" data-testid="calibration">
+      <h2 id="calib-h">Knowing when you are right</h2>
+      <p class="big" data-testid="calibration-agreement">
+        Your call matched the result {percentLabel(calib.agreement ?? 0)} of the time
+      </p>
+      <p class="muted">
+        From the {calib.attempts} answers you judged yourself in the last {CALIBRATION_WINDOW_DAYS} days,
+        before seeing the result.
+      </p>
+      <ul class="calib-counts">
+        <li data-testid="calibration-over">
+          Said right, but it was wrong: <strong>{calib.overconfident}</strong>
+        </li>
+        <li data-testid="calibration-under">
+          Said wrong, but it was right: <strong>{calib.underconfident}</strong>
+        </li>
+      </ul>
+      <figure>
+        <svg
+          class="spark"
+          viewBox="0 0 {SPARK_W} {SPARK_H}"
+          role="img"
+          aria-label="How often your call matched the result, by week"
+          data-testid="spark-calibration"
+        >
+          <path d={calibSpark.d} fill="none" />
+          {#each calibSpark.dots as dot (dot.index)}
+            <circle cx={dot.x} cy={dot.y} r="2" />
+          {/each}
+        </svg>
+        <figcaption>By week, over the last {CALENDAR_WEEKS} weeks</figcaption>
+      </figure>
+    </section>
+  {/if}
 {/if}
 
 <style>
@@ -486,6 +535,11 @@
 
   figcaption strong {
     color: var(--color-text);
+  }
+
+  .calib-counts {
+    margin: 0 0 var(--space-3);
+    padding-left: var(--space-4);
   }
 
   .spark {

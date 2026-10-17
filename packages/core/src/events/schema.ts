@@ -2,6 +2,7 @@ import { z } from "zod";
 import { envelopeShape } from "./envelope.js";
 import {
   AttemptCompletedV1,
+  AttemptCompletedV2,
   ContentImportedV1,
   ItemPresentedV1,
   NodeIntroducedV1,
@@ -73,7 +74,7 @@ export const learningEventSchema = z.discriminatedUnion("type", [
   SettingsChangedV2,
   SessionStartedV2,
   ItemPresentedV1,
-  AttemptCompletedV1,
+  AttemptCompletedV2,
   NodeIntroducedV1,
   PlacementCompletedV1,
   PieceCompletedV1,
@@ -109,7 +110,10 @@ export const eventRegistry: Readonly<Record<LearningEventType, EventRegistryEntr
     upcast: (event, from) => (from === 1 ? liftToV2(event) : event),
   },
   "item.presented": { versions: { 1: ItemPresentedV1 }, upcast: identity },
-  "attempt.completed": { versions: { 1: AttemptCompletedV1 }, upcast: identity },
+  "attempt.completed": {
+    versions: { 1: AttemptCompletedV1, 2: AttemptCompletedV2 },
+    upcast: (event, from) => (from === 1 ? liftToV2(event) : event),
+  },
   "node.introduced": { versions: { 1: NodeIntroducedV1 }, upcast: identity },
   "placement.completed": { versions: { 1: PlacementCompletedV1 }, upcast: identity },
   "piece.completed": { versions: { 1: PieceCompletedV1 }, upcast: identity },

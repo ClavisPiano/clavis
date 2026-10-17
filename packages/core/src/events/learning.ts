@@ -96,6 +96,20 @@ export const AttemptCompletedV1 = z.strictObject({
   performanceRef: z.string().min(1).optional(),
 });
 
+/** A learner's own verdict on an attempt (spec 8.4, R28). */
+export const SelfAssessmentSchema = z.enum(["right", "wrong"]);
+export type SelfAssessment = z.infer<typeof SelfAssessmentSchema>;
+
+/**
+ * v2 (T6.6, R28) adds `selfAssessment`: what the learner said about the answer before feedback
+ * showed. It is a metacognition signal only and never changes the rating.
+ */
+export const AttemptCompletedV2 = z.strictObject({
+  ...AttemptCompletedV1.shape,
+  v: z.literal(2),
+  selfAssessment: SelfAssessmentSchema.optional(),
+});
+
 export const NodeIntroducedV1 = z.strictObject({
   ...envelopeShape,
   type: z.literal("node.introduced"),

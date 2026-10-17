@@ -42,10 +42,14 @@ async function answer(h: Harness, singAdapter?: FakeInputAdapter): Promise<void>
 /** From the item's presenting state to its feedback, answering every phase correctly. */
 async function playItem(h: Harness, singAdapter?: FakeInputAdapter): Promise<void> {
   for (;;) {
-    const s = await until(h, (x) => x.kind === "listening" || x.kind === "feedback");
-    if (s.kind === "feedback") return;
+    const s = await until(
+      h,
+      (x) => x.kind === "listening" || x.kind === "feedback" || x.kind === "selfAssess",
+    );
+    if (s.kind === "feedback" || s.kind === "selfAssess") return;
     await answer(h, singAdapter);
-    if (h.machine.state.kind === "feedback") return;
+    const now = h.machine.state.kind;
+    if (now === "feedback" || now === "selfAssess") return;
     // Wait for a state change out of the phase we just answered (sequences need a quiet moment).
     const phase = s.kind === "listening" ? s.phase : undefined;
     await until(h, (x) => !(x.kind === "listening" && x.phase === phase));
@@ -574,6 +578,9 @@ describe("feedback fading", () => {
     h.machine.next();
     h.machine.next();
     await playItem(h);
+    // The first fluent or mastered answer of a session is self-assessed (R28) before feedback.
+    expect(h.machine.state.kind).toBe("selfAssess");
+    h.machine.selfAssess("right");
     const fb = h.machine.state;
     if (fb.kind !== "feedback") throw new Error("expected feedback");
     expect(fb.feedback).toMatchObject({ correct: true, detailed: false, autoAdvance: true });
@@ -589,6 +596,7 @@ describe("feedback fading", () => {
     h.machine.next();
     h.machine.next();
     await playItem(h);
+    h.machine.selfAssess("right");
     expect(h.machine.state).toMatchObject({ kind: "feedback", feedback: { autoAdvance: true } });
     h.machine.pause();
     await h.advance(5000);
@@ -620,6 +628,7 @@ describe("feedback fading", () => {
     h.machine.next();
     h.machine.next();
     await playItem(h);
+    h.machine.selfAssess("wrong");
     const first = h.machine.state;
     if (first.kind !== "feedback") throw new Error("expected feedback");
     expect(first.feedback.detailed).toBe(true);

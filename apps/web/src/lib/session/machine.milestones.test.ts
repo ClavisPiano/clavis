@@ -60,7 +60,7 @@ function oneShort(): LearningEvent[] {
         id: newId(),
         at: t + 1000,
         type: "attempt.completed",
-        v: 1,
+        v: 2,
         sessionId,
         itemId,
         nodeId: NODE,
