@@ -16,6 +16,7 @@
   import { createSessionRuntime, type SessionRuntime } from "../../lib/session/runtime";
   import { followUpSearch } from "../../lib/next-steps";
   import { minutesLabel } from "../../lib/home";
+  import { getSyncController } from "../../lib/sync/app";
 
   type Phase = "loading" | "failed" | "ready";
 
@@ -200,6 +201,10 @@
       firstOrient = !result.runtime.orientCardSeen;
       const m = result.runtime.machine;
       off = m.subscribe((s) => {
+        // Sync once when a session ends (the summary appears).
+        if (s.kind === "summary" && view.kind !== "summary") {
+          void getSyncController().trigger("sessionEnd");
+        }
         view = s;
         elapsed = m.elapsedSec();
         expected = s.kind === "listening" ? m.debug().expected : undefined;
