@@ -3,6 +3,7 @@ import { learnerDay } from "@clavis/core";
 import { parseCuePayload, FALLBACK_CUE } from "./pwa/cue-payload";
 import type { InstallEnv } from "./pwa/ios";
 import {
+  isSignedIn,
   CUE_META_KEY,
   CUE_REPORTED_META_KEY,
   DEFAULT_CUE,
@@ -397,5 +398,15 @@ describe("parseCuePayload", () => {
       FALLBACK_CUE,
     );
     expect(parseCuePayload(data({ url: "//evil.example" })).url).toBe("/");
+  });
+});
+
+describe("isSignedIn", () => {
+  it("makes no request without the signed-in hint", async () => {
+    const fetchFn = vi.fn(() => Promise.resolve(new Response("{}", { status: 200 })));
+    expect(await isSignedIn({ fetch: fetchFn }, () => false)).toBe(false);
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(await isSignedIn({ fetch: fetchFn }, () => true)).toBe(true);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });

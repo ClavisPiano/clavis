@@ -134,8 +134,16 @@ async function send(deps: CueDeps, method: string, path: string, body: unknown):
   return deps.fetch(path, { method, headers: JSON_HEADERS, body: JSON.stringify(body) });
 }
 
-/** True when a session exists (`GET /api/me`). Network failure counts as not known, so false. */
-export async function isSignedIn(deps: Pick<CueDeps, "fetch">): Promise<boolean> {
+/**
+ * True when a session exists (`GET /api/me`). Network failure counts as not known, so false.
+ * Without the device's signed-in hint it answers false without a request, so anonymous learners
+ * make no failing calls.
+ */
+export async function isSignedIn(
+  deps: Pick<CueDeps, "fetch">,
+  hasHint: () => boolean = () => true,
+): Promise<boolean> {
+  if (!hasHint()) return false;
   try {
     return (await deps.fetch("/api/me")).ok;
   } catch {

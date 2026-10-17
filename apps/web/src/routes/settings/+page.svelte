@@ -46,6 +46,7 @@
     type CueSupport,
   } from "../../lib/practice-cue";
   import { browserCueDeps, readCueSupport } from "../../lib/practice-cue-browser";
+  import { isSignedInHint } from "../../lib/sync/hint";
 
   type InputChoice = "auto" | "mic" | "tap";
   const HEADPHONES_META_KEY = "headphones";
@@ -98,7 +99,7 @@
     if (learner.status !== "ready") return;
     cue = parseCueSettings(await learner.ctx.store.getMeta(CUE_META_KEY));
     const deps = browserCueDeps();
-    signedIn = await isSignedIn(deps);
+    signedIn = await isSignedIn(deps, isSignedInHint);
     // The time zone may have changed since the subscription was registered, so refresh the server copy.
     if (cue.enabled && signedIn && cueSupport === "ok" && permission === "granted") {
       void syncCue(deps, cue);
