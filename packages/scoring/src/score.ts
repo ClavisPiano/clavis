@@ -86,6 +86,7 @@ function scorePlay(play: PlayTarget, input: ScoreInput): PartResult {
         chords: play.chords,
         tempoBpm: play.tempoBpm,
         source: input.source,
+        ...(play.gradeTiming === undefined ? {} : { gradeTiming: play.gradeTiming }),
       });
     case "rhythm":
       return scoreRhythm({

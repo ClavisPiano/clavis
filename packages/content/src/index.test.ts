@@ -105,7 +105,7 @@ describe("v1 skill graph", () => {
     }
   });
 
-  it("enables the ear M2 nodes and the nine reading nodes", () => {
+  it("enables the ear M2 nodes and the ten reading nodes", () => {
     const enabled = graph.nodes.filter((n) => isNodeEnabled(n, graph.generators)).map((n) => n.id);
     for (const id of [
       "ear.degrees.major.135",
@@ -116,8 +116,10 @@ describe("v1 skill graph", () => {
     ]) {
       expect(enabled).toContain(id);
     }
-    // R18: bassNoteRead covers five nodes, rhythmRead one. Grand staff and chords wait for M5.
+    // R18: bassNoteRead covers five nodes, rhythmRead one. T5.10: bassChordRead the bass chords.
+    // The grand staff nodes wait for sightLine.
     expect(enabled.filter((id) => id.startsWith("read.")).sort()).toEqual([
+      "read.bass.chords",
       "read.bass.intervals",
       "read.bass.landmarks",
       "read.bass.skips",

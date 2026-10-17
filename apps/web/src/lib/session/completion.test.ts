@@ -148,3 +148,38 @@ describe("checkPlayDone for a chord line", () => {
     expect(checkPlayDone(chordLine, first, 1000 + CHORD_GIVE_UP_MS).done).toBe(true);
   });
 });
+
+describe("checkPlayDone for one chord read from the staff (T5.10)", () => {
+  // No count-in: the chord may come at any time after the score is shown.
+  const one: PlayTarget = {
+    kind: "chordLine",
+    chords: [{ roman: "IV", symbol: "F/A", midi: [45, 48, 53], onsetBeats: 0, durationBeats: 4 }],
+    tempoBpm: 60,
+    beatsPerBar: 4,
+    gradeTiming: false,
+    showLabels: false,
+  };
+  const at = (midi: number[], ms: number): NoteEvent[] => midi.map((m) => note(m, ms));
+
+  it("waits however long the learner takes to start", () => {
+    expect(checkPlayDone(one, [], 9_000).done).toBe(false);
+  });
+
+  it("is done a moment after the three tones, wherever they fall", () => {
+    const chord = at([45, 48, 53], 4_200);
+    expect(checkPlayDone(one, chord, 4_200 + SEQUENCE_QUIET_MS - 1).done).toBe(false);
+    expect(checkPlayDone(one, chord, 4_200 + SEQUENCE_QUIET_MS).done).toBe(true);
+  });
+
+  it("counts the last tone of a chord found one finger at a time", () => {
+    const chord = [note(45, 2_000), note(48, 2_150), note(53, 2_300)];
+    expect(checkPlayDone(one, chord, 2_000 + SEQUENCE_QUIET_MS).done).toBe(false);
+    expect(checkPlayDone(one, chord, 2_300 + SEQUENCE_QUIET_MS).done).toBe(true);
+  });
+
+  it("gives up after a long pause with a tone still missing", () => {
+    const two = at([45, 48], 2_000);
+    expect(checkPlayDone(one, two, 2_000 + SEQUENCE_QUIET_MS).done).toBe(false);
+    expect(checkPlayDone(one, two, 2_000 + CHORD_GIVE_UP_MS).done).toBe(true);
+  });
+});

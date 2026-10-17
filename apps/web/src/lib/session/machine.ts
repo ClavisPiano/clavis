@@ -354,7 +354,11 @@ export function promptFor(
     if (play.kind === "exactPitch") return "Play this note";
     if (play.kind === "sequence") return "Play these notes";
     if (play.kind === "line") return "Play this phrase";
-    if (play.kind === "chordLine") return "Play these chords with your left hand";
+    if (play.kind === "chordLine") {
+      return play.chords.length === 1
+        ? "Play this chord with your left hand"
+        : "Play these chords with your left hand";
+    }
   }
   if (play?.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
   return mode === "away" ? "Tap it on the keyboard" : "Play it";
@@ -1141,7 +1145,9 @@ export class SessionMachine {
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
-      ...(cur.instance.expected.play?.kind === "chordLine"
+      // Reading a chord is the task when its labels are hidden (T5.10); feedback still names it.
+      ...(cur.instance.expected.play?.kind === "chordLine" &&
+      cur.instance.expected.play.showLabels !== false
         ? {
             chords: cur.instance.expected.play.chords.map((c) => ({
               roman: c.roman,
