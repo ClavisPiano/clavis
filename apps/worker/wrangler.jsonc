@@ -30,6 +30,9 @@
       "migrations_dir": "migrations",
     },
   ],
+  // Recordings (T4.5), keyed `${userId}/${name}`. Create the bucket once before deploying:
+  //   pnpm --filter @clavis/worker exec wrangler r2 bucket create clavis-blobs
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "clavis-blobs" }],
   // SESSION_SECRET is a secret, never put it here: `wrangler secret put SESSION_SECRET`.
   "durable_objects": {
     "bindings": [{ "name": "USER_EVENTS", "class_name": "UserEvents" }],

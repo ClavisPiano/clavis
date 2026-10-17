@@ -96,6 +96,32 @@ export function fakeNamespace(): DurableObjectNamespace {
   return ns as unknown as DurableObjectNamespace;
 }
 
+/** In-memory R2 bucket implementing the subset the worker uses: `put`, `get`, `delete`. */
+export function fakeBucket(): R2Bucket & { keys: () => string[] } {
+  const objects = new Map<string, { bytes: Uint8Array; contentType: string | undefined }>();
+  const bucket = {
+    put: (key: string, value: Uint8Array, opts?: { httpMetadata?: { contentType?: string } }) => {
+      objects.set(key, { bytes: value, contentType: opts?.httpMetadata?.contentType });
+      return Promise.resolve({ key });
+    },
+    get: (key: string) => {
+      const o = objects.get(key);
+      if (!o) return Promise.resolve(null);
+      return Promise.resolve({
+        body: new Response(o.bytes).body,
+        size: o.bytes.byteLength,
+        httpMetadata: { contentType: o.contentType },
+      });
+    },
+    delete: (key: string) => {
+      objects.delete(key);
+      return Promise.resolve();
+    },
+    keys: () => [...objects.keys()],
+  };
+  return bucket as unknown as R2Bucket & { keys: () => string[] };
+}
+
 export const SECRET = "test-secret-not-real";
 
 export function makeEnv(overrides: Partial<Env> = {}): { env: Env; seen: string[] } {
@@ -114,6 +140,7 @@ export function makeEnv(overrides: Partial<Env> = {}): { env: Env; seen: string[
     USER_EVENTS: fakeNamespace(),
     SESSION_SECRET: SECRET,
     DB: fakeD1(),
+    BLOBS: fakeBucket(),
     RP_ID,
     EXPECTED_ORIGIN: ORIGIN,
     ...overrides,
