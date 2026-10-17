@@ -17,6 +17,8 @@ export const REPLAY_GAP_SEC = 0.9;
 const ATTEMPT_VELOCITY = 0.7;
 const MAX_NOTE_SEC = 0.6;
 const MIN_NOTE_SEC = 0.15;
+/** Notes closer than this are one chord when replaying an attempt. */
+const CHORD_SPREAD_MS = 80;
 
 export interface Attempt {
   notes: readonly NoteEvent[];
@@ -67,6 +69,21 @@ function displayTargetEvents(instance: ItemInstance): StimulusEvent[] {
           atSec: countInEnd + (play.onsetsBeats[i] ?? 0) * beatSec,
           midi: [m],
           durationSec: Math.min(TARGET_NOTE_SEC, beatSec * 0.9),
+          velocity: TARGET_VELOCITY,
+          role: "target" as const,
+        })),
+      ];
+    }
+    case "chordLine": {
+      // The count-in, then each chord struck together at its place in the bar.
+      const beatSec = 60 / play.tempoBpm;
+      const countInEnd = countIn.reduce((end, e) => Math.max(end, e.atSec + beatSec), 0);
+      return [
+        ...countIn,
+        ...play.chords.map((c) => ({
+          atSec: countInEnd + c.onsetBeats * beatSec,
+          midi: c.midi,
+          durationSec: Math.min(TARGET_NOTE_SEC, c.durationBeats * beatSec * 0.9),
           velocity: TARGET_VELOCITY,
           role: "target" as const,
         })),
@@ -135,9 +152,10 @@ export function attemptEvents(attempt: Attempt): StimulusEvent[] {
   const first = timed[0];
   if (!first) return [];
   return timed.map((n, i) => {
-    const next = timed[i + 1];
     const natural = n.endMs !== undefined ? (n.endMs - n.startMs) / 1000 : MAX_NOTE_SEC;
-    const gap = next ? (next.startMs - n.startMs) / 1000 : MAX_NOTE_SEC;
+    // Tones struck together (a chord) last until the next onset that is not part of the same chord.
+    const apart = timed.slice(i + 1).find((m) => m.startMs - n.startMs > CHORD_SPREAD_MS);
+    const gap = apart ? (apart.startMs - n.startMs) / 1000 : MAX_NOTE_SEC;
     const durationSec = Math.max(MIN_NOTE_SEC, Math.min(natural, gap * 0.95, MAX_NOTE_SEC));
     return {
       atSec: (n.startMs - first.startMs) / 1000,

@@ -29,6 +29,9 @@ import {
   type SkillGraph,
   type StimulusSpec,
   type VoiceRange,
+  newMilestones,
+  type EarnedMilestone,
+  type Milestone,
 } from "@clavis/core";
 import type { InputAdapter } from "@clavis/audio";
 import { combineParts, type ScoreInput, type ScoreResult } from "@clavis/scoring";
@@ -105,6 +108,8 @@ export interface SessionDeps {
   /** Learn something new: extra new items for this session on top of the daily allowance. */
   extraNewItems?: number;
   graph: SkillGraph;
+  /** Capability milestone statements (T6.3). Absent means the summary shows none. */
+  milestones?: readonly Milestone[];
   /** Placement mode (T3.16): present this plan instead of composing a session. */
   placement?: { plan: PlacementPlan };
   compose(input: ComposeInput): SessionPlan;
@@ -181,6 +186,8 @@ export interface ItemView {
   revealed?: true;
   /** Buttons to answer with, for choice items (R21). They replace the keyboard. */
   choices?: ChoiceOption[];
+  /** Chord lines (T5.3): each chord's numeral and symbol, shown as text beside the staff. */
+  chords?: { roman: string; symbol: string }[];
 }
 
 export interface NodeChange {
@@ -198,6 +205,8 @@ export interface SessionSummary {
   accuracy: number;
   elapsedSec: number;
   nodeChanges: NodeChange[];
+  /** Capability milestones first earned in this session (T6.3), oldest first. */
+  milestones?: EarnedMilestone[];
   /** Things the learner should know about, such as items skipped because notation did not load. */
   notes?: string[];
   /** Placement only: the node states written by `placement.completed`, in plan order. */
@@ -317,8 +326,12 @@ export function targetOnly(spec: StimulusSpec): StimulusSpec {
   return { ...spec, events: targets.map((e) => ({ ...e, atSec: e.atSec - first })) };
 }
 
-/** "Major or minor?" or "Major, minor or diminished?" from the option labels. */
+/**
+ * "Major or minor?" or "Major, minor or diminished?" from the option labels. Labels that are not
+ * plain words (progressions such as "I-V-vi-IV") ask "Which one did you hear?" instead.
+ */
 export function choiceQuestion(options: readonly ChoiceOption[]): string {
+  if (options.some((o) => !/^[A-Z][a-z]+$/.test(o.label))) return "Which one did you hear?";
   const labels = options.map((o, i) => (i === 0 ? o.label : o.label.toLowerCase()));
   const last = labels[labels.length - 1] ?? "";
   return `${labels.slice(0, -1).join(", ")} or ${last}?`;
@@ -341,6 +354,7 @@ export function promptFor(
     if (play.kind === "exactPitch") return "Play this note";
     if (play.kind === "sequence") return "Play these notes";
     if (play.kind === "line") return "Play this phrase";
+    if (play.kind === "chordLine") return "Play these chords with your left hand";
   }
   if (play?.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
   return mode === "away" ? "Tap it on the keyboard" : "Play it";
@@ -361,6 +375,8 @@ export class SessionMachine {
   /** The notation engine loaded, so staffs beside the audio can be drawn. */
   #staffReady = false;
   #nodesBefore: Record<string, NodeState> = {};
+  /** Node records when the session started, to tell which milestones are new. */
+  #recordsBefore: LearnerState["nodes"] = {};
   #priorAttempts: Record<string, number> = {};
   #sessionAttempts: Record<string, number> = {};
   #attempts = 0;
@@ -718,6 +734,7 @@ export class SessionMachine {
     this.#setState({ kind: "preparing" });
     const before = d.getState();
     this.#nodesBefore = this.#nodeStates(before);
+    this.#recordsBefore = before.nodes;
     for (const [id, list] of Object.entries(before.attempts)) this.#priorAttempts[id] = list.length;
 
     // A session left open by a reload is closed as abandoned before a new one starts.
@@ -780,7 +797,10 @@ export class SessionMachine {
     const needsMic = this.#items.some(({ planned }) =>
       d.graph.generators.find((g) => g.id === planned.generator)?.requires.includes("mic"),
     );
-    if (d.mode === "away" && d.input.source !== "mic" && needsMic && d.createSingInput) {
+    // Sung answers always use the mic. Away mode (keys only) and a MIDI keyboard have none of their
+    // own, so they open one only for plans that need it (items that require "mic").
+    const keysOnly = d.mode === "away" || d.input.source === "midi";
+    if (keysOnly && d.input.source !== "mic" && needsMic && d.createSingInput) {
       this.#singInput = d.createSingInput();
     }
     const micUsed = d.input.source === "mic" || this.#singInput !== undefined;
@@ -1121,6 +1141,14 @@ export class SessionMachine {
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
+      ...(cur.instance.expected.play?.kind === "chordLine"
+        ? {
+            chords: cur.instance.expected.play.chords.map((c) => ({
+              roman: c.roman,
+              symbol: c.symbol,
+            })),
+          }
+        : {}),
     };
   }
 
@@ -1129,7 +1157,10 @@ export class SessionMachine {
   }
 
   #tailMs(): number {
-    const mic = this.#d.input.source !== "tap" || this.#singInput !== undefined;
+    // Exact-key inputs (keys, MIDI) hear no speaker bleed, so only the mic needs the tail.
+    const mic =
+      (this.#d.input.source !== "tap" && this.#d.input.source !== "midi") ||
+      this.#singInput !== undefined;
     if (!mic) return 0;
     const tails = this.#d.gateTailMs ?? DEFAULT_GATE_TAIL_MS;
     return this.#headphones === true ? tails.headphones : tails.speakers;
@@ -1307,6 +1338,7 @@ export class SessionMachine {
   #offset(source: InputSource): number {
     if (source === "tap") return this.#latency.tapMs ?? 0;
     if (source === "mic") return this.#latency.micMs ?? 0;
+    // MIDI timestamps come from the device driver, so there is nothing to calibrate (R3).
     return 0;
   }
 
@@ -1669,6 +1701,10 @@ export class SessionMachine {
       const from = this.#nodesBefore[nodeId] ?? "locked";
       if (from !== to) nodeChanges.push({ nodeId, title: this.#nodeTitle(nodeId), from, to });
     }
+    const earned =
+      placed || !d.milestones
+        ? []
+        : newMilestones({ nodes: this.#recordsBefore }, d.getState(), d.graph, d.milestones);
     this.#setState({
       kind: "summary",
       summary: {
@@ -1678,6 +1714,7 @@ export class SessionMachine {
         accuracy: this.#attempts === 0 ? 0 : this.#correct / this.#attempts,
         elapsedSec,
         nodeChanges,
+        ...(earned.length > 0 ? { milestones: earned } : {}),
         ...(this.#notes.length > 0 ? { notes: [...this.#notes] } : {}),
         ...(placed ? { placed } : {}),
         ...(this.#runSummary ? { run: this.#runSummary } : {}),
@@ -1708,8 +1745,13 @@ export function feedbackMarks(
   const wrong = new Set<string>();
   for (const e of errors) {
     const index = e.detail?.index;
-    const id =
-      e.code === "sequence.wrong-note" && typeof index === "number" ? ids[index] : undefined;
+    // A wrong tone or a missed chord marks its chord (one score note per chord).
+    const marksNote =
+      e.code === "sequence.wrong-note" ||
+      e.code === "chord.wrong-tone" ||
+      e.code === "chord.missing-tone" ||
+      e.code === "chord.missed";
+    const id = marksNote && typeof index === "number" ? ids[index] : undefined;
     if (id !== undefined) wrong.add(id);
   }
   return ids.map((noteId) => ({ noteId, kind: wrong.has(noteId) ? "wrong" : "target" }));

@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.9",
+  "contentVersion": "2026.10.12",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -247,7 +247,7 @@
       "title": "Real phrases",
       "description": "Short phrases from real recordings.",
       "prerequisites": ["ear.prog.core", "ear.cells.major.2-4"],
-      "itemGenerators": ["byEarPhrase"],
+      "itemGenerators": ["byEarRecording"],
       "params": {
         "source": "recordings",
         "bars": [2, 4],
@@ -530,7 +530,7 @@
       "title": "Close voice leading",
       "description": "Left-hand inversions with close voice leading between chords.",
       "prerequisites": ["hands.lh.triads.root"],
-      "itemGenerators": ["lhPattern"],
+      "itemGenerators": ["lhPatternVariants"],
       "params": {
         "pattern": "block",
         "voiceLeading": "close",
@@ -549,7 +549,7 @@
       "title": "Broken chords",
       "description": "Broken chords and Alberti bass.",
       "prerequisites": ["hands.lh.inversions"],
-      "itemGenerators": ["lhPattern"],
+      "itemGenerators": ["lhPatternVariants"],
       "params": {
         "patterns": ["broken", "alberti"]
       },
@@ -566,7 +566,7 @@
       "title": "Pop patterns",
       "description": "Root-5-8 and syncopated pop rhythm patterns.",
       "prerequisites": ["hands.lh.broken"],
-      "itemGenerators": ["lhPattern"],
+      "itemGenerators": ["lhPatternVariants"],
       "params": {
         "patterns": ["root-5-8", "syncopated"]
       },
@@ -619,7 +619,7 @@
       "title": "Minor leading tone",
       "description": "Left-hand patterns using the raised seventh of harmonic minor.",
       "prerequisites": ["hands.lh.triads.root", "ear.degrees.minor"],
-      "itemGenerators": ["lhPattern"],
+      "itemGenerators": ["lhPatternVariants"],
       "params": {
         "mode": "harmonic-minor",
         "chords": ["i", "iv", "V"],
@@ -657,7 +657,7 @@
       "title": "Harmonise a melody",
       "description": "Add left-hand chords to a known or heard melody.",
       "prerequisites": ["byear.melody.simple", "ear.prog.core", "hands.coord.basic"],
-      "itemGenerators": ["byEarPhrase"],
+      "itemGenerators": ["byEarHarmonise"],
       "params": {
         "bars": [4, 8],
         "stages": ["melody", "roots", "chords"]
@@ -675,7 +675,7 @@
       "title": "Full phrase by ear",
       "description": "Melody and harmony from a real recording.",
       "prerequisites": ["byear.harmonise", "ear.real.phrase"],
-      "itemGenerators": ["byEarPhrase"],
+      "itemGenerators": ["byEarRecording"],
       "params": {
         "source": "recordings",
         "stages": ["melody", "roots", "chords"]
@@ -770,7 +770,7 @@
     },
     {
       "id": "progressionId",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 15,
       "awayEligible": true,
       "requires": ["keys"]
@@ -819,6 +819,13 @@
     },
     {
       "id": "lhPattern",
+      "implemented": true,
+      "seedDurationSec": 30,
+      "awayEligible": false,
+      "requires": ["keys", "polyphonic", "notation"]
+    },
+    {
+      "id": "lhPatternVariants",
       "implemented": false,
       "seedDurationSec": 90,
       "awayEligible": false,
@@ -833,8 +840,22 @@
     },
     {
       "id": "byEarPhrase",
+      "implemented": true,
+      "seedDurationSec": 90,
+      "awayEligible": false,
+      "requires": ["mic", "keys", "notation"]
+    },
+    {
+      "id": "byEarHarmonise",
       "implemented": false,
-      "seedDurationSec": 180,
+      "seedDurationSec": 240,
+      "awayEligible": false,
+      "requires": ["mic", "keys", "polyphonic", "notation"]
+    },
+    {
+      "id": "byEarRecording",
+      "implemented": false,
+      "seedDurationSec": 240,
       "awayEligible": false,
       "requires": ["mic", "keys", "polyphonic"]
     },

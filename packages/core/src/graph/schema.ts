@@ -37,8 +37,11 @@ export const GENERATOR_IDS = [
   "bassChordRead",
   "sightLine",
   "lhPattern",
+  "lhPatternVariants",
   "coordTask",
   "byEarPhrase",
+  "byEarHarmonise",
+  "byEarRecording",
   "concept",
 ] as const;
 export const GeneratorIdSchema = z.enum(GENERATOR_IDS);

@@ -43,6 +43,12 @@ export interface ComposeInput {
    * after Read. Without any of those the block is `null`.
    */
   pieces?: readonly Piece[];
+  /**
+   * True when the session's input can capture chords: MIDI, today. Generators that list
+   * `polyphonic` in `requires` (HANDS, T5.3) are only offered, and their nodes only introduced,
+   * when this is true. Default false, so a mic, tap or Away session never gets them.
+   */
+  polyphonic?: boolean;
 }
 
 /** One item the session runner will turn into a stimulus via `getGenerator(generator).generate(...)`. */
@@ -73,8 +79,8 @@ export interface SessionPlan {
   /** Null in Away mode. */
   orient: { estimatedSec: number; includeScale: boolean } | null;
   /**
-   * Apply holds piece phrases (MP) and is `null` when there are none: Away mode, practice, no
-   * piece library or generator, or nothing due and nothing new to learn.
+   * Apply holds piece phrases (MP) and left-hand chord items (HANDS, T5.3, MIDI only). It is `null`
+   * when there are none: Away mode, practice, nothing due and nothing new to learn.
    */
   blocks: { ear: PlannedItem[]; read: PlannedItem[]; apply: PlannedItem[] | null };
   /** Present only for a whole-piece run (`composePieceRun`): the piece being played through. */

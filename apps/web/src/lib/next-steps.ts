@@ -45,6 +45,8 @@ export function nextSteps(opts: {
   budgetSec: number;
   /** Seconds used in the session just finished; 0 on Home. */
   elapsedSec: number;
+  /** The session's input can capture chords (MIDI), so left-hand chord items count as new material. */
+  polyphonic?: boolean;
 }): NextSteps {
   const batch = effectiveSettings(opts.state.settings).newItemsPerDay;
   return {
@@ -58,7 +60,8 @@ export function nextSteps(opts: {
       mode: opts.mode,
       batch,
       budgetSec: opts.budgetSec,
-      ...pieceInputs(),
+      ...(opts.polyphonic === true ? { polyphonic: true } : {}),
+      ...pieceInputs(opts.state),
     }),
   };
 }
@@ -75,7 +78,7 @@ export function startWouldBeEmpty(opts: {
   mode: SessionMode;
   budgetSec: number;
 }): boolean {
-  const plan = composeSession({ ...opts, ...pieceInputs(), seed: 0 });
+  const plan = composeSession({ ...opts, ...pieceInputs(opts.state), seed: 0 });
   return plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0) === 0;
 }
 
