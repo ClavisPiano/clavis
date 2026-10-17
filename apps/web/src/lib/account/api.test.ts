@@ -171,6 +171,18 @@ describe("auth API error mapping", () => {
       409,
       "rejected",
     ],
+    [
+      "recovery 429 is rateLimited",
+      (a: ReturnType<typeof createAuthApi>) => a.recovery("x"),
+      429,
+      "rateLimited",
+    ],
+    [
+      "login options 429 is rateLimited",
+      (a: ReturnType<typeof createAuthApi>) => a.loginOptions(),
+      429,
+      "rateLimited",
+    ],
     ["me 500 is server", (a: ReturnType<typeof createAuthApi>) => a.me(), 500, "server"],
   ] as const)("%s", async (_name, call, status, kind) => {
     const { api } = fake(() => jsonRes({ error: "x" }, status));
@@ -200,6 +212,7 @@ describe("auth API error mapping", () => {
       "network",
       "server",
       "unsupported",
+      "rateLimited",
     ];
     for (const k of kinds) {
       const text = describeAccountError(new AccountError(k, "x"));

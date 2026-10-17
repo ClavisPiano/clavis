@@ -11,8 +11,8 @@ import { AccountError } from "./errors";
  *
  * Error mapping: network failure -> `network`; 401 -> `unauthorized` (login and recovery map it to
  * `rejected`, because there a 401 means a bad credential, not an expired session); 409 ->
- * `alreadyRegistered` on the registration endpoints, `rejected` elsewhere; other 4xx -> `rejected`;
- * 5xx and malformed bodies -> `server`.
+ * `alreadyRegistered` on the registration endpoints, `rejected` elsewhere; 429 -> `rateLimited`;
+ * other 4xx -> `rejected`; 5xx and malformed bodies -> `server`.
  */
 
 export interface MeResponse {
@@ -87,6 +87,7 @@ export function createAuthApi(
     if (res.status === 401) {
       throw new AccountError(opts.unauthorizedKind ?? "unauthorized", "unauthorized", 401);
     }
+    if (res.status === 429) throw new AccountError("rateLimited", "rate limited", 429);
     if (res.status === 409) {
       throw new AccountError(opts.conflictKind ?? "rejected", "conflict", 409);
     }

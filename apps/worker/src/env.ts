@@ -21,6 +21,10 @@ export interface Env {
   VAPID_SUBJECT?: string;
   /** R2 bucket for recordings, keyed `${userId}/${name}`. */
   BLOBS: R2Bucket;
+  /** Per-IP limiter for unauthenticated register and login POSTs (`ratelimits` in wrangler.jsonc). */
+  AUTH_LIMITER: RateLimit;
+  /** Stricter per-IP limiter for `/api/auth/recovery`. */
+  AUTH_RECOVERY_LIMITER: RateLimit;
   /** Test seam for the clock (unix ms). Never set in production. */
   now?: () => number;
 }
