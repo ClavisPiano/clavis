@@ -54,6 +54,17 @@ describe("DexieBlobStore", () => {
     expect((await blobs.get("a"))?.uploaded).toBe(true);
   });
 
+  it("markUploaded with a version only marks that version", async () => {
+    const { blobs } = open(1000);
+    await blobs.put({ key: "a", blob: blob(1), createdAt: 5 });
+    await blobs.markUploaded("a", { createdAt: 4, size: 1 });
+    expect((await blobs.get("a"))?.uploaded).toBe(false);
+    await blobs.markUploaded("a", { createdAt: 5, size: 2 });
+    expect((await blobs.get("a"))?.uploaded).toBe(false);
+    await blobs.markUploaded("a", { createdAt: 5, size: 1 });
+    expect((await blobs.get("a"))?.uploaded).toBe(true);
+  });
+
   it("rejects bad keys and types", async () => {
     const { blobs } = open(1000);
     await expect(blobs.put({ key: "../x", blob: blob(1) })).rejects.toThrow(/invalid blob key/);

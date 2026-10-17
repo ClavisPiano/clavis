@@ -153,10 +153,35 @@ describe("auth API error mapping", () => {
       403,
       "rejected",
     ],
+    [
+      "passkey verify 409 is alreadyRegistered",
+      (a: ReturnType<typeof createAuthApi>) => a.passkeyVerify("c", {}),
+      409,
+      "alreadyRegistered",
+    ],
+    [
+      "login verify 409 is rejected, not alreadyRegistered",
+      (a: ReturnType<typeof createAuthApi>) => a.loginVerify("c", {}),
+      409,
+      "rejected",
+    ],
+    [
+      "recovery 409 is rejected",
+      (a: ReturnType<typeof createAuthApi>) => a.recovery("x"),
+      409,
+      "rejected",
+    ],
     ["me 500 is server", (a: ReturnType<typeof createAuthApi>) => a.me(), 500, "server"],
   ] as const)("%s", async (_name, call, status, kind) => {
     const { api } = fake(() => jsonRes({ error: "x" }, status));
     expect(await kindOf(call(api))).toBe(kind);
+  });
+
+  it("rejects negative counts from recovery and passkey verify as malformed", async () => {
+    const rec = fake(() => jsonRes({ userId: "u1", recoveryCodesLeft: -1 }));
+    expect(await kindOf(rec.api.recovery("x"))).toBe("server");
+    const pk = fake(() => jsonRes({ userId: "u1", passkeys: -1 }));
+    expect(await kindOf(pk.api.passkeyVerify("c", {}))).toBe("server");
   });
 
   it("maps a malformed 200 body to server", async () => {

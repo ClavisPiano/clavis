@@ -66,6 +66,8 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
   let running: Promise<void> | undefined;
   let rerun = false;
   let signedOut = false;
+  /** Bumped on sign-in and sign-out, so a run that started before either cannot undo it. */
+  let session = 0;
   const subs = new Set<(s: SyncState) => void>();
   const pulledSubs = new Set<() => void>();
 
@@ -75,6 +77,7 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
   };
 
   async function runOnce(): Promise<void> {
+    const startedIn = session;
     set({ ...state, status: "syncing" });
     let result: SyncResult;
     try {
@@ -87,6 +90,11 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
         skipped: 0,
         detail: e instanceof Error ? e.message : String(e),
       };
+    }
+    if (startedIn !== session) {
+      // Signed in or out while this run was in flight: its outcome describes the old session.
+      if (result.pulledNew > 0) for (const fn of [...pulledSubs]) fn();
+      return;
     }
     signedOut = result.outcome === "signedOut";
     if (signedOut) deps.onSignedOut?.();
@@ -161,10 +169,12 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
       return () => subs.delete(fn);
     },
     notifySignedIn() {
+      session += 1;
       signedOut = false;
       return trigger("start");
     },
     notifySignedOut() {
+      session += 1;
       signedOut = true;
       const kept = state.lastSyncedAt === undefined ? {} : { lastSyncedAt: state.lastSyncedAt };
       set({ status: "signedOut", ...kept });

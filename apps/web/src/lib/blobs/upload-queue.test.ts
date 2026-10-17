@@ -57,6 +57,28 @@ describe("upload queue", () => {
     expect(sent).toHaveLength(2);
   });
 
+  it("a recording replaced while its old bytes upload stays pending for the next run", async () => {
+    const store = makeStore();
+    await store.put({ key: "take", blob: blob(4), createdAt: 1 });
+    const sentSizes: number[] = [];
+    const q = createUploadQueue({
+      store,
+      upload: async (r) => {
+        sentSizes.push(r.size);
+        // The learner records again under the same key while the first upload is in flight.
+        if (sentSizes.length === 1) await store.put({ key: "take", blob: blob(8), createdAt: 2 });
+      },
+      delay: noDelay,
+    });
+    await q.run();
+    // The old upload finished, but the row now holds new bytes, so it is still pending.
+    expect(await store.get("take")).toMatchObject({ size: 8, uploaded: false });
+    // The next run (the next sync) uploads the new bytes.
+    await q.run();
+    expect(sentSizes).toEqual([4, 8]);
+    expect(await store.get("take")).toMatchObject({ size: 8, uploaded: true });
+  });
+
   it("retries network failures with backoff, then succeeds", async () => {
     const store = makeStore();
     await seed(store, ["a"]);

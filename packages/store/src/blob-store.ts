@@ -40,7 +40,12 @@ export interface BlobStore {
   get(key: string): Promise<BlobRecord | undefined>;
   /** Metadata only (no blob bytes), oldest first. */
   list(): Promise<BlobMeta[]>;
-  markUploaded(key: string): Promise<void>;
+  /**
+   * Mark `key` uploaded. With `uploaded`, only when the stored row is still that version (same
+   * `createdAt` and `size`): a row replaced by `put` while its old bytes were uploading stays
+   * pending, so the new bytes get uploaded too.
+   */
+  markUploaded(key: string, uploaded?: Pick<BlobMeta, "createdAt" | "size">): Promise<void>;
   /** Enforce the cap now. Returns evicted keys, in eviction order. */
   evict(): Promise<string[]>;
   delete(key: string): Promise<void>;
@@ -130,8 +135,12 @@ export class DexieBlobStore implements BlobStore {
     return out.sort(byAge);
   }
 
-  async markUploaded(key: string): Promise<void> {
-    await this.table.where("key").equals(key).modify({ uploaded: true });
+  async markUploaded(key: string, uploaded?: Pick<BlobMeta, "createdAt" | "size">): Promise<void> {
+    await this.table
+      .where("key")
+      .equals(key)
+      .filter((r) => !uploaded || (r.createdAt === uploaded.createdAt && r.size === uploaded.size))
+      .modify({ uploaded: true });
   }
 
   evict(): Promise<string[]> {

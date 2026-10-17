@@ -11,7 +11,8 @@ import { AccountError } from "./errors";
  *
  * Error mapping: network failure -> `network`; 401 -> `unauthorized` (login and recovery map it to
  * `rejected`, because there a 401 means a bad credential, not an expired session); 409 ->
- * `alreadyRegistered`; other 4xx -> `rejected`; 5xx and malformed bodies -> `server`.
+ * `alreadyRegistered` on the registration endpoints, `rejected` elsewhere; other 4xx -> `rejected`;
+ * 5xx and malformed bodies -> `server`.
  */
 
 export interface MeResponse {
@@ -33,8 +34,11 @@ const Me = z.object({
 const Options = z.object({ challengeId: z.string(), options: z.looseObject({}) });
 const Registered = z.object({ userId: z.string(), recoveryCodes: z.array(z.string()) });
 const LoggedIn = z.object({ userId: z.string() });
-const Recovered = z.object({ userId: z.string(), recoveryCodesLeft: z.number().int() });
-const PasskeyAdded = z.object({ userId: z.string(), passkeys: z.number().int() });
+const Recovered = z.object({
+  userId: z.string(),
+  recoveryCodesLeft: z.number().int().nonnegative(),
+});
+const PasskeyAdded = z.object({ userId: z.string(), passkeys: z.number().int().nonnegative() });
 
 export interface AuthApi {
   me: () => Promise<MeResponse>;
@@ -62,7 +66,12 @@ export function createAuthApi(
     method: "GET" | "POST",
     path: string,
     schema: S,
-    opts: { body?: unknown; unauthorizedKind?: "unauthorized" | "rejected" } = {},
+    opts: {
+      body?: unknown;
+      unauthorizedKind?: "unauthorized" | "rejected";
+      /** Only registration can mean "this passkey already exists" by a 409. */
+      conflictKind?: "alreadyRegistered" | "rejected";
+    } = {},
   ): Promise<z.output<S>> {
     const init: RequestInit = { method, credentials: "include" };
     if (method === "POST") {
@@ -78,7 +87,9 @@ export function createAuthApi(
     if (res.status === 401) {
       throw new AccountError(opts.unauthorizedKind ?? "unauthorized", "unauthorized", 401);
     }
-    if (res.status === 409) throw new AccountError("alreadyRegistered", "conflict", 409);
+    if (res.status === 409) {
+      throw new AccountError(opts.conflictKind ?? "rejected", "conflict", 409);
+    }
     if (res.status >= 400 && res.status < 500) {
       throw new AccountError("rejected", `request rejected (${String(res.status)})`, res.status);
     }
@@ -105,7 +116,10 @@ export function createAuthApi(
     me: () => call("GET", "/me", Me),
     registerOptions: () => options("/auth/register/options"),
     registerVerify: (challengeId, response) =>
-      call("POST", "/auth/register/verify", Registered, { body: { challengeId, response } }),
+      call("POST", "/auth/register/verify", Registered, {
+        body: { challengeId, response },
+        conflictKind: "alreadyRegistered",
+      }),
     loginOptions: () => options("/auth/login/options"),
     loginVerify: (challengeId, response) =>
       call("POST", "/auth/login/verify", LoggedIn, {
@@ -119,7 +133,10 @@ export function createAuthApi(
       }),
     passkeyOptions: () => options("/auth/passkeys/options"),
     passkeyVerify: (challengeId, response) =>
-      call("POST", "/auth/passkeys/verify", PasskeyAdded, { body: { challengeId, response } }),
+      call("POST", "/auth/passkeys/verify", PasskeyAdded, {
+        body: { challengeId, response },
+        conflictKind: "alreadyRegistered",
+      }),
     async logout() {
       await call("POST", "/auth/logout", z.object({ ok: z.boolean() }));
     },

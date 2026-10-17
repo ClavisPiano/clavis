@@ -120,6 +120,26 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
     }
   }
 
+  /**
+   * After a verify call has set the session cookie: load the account, then tell sync. If `/api/me`
+   * cannot be read, the session still exists, so sync is told anyway, the account shows as
+   * unknown and the person gets an error instead of a silent "signed in" that shows nothing.
+   */
+  async function finishSignIn(): Promise<void> {
+    await load(true);
+    if (snap.account.kind === "signedIn") {
+      deps.onSignedIn();
+      return;
+    }
+    if (!snap.offline) {
+      // `/api/me` answered 401: the session cookie did not stick.
+      throw new AccountError("unauthorized", "no session after sign-in");
+    }
+    set({ account: { kind: "unknown" } });
+    deps.onSignedIn();
+    throw new AccountError("network", "signed in, but the account could not be loaded");
+  }
+
   /** Runs one action in `phase`, ignoring the call if another action is in flight. */
   async function action(phase: AccountPhase, body: () => Promise<void>): Promise<boolean> {
     if (snap.phase !== "idle") return false;
@@ -191,16 +211,14 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
         const { challengeId, options } = await api.loginOptions();
         const response = await ceremonies.authenticate(options);
         await api.loginVerify(challengeId, response);
-        await load(true);
         set({ suggestPasskey: false });
-        deps.onSignedIn();
+        await finishSignIn();
       }),
     recover: (code) =>
       action("recovering", async () => {
         await api.recovery(code.trim());
-        await load(true);
+        await finishSignIn();
         set({ suggestPasskey: ceremonies.supported() });
-        deps.onSignedIn();
       }),
     addPasskey: () =>
       action("addingPasskey", async () => {
