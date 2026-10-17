@@ -29,6 +29,9 @@ import {
   type SkillGraph,
   type StimulusSpec,
   type VoiceRange,
+  newMilestones,
+  type EarnedMilestone,
+  type Milestone,
 } from "@clavis/core";
 import type { InputAdapter } from "@clavis/audio";
 import { combineParts, type ScoreInput, type ScoreResult } from "@clavis/scoring";
@@ -105,6 +108,8 @@ export interface SessionDeps {
   /** Learn something new: extra new items for this session on top of the daily allowance. */
   extraNewItems?: number;
   graph: SkillGraph;
+  /** Capability milestone statements (T6.3). Absent means the summary shows none. */
+  milestones?: readonly Milestone[];
   /** Placement mode (T3.16): present this plan instead of composing a session. */
   placement?: { plan: PlacementPlan };
   compose(input: ComposeInput): SessionPlan;
@@ -200,6 +205,8 @@ export interface SessionSummary {
   accuracy: number;
   elapsedSec: number;
   nodeChanges: NodeChange[];
+  /** Capability milestones first earned in this session (T6.3), oldest first. */
+  milestones?: EarnedMilestone[];
   /** Things the learner should know about, such as items skipped because notation did not load. */
   notes?: string[];
   /** Placement only: the node states written by `placement.completed`, in plan order. */
@@ -368,6 +375,8 @@ export class SessionMachine {
   /** The notation engine loaded, so staffs beside the audio can be drawn. */
   #staffReady = false;
   #nodesBefore: Record<string, NodeState> = {};
+  /** Node records when the session started, to tell which milestones are new. */
+  #recordsBefore: LearnerState["nodes"] = {};
   #priorAttempts: Record<string, number> = {};
   #sessionAttempts: Record<string, number> = {};
   #attempts = 0;
@@ -725,6 +734,7 @@ export class SessionMachine {
     this.#setState({ kind: "preparing" });
     const before = d.getState();
     this.#nodesBefore = this.#nodeStates(before);
+    this.#recordsBefore = before.nodes;
     for (const [id, list] of Object.entries(before.attempts)) this.#priorAttempts[id] = list.length;
 
     // A session left open by a reload is closed as abandoned before a new one starts.
@@ -1691,6 +1701,10 @@ export class SessionMachine {
       const from = this.#nodesBefore[nodeId] ?? "locked";
       if (from !== to) nodeChanges.push({ nodeId, title: this.#nodeTitle(nodeId), from, to });
     }
+    const earned =
+      placed || !d.milestones
+        ? []
+        : newMilestones({ nodes: this.#recordsBefore }, d.getState(), d.graph, d.milestones);
     this.#setState({
       kind: "summary",
       summary: {
@@ -1700,6 +1714,7 @@ export class SessionMachine {
         accuracy: this.#attempts === 0 ? 0 : this.#correct / this.#attempts,
         elapsedSec,
         nodeChanges,
+        ...(earned.length > 0 ? { milestones: earned } : {}),
         ...(this.#notes.length > 0 ? { notes: [...this.#notes] } : {}),
         ...(placed ? { placed } : {}),
         ...(this.#runSummary ? { run: this.#runSummary } : {}),

@@ -1,5 +1,5 @@
 import { FakeInputAdapter, type FakeClock } from "@clavis/audio";
-import { loadGraph } from "@clavis/content";
+import { loadGraph, loadMilestones } from "@clavis/content";
 import {
   LearnerStateService,
   MemoryEventStore,
@@ -12,6 +12,7 @@ import {
   stimulusDurationSec,
   type ExpectedResponse,
   type LearningEvent,
+  type Milestone,
   type NoteEvent,
   type PitchFrame,
   type ScoreSpec,
@@ -167,6 +168,8 @@ export interface HarnessOptions {
   autoContinueMs?: number;
   /** Makes ids differ from another harness that used the same clock. */
   idSalt?: number;
+  /** Capability milestone statements for the summary (T6.3). Defaults to the shipped ones. */
+  milestones?: readonly Milestone[];
   /** A graph other than the shipped one, for example with `pieceLine` switched on. */
   graph?: SkillGraph;
 }
@@ -204,6 +207,7 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     ...(opts.practice && opts.skills ? { skills: opts.skills } : {}),
     ...(opts.extraNewItems ? { extraNewItems: opts.extraNewItems } : {}),
     graph,
+    milestones: opts.milestones ?? loadMilestones(),
     ...(opts.placement
       ? { placement: { plan: placementPlan(graph, createRng(opts.seed ?? 1234)) } }
       : {}),

@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
+  import { loadMilestones } from "@clavis/content";
   import {
     fluencyTrends,
     learnerDay,
+    milestones,
     practiceDays,
+    upcomingMilestones,
     weeklyProgress,
     type LearningEvent,
   } from "@clavis/core";
@@ -48,6 +51,17 @@
   const trends = $derived(
     events && learner.status === "ready" ? fluencyTrends(events, learner.ctx.graph) : [],
   );
+  const content = loadMilestones();
+  const earned = $derived(
+    learner.status === "ready" && learner.state
+      ? milestones(learner.state, learner.ctx.graph, content).reverse()
+      : [],
+  );
+  const upcoming = $derived(
+    learner.status === "ready" && learner.state
+      ? upcomingMilestones(learner.state, learner.ctx.graph, content, 3)
+      : [],
+  );
   const hasPractice = $derived(days.some((d) => d.practised));
   const barScale = $derived(Math.max(7, settings.weeklyTargetDays));
 
@@ -84,6 +98,35 @@
   <p class="map-link">
     <a href={resolve("/progress/map")} data-testid="skill-map-link">See your skill map</a>
   </p>
+
+  <section class="card" aria-labelledby="ms-h">
+    <h2 id="ms-h">Milestones</h2>
+    {#if earned.length === 0}
+      <p class="muted" data-testid="milestones-empty">
+        Nothing yet. When you master a skill, a plain statement of what you can now do appears here.
+      </p>
+    {:else}
+      <ol class="milestones" data-testid="milestones">
+        {#each earned as m (m.nodeId)}
+          <li data-testid="milestone" data-node={m.nodeId}>
+            <span class="ms-text">{m.statement}</span>
+            <span class="ms-date muted">{m.day}</span>
+          </li>
+        {/each}
+      </ol>
+    {/if}
+    {#if upcoming.length > 0}
+      <h3 class="ms-next-h">Within reach</h3>
+      <ul class="milestones upcoming" data-testid="milestones-upcoming">
+        {#each upcoming as m (m.nodeId)}
+          <li data-testid="milestone-upcoming" data-node={m.nodeId}>
+            <span class="ms-text">{m.statement}</span>
+            <span class="ms-date">{m.state === "fluent" ? "Fluent" : "Learning"}</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
 
   <section class="card" aria-labelledby="week-h">
     <h2 id="week-h">This week</h2>
@@ -244,6 +287,46 @@
 
   .muted {
     color: var(--color-text-muted);
+  }
+
+  .milestones {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .milestones li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  }
+
+  .milestones.upcoming li {
+    background: transparent;
+    color: var(--color-text-muted);
+  }
+
+  .ms-text {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+
+  .ms-date {
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .ms-next-h {
+    font-size: 1rem;
+    margin: var(--space-4) 0 var(--space-2);
   }
 
   .big {

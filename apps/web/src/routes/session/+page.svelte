@@ -739,6 +739,14 @@
             {/if}
           </div>
         {/if}
+        {#if view.summary.milestones}
+          <div class="moment" data-testid="milestones">
+            <h2>{view.summary.milestones.length === 1 ? "New milestone" : "New milestones"}</h2>
+            {#each view.summary.milestones as m (m.nodeId)}
+              <p data-testid="milestone" data-node={m.nodeId}>{m.statement}</p>
+            {/each}
+          </div>
+        {/if}
         {#if view.summary.nodeChanges.length > 0}
           <h2>Progress</h2>
           <ul class="issues" data-testid="node-changes">
@@ -1055,6 +1063,10 @@
 
   .moment p {
     margin: 0;
+  }
+
+  .moment p + p {
+    margin-top: var(--space-2);
   }
 
   .confirm-actions {
