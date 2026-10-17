@@ -1,5 +1,5 @@
 import { FakeInputAdapter, type FakeClock } from "@clavis/audio";
-import { loadGraph } from "@clavis/content";
+import { loadGraph, loadMilestones } from "@clavis/content";
 import {
   LearnerStateService,
   MemoryEventStore,
@@ -12,6 +12,7 @@ import {
   stimulusDurationSec,
   type ExpectedResponse,
   type LearningEvent,
+  type Milestone,
   type NoteEvent,
   type PitchFrame,
   type ScoreSpec,
@@ -145,7 +146,9 @@ export interface HarnessOptions {
   skills?: readonly string[];
   /** Learn something new: extra new items for this session. */
   extraNewItems?: number;
-  inputSource?: "mic" | "tap";
+  inputSource?: "mic" | "tap" | "midi";
+  /** Offer HANDS items (chords): the input can capture them, as MIDI does. */
+  polyphonic?: boolean;
   headphones?: boolean | undefined;
   askHeadphones?: boolean;
   latency?: { tapMs?: number; micMs?: number };
@@ -165,6 +168,8 @@ export interface HarnessOptions {
   autoContinueMs?: number;
   /** Makes ids differ from another harness that used the same clock. */
   idSalt?: number;
+  /** Capability milestone statements for the summary (T6.3). Defaults to the shipped ones. */
+  milestones?: readonly Milestone[];
   /** A graph other than the shipped one, for example with `pieceLine` switched on. */
   graph?: SkillGraph;
 }
@@ -202,13 +207,16 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     ...(opts.practice && opts.skills ? { skills: opts.skills } : {}),
     ...(opts.extraNewItems ? { extraNewItems: opts.extraNewItems } : {}),
     graph,
+    milestones: opts.milestones ?? loadMilestones(),
     ...(opts.placement
       ? { placement: { plan: placementPlan(graph, createRng(opts.seed ?? 1234)) } }
       : {}),
     ...(opts.notation ? { notation: opts.notation } : {}),
     ...(opts.practiceStep ? { practiceStep: true } : {}),
     ...(opts.autoContinueMs === undefined ? {} : { autoContinueMs: opts.autoContinueMs }),
-    compose: composeSession,
+    compose: opts.polyphonic
+      ? (input) => composeSession({ ...input, polyphonic: true })
+      : composeSession,
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
       if (!node) throw new Error(`unknown node ${item.nodeId}`);
@@ -322,6 +330,14 @@ export function playCorrect(
         last = startMs + (play.onsetsBeats[i] ?? 0) * beatMs;
         adapter.emitNote(noteAt(m, last, source));
       });
+      break;
+    }
+    case "chordLine": {
+      const beatMs = 60000 / play.tempoBpm;
+      for (const c of play.chords) {
+        last = startMs + c.onsetBeats * beatMs;
+        for (const m of c.midi) adapter.emitNote(noteAt(m, last, source));
+      }
       break;
     }
     case "rhythm": {

@@ -7,6 +7,12 @@ import {
 import { CARDS_V1, ORIENT_CARD_ID } from "./cards/v1.js";
 
 export { conceptTip, type ConceptTip, type TipMode } from "./tips.js";
+export {
+  MILESTONE_EXEMPT,
+  loadMilestones,
+  milestoneForNode,
+  parseMilestones,
+} from "./milestones.js";
 export { loadPieces } from "./pieces/library.js";
 import v1 from "./graph/v1.json";
 
@@ -37,7 +43,7 @@ export function parseGraph(raw: unknown): SkillGraph {
  *
  * The four ear generators (degreeSing, degreeId, cellEcho, rhythmEcho, T2.6), the two reading
  * generators (bassNoteRead, rhythmRead, T3.15), trebleNoteRead (TP.2) and the two harmonic ear
- * generators (bassMotion, chordQuality, TP.1) are implemented in core/items; the rest ship with
+ * generators (bassMotion, chordQuality, TP.1) and progressionId (T7.1) are implemented in core/items; the rest ship with
  * `implemented: false`.
  */
 export function loadGraph(): SkillGraph {

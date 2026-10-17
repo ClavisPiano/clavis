@@ -388,10 +388,10 @@ export const V1_GRAPH: SkillGraph = {
     },
     {
       id: "lhPattern",
-      implemented: false,
-      seedDurationSec: 90,
+      implemented: true,
+      seedDurationSec: 30,
       awayEligible: false,
-      requires: ["keys", "polyphonic"],
+      requires: ["keys", "polyphonic", "notation"],
     },
     {
       id: "coordTask",

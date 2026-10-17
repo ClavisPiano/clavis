@@ -1,4 +1,5 @@
 import { cloneJson } from "./clone.js";
+import { importedPiece } from "../events/learning.js";
 import type { LearningEvent } from "../events/schema.js";
 import { compareEvents } from "../events/validate.js";
 import { combineFamilyStates } from "../grading/families.js";
@@ -7,8 +8,9 @@ import { rate } from "../grading/rate.js";
 import type { GeneratorId, NodeState, SkillGraph, SkillNode } from "../graph/schema.js";
 import { isNodeEnabled } from "../graph/validate.js";
 import type { JsonObject } from "../json.js";
-import { learnerDay } from "../learning/day.js";
+import { learnerDay, type LearnerDay } from "../learning/day.js";
 import { isValidKey, keyFamily, type KeyFamily } from "../theory/keys.js";
+import type { Piece } from "../pieces/schema.js";
 import type {
   DailyRecord,
   FoldContext,
@@ -18,7 +20,7 @@ import type {
 } from "./types.js";
 
 /** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
-export const REDUCER_VERSION = 3;
+export const REDUCER_VERSION = 5;
 
 export const DURATION_WINDOW = 20;
 /** Fewer samples than this and the graph seed is used instead of the median. */
@@ -49,6 +51,7 @@ export function initialState(ctx: FoldContext): LearnerState {
     nodes: {},
     attempts: {},
     pieces: {},
+    imported: {},
     sessions: {},
     presented: {},
     durations: {},
@@ -215,7 +218,7 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
         day = learnerDay(event.at, 0);
       }
       daily(state, day).nodesIntroduced++;
-      reevaluate(state, node);
+      reevaluate(state, node, event.at, day);
       recomputeAvailability(state, ctx.graph);
       return;
     }
@@ -226,6 +229,20 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
       if (event.correctPhrases === event.phrases) {
         rec.completedAt = Math.min(rec.completedAt ?? event.at, event.at);
       }
+      return;
+    }
+    case "content.imported": {
+      // Last write by (at, id) wins, whatever order the events arrive in.
+      const prev = state.imported[event.pieceId];
+      if (prev !== undefined && compareEvents({ at: prev.at, id: prev.eventId }, event) > 0) return;
+      state.imported[event.pieceId] = {
+        piece: cloneJson<Piece>(importedPiece(event)),
+        source: event.source,
+        partIndex: event.partIndex,
+        staff: event.staff,
+        at: event.at,
+        eventId: event.id,
+      };
       return;
     }
     case "placement.completed": {
@@ -247,7 +264,7 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
           }
           rec.byFamily = by;
         }
-        reevaluate(state, node);
+        reevaluate(state, node, event.at, learnerDay(event.at, 0));
       }
       recomputeAvailability(state, ctx.graph);
       return;
@@ -332,7 +349,7 @@ function reduceAttempt(
   list.push(secs);
   if (list.length > DURATION_WINDOW) list.splice(0, list.length - DURATION_WINDOW);
 
-  reevaluate(state, node);
+  reevaluate(state, node, event.at, attempt.day);
   recomputeAvailability(state, ctx.graph);
 }
 
@@ -363,7 +380,16 @@ function keyHints(p: JsonObject): Pick<PresentationRecord, "tonic" | "mode"> {
 }
 
 /** Re-evaluate one node from its attempt history. Locked and available nodes do not move. */
-function reevaluate(state: LearnerState, node: SkillNode): void {
+function reevaluate(state: LearnerState, node: SkillNode, at: number, day: LearnerDay): void {
+  reevaluateState(state, node);
+  // The first time a node is mastered is kept for good (T6.3): a later drop and regain leaves it.
+  const rec = state.nodes[node.id];
+  if (rec?.state === "mastered" && rec.firstMastered === undefined) {
+    rec.firstMastered = { at, day };
+  }
+}
+
+function reevaluateState(state: LearnerState, node: SkillNode): void {
   const rec = state.nodes[node.id];
   if (!rec || RANK[rec.state] < RANK.learning) return;
   const attempts = state.attempts[node.id] ?? [];

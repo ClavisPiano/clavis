@@ -12,7 +12,8 @@
     card: ConceptCard;
     /** Examples sound in this key (or its parallel key for examples in the other mode). */
     keyOfDay: Key;
-    onplay: (spec: StimulusSpec) => void;
+    /** Omit to show the examples without play buttons (no audio runtime, e.g. the skill map). */
+    onplay?: (spec: StimulusSpec) => void;
   }
 
   let { card, keyOfDay, onplay }: Props = $props();
@@ -26,29 +27,43 @@
 
   <!-- Staff examples show their score (cardExampleScore) next to the play button's label. -->
   {#if card.examples.length > 0}
-    <div class="examples" role="group" aria-label="Listen">
+    <div class="examples" role="group" aria-label={onplay ? "Listen" : "Examples"}>
       {#each card.examples as example, i (i)}
-        <button
-          type="button"
-          class="example"
-          data-testid="card-example"
-          aria-label={`Play: ${example.label}`}
-          onclick={() => {
-            onplay(cardExampleStimulus(example, keyOfDay));
-          }}
-        >
-          <span aria-hidden="true">&#9654;</span>
-          {example.label}
-          {#if example.kind === "staff"}
-            {@const score = cardExampleScore(example, keyOfDay)}
-            {#if score}
-              <!-- The button's label already describes the example. -->
-              <div class="staff" aria-hidden="true">
-                <CardStaff {score} label={example.label} />
-              </div>
+        {#if onplay}
+          <button
+            type="button"
+            class="example"
+            data-testid="card-example"
+            aria-label={`Play: ${example.label}`}
+            onclick={() => {
+              onplay(cardExampleStimulus(example, keyOfDay));
+            }}
+          >
+            <span aria-hidden="true">&#9654;</span>
+            {example.label}
+            {#if example.kind === "staff"}
+              {@const score = cardExampleScore(example, keyOfDay)}
+              {#if score}
+                <!-- The button's label already describes the example. -->
+                <div class="staff" aria-hidden="true">
+                  <CardStaff {score} label={example.label} />
+                </div>
+              {/if}
             {/if}
-          {/if}
-        </button>
+          </button>
+        {:else}
+          <div class="example" data-testid="card-example">
+            {example.label}
+            {#if example.kind === "staff"}
+              {@const score = cardExampleScore(example, keyOfDay)}
+              {#if score}
+                <div class="staff">
+                  <CardStaff {score} label={example.label} />
+                </div>
+              {/if}
+            {/if}
+          </div>
+        {/if}
       {/each}
     </div>
   {/if}
@@ -120,6 +135,9 @@
     color: var(--color-text);
     font: inherit;
     text-align: left;
+  }
+
+  button.example {
     cursor: pointer;
   }
 
