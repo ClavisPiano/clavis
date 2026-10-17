@@ -162,6 +162,7 @@ test.describe("reading is enabled", () => {
             daily: {},
             keyOfDayHistory: [],
             pieces: {},
+            imported: {},
             settings: {},
             lastEvent: { at: last.at, id: last.id },
             eventCount: 999,

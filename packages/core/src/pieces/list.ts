@@ -41,6 +41,21 @@ export function listPieces(
   });
 }
 
+/**
+ * The pieces the app offers: the learner's imports first (oldest first), then the library. An
+ * imported piece has no required nodes, so it is unlocked at once and becomes the current piece
+ * until it is played through. Pure, from the state's imported records.
+ */
+export function allPieces(
+  library: readonly Piece[],
+  learner: Pick<LearnerState, "imported">,
+): Piece[] {
+  const own = Object.values(learner.imported)
+    .sort((a, b) => a.at - b.at || (a.eventId < b.eventId ? -1 : a.eventId > b.eventId ? 1 : 0))
+    .map((r) => r.piece);
+  return [...own, ...library];
+}
+
 /** Problems that need the skill graph to find. Empty when the library is consistent with it. */
 export function validatePieces(
   pieces: readonly Piece[],

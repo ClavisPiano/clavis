@@ -77,6 +77,18 @@ export function answerLine(item: ItemInstance): string | undefined {
     const n = noteFor(key, degree, variant);
     return `The note was ${n.label}, which is ${n.note} in ${key.tonic} ${key.mode}.`;
   }
+  // Chord lines (T5.3): the chords with their symbols, such as "I C, IV F, V G, I C".
+  const { prog, symbols } = item.presentation;
+  if (
+    Array.isArray(prog) &&
+    Array.isArray(symbols) &&
+    prog.length === symbols.length &&
+    prog.every((p) => typeof p === "string") &&
+    symbols.every((p) => typeof p === "string")
+  ) {
+    const chords = prog.map((roman, i) => `${roman} (${String(symbols[i])})`);
+    return `The chords were ${chords.join(", ")} in ${key.tonic} ${key.mode}.`;
+  }
   const cell = item.presentation.cell;
   if (Array.isArray(cell) && cell.every((d) => typeof d === "number")) {
     const ns = cell.map((d) => noteFor(key, d, variant));

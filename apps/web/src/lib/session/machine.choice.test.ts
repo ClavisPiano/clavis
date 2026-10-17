@@ -184,6 +184,21 @@ describe("choice prompts", () => {
     expect(choiceQuestion([opt("a", "Major"), opt("b", "Minor"), opt("c", "Diminished")])).toBe(
       "Major, minor or diminished?",
     );
+    expect(
+      choiceQuestion([
+        opt("Perfect", "Perfect"),
+        opt("Plagal", "Plagal"),
+        opt("Imperfect", "Imperfect"),
+        opt("Deceptive", "Deceptive"),
+      ]),
+    ).toBe("Perfect, plagal, imperfect or deceptive?");
+  });
+
+  it("asks which one was heard when the labels are Roman numerals", () => {
+    const opt = (id: string, label: string) => ({ id, label });
+    expect(choiceQuestion([opt("a", "I-V-vi-IV"), opt("b", "I-IV-V")])).toBe(
+      "Which one did you hear?",
+    );
   });
 
   it("promptFor asks the question for a choice item in either mode", () => {

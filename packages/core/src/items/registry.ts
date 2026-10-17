@@ -1,9 +1,12 @@
 import type { GeneratorId } from "../graph/schema.js";
 import { bassMotion } from "./bass-motion.js";
 import { bassNoteRead } from "./bass-note-read.js";
+import { byEarPhrase } from "./by-ear-phrase.js";
 import { cellEcho } from "./cell.js";
 import { chordQuality } from "./chord-quality.js";
 import { degreeId, degreeSing } from "./degree.js";
+import { lhPattern } from "./lh-pattern.js";
+import { progressionId } from "./progression-id.js";
 import { rhythmRead } from "./rhythm-read.js";
 import { trebleNoteRead } from "./treble-note-read.js";
 import { rhythmEcho } from "./rhythm.js";
@@ -20,6 +23,9 @@ export const GENERATORS: Partial<Record<GeneratorId, Generator>> = {
   bassMotion,
   chordQuality,
   trebleNoteRead,
+  lhPattern,
+  progressionId,
+  byEarPhrase,
 };
 
 export function getGenerator(id: GeneratorId): Generator {
