@@ -37,6 +37,7 @@ export const GENERATOR_IDS = [
   "bassChordRead",
   "sightLine",
   "lhPattern",
+  "lhPatternVariants",
   "coordTask",
   "byEarPhrase",
   "byEarHarmonise",

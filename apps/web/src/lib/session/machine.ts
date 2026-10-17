@@ -186,6 +186,8 @@ export interface ItemView {
   revealed?: true;
   /** Buttons to answer with, for choice items (R21). They replace the keyboard. */
   choices?: ChoiceOption[];
+  /** Chord lines (T5.3): each chord's numeral and symbol, shown as text beside the staff. */
+  chords?: { roman: string; symbol: string }[];
 }
 
 export interface NodeChange {
@@ -352,6 +354,7 @@ export function promptFor(
     if (play.kind === "exactPitch") return "Play this note";
     if (play.kind === "sequence") return "Play these notes";
     if (play.kind === "line") return "Play this phrase";
+    if (play.kind === "chordLine") return "Play these chords with your left hand";
   }
   if (play?.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
   return mode === "away" ? "Tap it on the keyboard" : "Play it";
@@ -1138,6 +1141,14 @@ export class SessionMachine {
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
+      ...(cur.instance.expected.play?.kind === "chordLine"
+        ? {
+            chords: cur.instance.expected.play.chords.map((c) => ({
+              roman: c.roman,
+              symbol: c.symbol,
+            })),
+          }
+        : {}),
     };
   }
 
@@ -1734,8 +1745,13 @@ export function feedbackMarks(
   const wrong = new Set<string>();
   for (const e of errors) {
     const index = e.detail?.index;
-    const id =
-      e.code === "sequence.wrong-note" && typeof index === "number" ? ids[index] : undefined;
+    // A wrong tone or a missed chord marks its chord (one score note per chord).
+    const marksNote =
+      e.code === "sequence.wrong-note" ||
+      e.code === "chord.wrong-tone" ||
+      e.code === "chord.missing-tone" ||
+      e.code === "chord.missed";
+    const id = marksNote && typeof index === "number" ? ids[index] : undefined;
     if (id !== undefined) wrong.add(id);
   }
   return ids.map((noteId) => ({ noteId, kind: wrong.has(noteId) ? "wrong" : "target" }));
