@@ -19,6 +19,6 @@ export class ReactiveSyncStatus {
   }
 
   syncNow(): Promise<void> {
-    return getSyncController().trigger("start");
+    return getSyncController().trigger("manual");
   }
 }

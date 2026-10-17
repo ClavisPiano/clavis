@@ -21,8 +21,10 @@
     "@clavis/notation": "workspace:*",
     "@clavis/scoring": "workspace:*",
     "@clavis/store": "workspace:*",
+    "@simplewebauthn/browser": "14.0.0",
     "pitchy": "4.1.0",
-    "verovio": "6.3.0"
+    "verovio": "6.3.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",
