@@ -8,6 +8,7 @@ import type {
   PitchFrame,
   PlayTarget,
 } from "@clavis/core";
+import { scoreChordLine } from "./chords.js";
 import { scoreChoice, type ChoiceAnswer } from "./choice.js";
 import { scoreLine } from "./line.js";
 import { scoreRhythm } from "./rhythm.js";
@@ -76,6 +77,13 @@ function scorePlay(play: PlayTarget, input: ScoreInput): PartResult {
         ...base,
         midi: play.midi,
         onsetsBeats: play.onsetsBeats,
+        tempoBpm: play.tempoBpm,
+        source: input.source,
+      });
+    case "chordLine":
+      return scoreChordLine({
+        ...base,
+        chords: play.chords,
         tempoBpm: play.tempoBpm,
         source: input.source,
       });

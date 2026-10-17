@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.11",
+  "contentVersion": "2026.10.12",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -530,7 +530,7 @@
       "title": "Close voice leading",
       "description": "Left-hand inversions with close voice leading between chords.",
       "prerequisites": ["hands.lh.triads.root"],
-      "itemGenerators": ["lhPattern"],
+      "itemGenerators": ["lhPatternVariants"],
       "params": {
         "pattern": "block",
         "voiceLeading": "close",
@@ -549,7 +549,7 @@
       "title": "Broken chords",
       "description": "Broken chords and Alberti bass.",
       "prerequisites": ["hands.lh.inversions"],
-      "itemGenerators": ["lhPattern"],
+      "itemGenerators": ["lhPatternVariants"],
       "params": {
         "patterns": ["broken", "alberti"]
       },
@@ -566,7 +566,7 @@
       "title": "Pop patterns",
       "description": "Root-5-8 and syncopated pop rhythm patterns.",
       "prerequisites": ["hands.lh.broken"],
-      "itemGenerators": ["lhPattern"],
+      "itemGenerators": ["lhPatternVariants"],
       "params": {
         "patterns": ["root-5-8", "syncopated"]
       },
@@ -619,7 +619,7 @@
       "title": "Minor leading tone",
       "description": "Left-hand patterns using the raised seventh of harmonic minor.",
       "prerequisites": ["hands.lh.triads.root", "ear.degrees.minor"],
-      "itemGenerators": ["lhPattern"],
+      "itemGenerators": ["lhPatternVariants"],
       "params": {
         "mode": "harmonic-minor",
         "chords": ["i", "iv", "V"],
@@ -819,6 +819,13 @@
     },
     {
       "id": "lhPattern",
+      "implemented": true,
+      "seedDurationSec": 30,
+      "awayEligible": false,
+      "requires": ["keys", "polyphonic", "notation"]
+    },
+    {
+      "id": "lhPatternVariants",
       "implemented": false,
       "seedDurationSec": 90,
       "awayEligible": false,

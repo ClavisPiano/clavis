@@ -233,3 +233,41 @@ describe("describeError on reading items (named notes)", () => {
     expect(view.lines).toEqual(["You played E2. This note is D2."]);
   });
 });
+
+describe("chord line errors", () => {
+  const NAMES = new Map([
+    [40, "E2"],
+    [41, "F2"],
+    [45, "A2"],
+  ]);
+  const names = (midi: number): string => NAMES.get(midi) ?? `n${String(midi)}`;
+  const chord = { index: 1, roman: "IV", symbol: "F" };
+  const table: [AttemptError, string][] = [
+    [
+      { code: "chord.wrong-tone", detail: { ...chord, expected: 41, played: 40, part: "play" } },
+      "You played E instead of F in the IV chord.",
+    ],
+    [
+      { code: "chord.missing-tone", detail: { ...chord, expected: 45 } },
+      "You left out A in the IV chord.",
+    ],
+    [{ code: "chord.missed", detail: chord }, "The IV chord (F) was missed"],
+    [{ code: "chord.extra", detail: { count: 1, played: 60 } }, "There was an extra note"],
+    [{ code: "chord.extra", detail: { count: 3, played: 60 } }, "There were extra notes"],
+    [{ code: "chord.early", detail: chord }, "The IV chord was early"],
+    [{ code: "chord.late", detail: chord }, "The IV chord was late"],
+  ];
+
+  it.each(table)("%j", (error, line) => {
+    expect(describeError(error, names)).toBe(line);
+  });
+
+  it("falls back to the chord alone when notes cannot be named", () => {
+    expect(
+      describeError({ code: "chord.wrong-tone", detail: { ...chord, expected: 41, played: 40 } }),
+    ).toBe("A wrong note in the IV chord");
+    expect(describeError({ code: "chord.missing-tone", detail: chord })).toBe(
+      "A note of the IV chord was missing",
+    );
+  });
+});

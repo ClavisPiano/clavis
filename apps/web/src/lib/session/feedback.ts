@@ -26,8 +26,54 @@ function verb(detail: AttemptError["detail"]): string {
   return detail?.part === "sing" ? "sang" : "played";
 }
 
+function text(detail: AttemptError["detail"], key: string): string | undefined {
+  const v = detail?.[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+/** "the IV chord", from the numeral in a chord error's detail. */
+function chordLabel(detail: AttemptError["detail"]): string {
+  const roman = text(detail, "roman");
+  return roman === undefined ? "a chord" : `the ${roman} chord`;
+}
+
+/** A note name without its octave: "F3" is "F", because chords are named by their tones. */
+function toneName(names: NoteNamer, midi: number): string {
+  return names(midi).replace(/-?\d+$/, "");
+}
+
 /** Names a MIDI note for reading items, e.g. "E2". Absent for ear items. */
 export type NoteNamer = (midi: number) => string;
+
+/** Errors of a chord line (T5.3), which name the chord by its numeral. */
+function describeChordError(error: AttemptError, names?: NoteNamer): string {
+  const { code, detail } = error;
+  const chord = chordLabel(detail);
+  const expected = num(detail, "expected");
+  const played = num(detail, "played");
+  switch (code) {
+    case "chord.wrong-tone":
+      return names && expected !== undefined && played !== undefined
+        ? `You played ${toneName(names, played)} instead of ${toneName(names, expected)} in ${chord}.`
+        : `A wrong note in ${chord}`;
+    case "chord.missing-tone":
+      return names && expected !== undefined
+        ? `You left out ${toneName(names, expected)} in ${chord}.`
+        : `A note of ${chord} was missing`;
+    case "chord.missed": {
+      const symbol = text(detail, "symbol");
+      return `${chord[0]?.toUpperCase() ?? ""}${chord.slice(1)}${symbol === undefined ? "" : ` (${symbol})`} was missed`;
+    }
+    case "chord.extra":
+      return (num(detail, "count") ?? 1) > 1 ? "There were extra notes" : "There was an extra note";
+    case "chord.early":
+      return `${chord[0]?.toUpperCase() ?? ""}${chord.slice(1)} was early`;
+    case "chord.late":
+      return `${chord[0]?.toUpperCase() ?? ""}${chord.slice(1)} was late`;
+    default:
+      return "Something was off";
+  }
+}
 
 /** One short sentence for an error code. With `names` (reading items) notes are named. */
 /**
@@ -55,6 +101,7 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
       }
     }
   }
+  if (code.startsWith("chord.")) return describeChordError(error, names);
   if (code.startsWith(CONFUSION_PREFIX)) {
     const [expected, played] = code.slice(CONFUSION_PREFIX.length).split("-");
     if (expected !== undefined && played !== undefined && expected !== "" && played !== "") {

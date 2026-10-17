@@ -146,6 +146,8 @@ export interface HarnessOptions {
   /** Learn something new: extra new items for this session. */
   extraNewItems?: number;
   inputSource?: "mic" | "tap" | "midi";
+  /** Offer HANDS items (chords): the input can capture them, as MIDI does. */
+  polyphonic?: boolean;
   headphones?: boolean | undefined;
   askHeadphones?: boolean;
   latency?: { tapMs?: number; micMs?: number };
@@ -208,7 +210,9 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     ...(opts.notation ? { notation: opts.notation } : {}),
     ...(opts.practiceStep ? { practiceStep: true } : {}),
     ...(opts.autoContinueMs === undefined ? {} : { autoContinueMs: opts.autoContinueMs }),
-    compose: composeSession,
+    compose: opts.polyphonic
+      ? (input) => composeSession({ ...input, polyphonic: true })
+      : composeSession,
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
       if (!node) throw new Error(`unknown node ${item.nodeId}`);
@@ -322,6 +326,14 @@ export function playCorrect(
         last = startMs + (play.onsetsBeats[i] ?? 0) * beatMs;
         adapter.emitNote(noteAt(m, last, source));
       });
+      break;
+    }
+    case "chordLine": {
+      const beatMs = 60000 / play.tempoBpm;
+      for (const c of play.chords) {
+        last = startMs + c.onsetBeats * beatMs;
+        for (const m of c.midi) adapter.emitNote(noteAt(m, last, source));
+      }
       break;
     }
     case "rhythm": {

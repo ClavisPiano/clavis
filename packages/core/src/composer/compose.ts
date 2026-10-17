@@ -56,6 +56,9 @@ export const APPLY_NEW_PHRASES_PER_SESSION = 2;
 /** New phrases to play by ear in a session (TP.6): hearing and singing is slower than reading. */
 export const APPLY_NEW_EAR_PHRASES_PER_SESSION = 1;
 
+/** New left-hand chord items (HANDS, T5.3) offered in one session. Each takes a while to play. */
+export const HANDS_NEW_ITEMS_PER_SESSION = 2;
+
 /** The READ node whose fluency ends the C-major-first rule (R15). */
 const LANDMARKS_NODE = "read.bass.landmarks";
 const FAMILY_ORDER: readonly KeyFamily[] = ["A", "B", "C"];
@@ -96,6 +99,7 @@ function usableGenerators(
   graph: SkillGraph,
   mode: ComposeInput["mode"],
   registry: Registry,
+  polyphonic: boolean,
 ): GeneratorId[] {
   if (!nodeEnabled(node, graph, registry)) return [];
   return node.itemGenerators.filter((g) => {
@@ -104,7 +108,9 @@ function usableGenerators(
       info !== undefined &&
       info.implemented &&
       registry[g] !== undefined &&
-      (mode === "instrument" || info.awayEligible)
+      (mode === "instrument" || info.awayEligible) &&
+      // Chords need an input that can hear them (MIDI), whatever else the generator needs.
+      (polyphonic || !info.requires.includes("polyphonic"))
     );
   });
 }
@@ -114,8 +120,9 @@ function buildInfo(
   graph: SkillGraph,
   mode: ComposeInput["mode"],
   registry: Registry,
+  polyphonic: boolean,
 ) {
-  const gens = usableGenerators(node, graph, mode, registry);
+  const gens = usableGenerators(node, graph, mode, registry, polyphonic);
   const first = gens[0];
   if (first === undefined) return undefined;
   const gen = registry[first];
@@ -459,10 +466,11 @@ export function composeSession(input: ComposeInput): SessionPlan {
 
   const skillSet = input.skills === undefined ? undefined : new Set(input.skills);
   const infos = new Map<string, NodeInfo>();
-  const strands: Strand[] = ["EAR", "READ", "BYEAR", "APPLY"];
+  const polyphonic = input.polyphonic === true;
+  const strands: Strand[] = ["EAR", "READ", "BYEAR", "APPLY", "HANDS"];
   for (const node of graph.nodes) {
     if (!strands.includes(node.strand)) continue;
-    const info = buildInfo(node, graph, mode, registry);
+    const info = buildInfo(node, graph, mode, registry, polyphonic);
     if (info && (skillSet === undefined || skillSet.has(node.id))) infos.set(node.id, info);
   }
   const stateOf = (id: string) => NODE_RANK[state.nodes[id]?.state ?? "locked"];
@@ -509,18 +517,24 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const readIntro = introCandidate("READ");
   // A by-ear task node (T7.2) joins the Apply block, so only instrument sessions can introduce it.
   const byearIntro = mode === "instrument" ? introCandidate("BYEAR") : undefined;
-  // The strand whose most recent introduction is oldest goes first; ties go to EAR, READ, BYEAR.
-  const chosen = [
-    { strand: "EAR", node: earIntro },
-    { strand: "READ", node: readIntro },
-    { strand: "BYEAR", node: byearIntro },
-  ]
-    .filter((c) => c.node !== undefined)
-    .sort((a, b) => {
-      const x = lastIntroduction(a.strand as Strand);
-      const y = lastIntroduction(b.strand as Strand);
-      return x < y ? -1 : x > y ? 1 : 0;
-    })[0]?.node;
+  // HANDS has a candidate only with polyphonic input (its generators need it), so without MIDI
+  // this is the same choice as before.
+  const handsIntro = introCandidate("HANDS");
+  // The strand whose most recent introduction is oldest goes first; ties go to EAR, READ, BYEAR,
+  // HANDS.
+  const chosen = (
+    [
+      [earIntro, "EAR"],
+      [readIntro, "READ"],
+      [byearIntro, "BYEAR"],
+      [handsIntro, "HANDS"],
+    ] as const
+  )
+    .flatMap(([node, strand]) => (node ? [{ node, last: lastIntroduction(strand) }] : []))
+    .reduce<{ node: SkillNode; last: number } | undefined>(
+      (best, c) => (best === undefined || c.last < best.last ? c : best),
+      undefined,
+    )?.node;
   if (chosen) {
     if (newAllowance > 0) intro = chosen;
     else notes.push("daily new-item cap reached: introduction deferred");
@@ -576,7 +590,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     // Mastered items are a last resort: only when nothing else can supply new material here.
     const fallbackOnly =
       !fresh.some((c) => c.tier !== TIER_MASTERED) &&
-      (strand === "EAR" ? earIntro : readIntro) === undefined;
+      (strand === "EAR" ? earIntro : strand === "READ" ? readIntro : handsIntro) === undefined;
     const usable = fresh.filter((c) => c.tier !== TIER_MASTERED || fallbackOnly);
     // EAR: learning and fluent nodes take turns, one item each per round (learning first in a
     // round), so a large learning node cannot hold back a placed skill for days. READ keeps
@@ -612,13 +626,23 @@ export function composeSession(input: ComposeInput): SessionPlan {
         (i) => (i.node.strand === "APPLY" && hasPieces) || i.node.strand === "BYEAR",
       )
     : [];
-  const apply = applyCandidates(
+  const pieceApply = applyCandidates(
     applyInfos,
     input.pieces ?? [],
     state,
     input.now,
     intro?.strand === "BYEAR" ? intro.id : undefined,
   );
+  // Left-hand chord items (HANDS, T5.3) share the Apply block. They exist only with polyphonic
+  // input and at the instrument, and are not part of practice rounds. Due ones first, then up to
+  // `HANDS_NEW_ITEMS_PER_SESSION` new ones, ahead of new piece phrases.
+  const hands = applyOpen
+    ? candidates("HANDS")
+    : { due: [] as Candidate[], fresh: [] as Candidate[] };
+  const apply = {
+    due: [...hands.due, ...pieceApply.due],
+    fresh: [...hands.fresh.slice(0, HANDS_NEW_ITEMS_PER_SESSION), ...pieceApply.fresh],
+  };
   // An introduction needs its item, so a by-ear node being introduced always gets a share.
   const byearIntroducing = intro?.strand === "BYEAR" && newAllowance > 0;
   const applyHasContent =
@@ -712,6 +736,8 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const readItems = withKey(
     arrange(readFill, createRng((input.seed ^ 0x5bd1e995) >>> 0), practice),
   );
+  // Chord items carry a family like reading items; piece phrases have none and pass through.
+  const applyItems = withKey(applyFill.items);
 
   const orient =
     mode === "away" || !orientNeeded
@@ -733,7 +759,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     blocks: {
       ear: earItems,
       read: readItems,
-      apply: applyFill.items.length > 0 ? applyFill.items : null,
+      apply: applyItems.length > 0 ? applyItems : null,
     },
     introductions,
     introductionKeyFamilies,

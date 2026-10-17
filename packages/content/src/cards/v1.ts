@@ -403,6 +403,37 @@ export const CARDS_V1: unknown[] = [
     links: [{ label: "Diatonic triads (musictheory.net)", url: `${MT}/43` }],
   },
   {
+    id: "concept.hands.lh.triads.root",
+    nodeIds: ["hands.lh.triads.root"],
+    title: "Left-hand triads",
+    body: [
+      "A triad is three notes stacked in thirds, and in root position the chord's name note, the root, is the lowest. Your left hand can play all three together as a block chord. In a major key the chords on 1, 4 and 5 are major (I, IV, V) and the chord on 6 is minor (vi).",
+      "Each chord is written as three notes stacked on the bass staff, with its symbol and numeral shown alongside. Reading the shape is quicker than reading each note: a triad in root position sits on three lines or three spaces.",
+      "Keep your hand relaxed and move the shortest way to the next chord. Press the three notes at the same moment.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "Four chords are written on the bass staff, with a count-in of four clicks before the first.",
+      "Play each chord with your left hand, all three notes together, holding it for two beats.",
+      "Every chord tone must be right, and the rhythm judged against your own pace. A wrong note is named, for example E instead of F.",
+    ],
+    examples: [
+      {
+        kind: "progression",
+        label: "I IV V I as block chords",
+        romans: ["I", "IV", "V", "I"],
+        afterCadence: false,
+      },
+      {
+        kind: "staff",
+        label: "The home chord in the bass: C E G",
+        clef: "bass",
+        positions: ["C3", "E3", "G3"],
+      },
+    ],
+    links: [{ label: "Triads (musictheory.net)", url: `${MT}/40` }],
+  },
+  {
     id: "concept.byear.melody.simple",
     nodeIds: ["byear.melody.simple"],
     title: "Playing a heard melody",

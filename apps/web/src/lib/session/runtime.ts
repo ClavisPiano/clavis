@@ -180,7 +180,12 @@ export async function createSessionRuntime(
             tzOffsetMin: input.tzOffsetMin,
             generators: appGenerators(input.state),
           })
-        : composeSession({ ...input, ...pieceInputs(input.state) }),
+        : // Chords (HANDS) need an input that can hear them: only MIDI does, today.
+          composeSession({
+            ...input,
+            ...pieceInputs(input.state),
+            polyphonic: inputKind === "midi",
+          }),
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
       if (!node) throw new Error(`Unknown skill node ${item.nodeId}`);
@@ -257,6 +262,7 @@ export async function createSessionRuntime(
           mode: params.mode,
           budgetSec: machine.budgetSec,
           elapsedSec,
+          polyphonic: inputKind === "midi",
         });
       },
       tone(midi) {
