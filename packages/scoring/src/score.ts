@@ -11,6 +11,7 @@ import type {
 import { scoreChordLine } from "./chords.js";
 import { scoreChoice, type ChoiceAnswer } from "./choice.js";
 import { scoreLine } from "./line.js";
+import { scorePerformance } from "./performance.js";
 import { scoreRhythm } from "./rhythm.js";
 import { scoreSequence } from "./sequence.js";
 import { scoreExactPitch, scorePitchClass } from "./single.js";
@@ -85,6 +86,16 @@ function scorePlay(play: PlayTarget, input: ScoreInput): PartResult {
         ...base,
         chords: play.chords,
         tempoBpm: play.tempoBpm,
+        source: input.source,
+      });
+    case "performance":
+      return scorePerformance({
+        notes: play.notes,
+        tempoBpm: play.tempoBpm,
+        beatsPerBar: play.beatsPerBar,
+        played: input.notes,
+        stimulusEndMs: input.stimulusEndMs,
+        responseWindowMs: input.expected.responseWindowMs,
         source: input.source,
       });
     case "rhythm":

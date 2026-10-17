@@ -57,6 +57,15 @@ interface Refinable {
 function refinePiece(piece: Refinable, ctx: z.RefinementCtx): void {
   const staff = piece.score.staves[0];
   if (staff === undefined) return;
+  // Phrases, hands and line notes read the first staff only; grand-staff pieces are T5.6. This
+  // also keeps `content.imported` v1, which validates its payload as a user piece, as it shipped.
+  if (piece.score.staves.length > 1) {
+    ctx.addIssue({
+      code: "custom",
+      message: "a piece has a single staff",
+      path: ["score", "staves"],
+    });
+  }
   if (staff.clef === "percussion") {
     ctx.addIssue({
       code: "custom",

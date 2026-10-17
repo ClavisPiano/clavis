@@ -148,3 +148,35 @@ describe("checkPlayDone for a chord line", () => {
     expect(checkPlayDone(chordLine, first, 1000 + CHORD_GIVE_UP_MS).done).toBe(true);
   });
 });
+
+describe("checkPlayDone for a two-hand performance", () => {
+  const performance: PlayTarget = {
+    kind: "performance",
+    notes: [
+      { id: "n1", midi: 67, onsetBeats: 0, durationBeats: 1, hand: "rh" },
+      { id: "n3", midi: 43, onsetBeats: 0, durationBeats: 2, hand: "lh" },
+      { id: "n2", midi: 69, onsetBeats: 1, durationBeats: 1, hand: "rh" },
+    ],
+    tempoBpm: 60,
+    beatsPerBar: 4,
+  };
+
+  it("is not done before anything is played", () => {
+    expect(checkPlayDone(performance, [], 10_000).done).toBe(false);
+  });
+
+  it("is done once every note is struck and the hands have been still for a moment", () => {
+    const all = [note(67, 1000), note(43, 1010), note(69, 2000)];
+    const check = checkPlayDone(performance, all, 2100);
+    expect(check.done).toBe(false);
+    expect(check.recheckInMs).toBe(2000 + SEQUENCE_QUIET_MS - 2100);
+    expect(checkPlayDone(performance, all, 2000 + SEQUENCE_QUIET_MS).done).toBe(true);
+  });
+
+  it("waits a long pause when notes are still to come", () => {
+    const first = [note(67, 1000), note(43, 1010)];
+    expect(checkPlayDone(performance, first, 1010 + SEQUENCE_QUIET_MS).done).toBe(false);
+    expect(checkPlayDone(performance, first, 1010 + CHORD_GIVE_UP_MS - 1).done).toBe(false);
+    expect(checkPlayDone(performance, first, 1010 + CHORD_GIVE_UP_MS).done).toBe(true);
+  });
+});

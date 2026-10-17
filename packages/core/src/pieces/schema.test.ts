@@ -109,6 +109,18 @@ describe("PieceSchema", () => {
       },
       "single line",
     ],
+    [
+      "a grand staff",
+      (p) => {
+        const treble = must(p.score.staves[0]);
+        p.score.staves.push({
+          clef: "bass",
+          lines: 5,
+          measures: treble.measures.map(() => [{ kind: "rest", duration: { value: 1, dots: 0 } }]),
+        });
+      },
+      "a piece has a single staff",
+    ],
     ["no required nodes", (p) => void (p.requiredNodeIds = []), "requiredNodeIds"],
     [
       "duplicate required nodes",

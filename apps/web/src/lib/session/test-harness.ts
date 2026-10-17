@@ -340,6 +340,15 @@ export function playCorrect(
       }
       break;
     }
+    case "performance": {
+      const beatMs = 60000 / play.tempoBpm;
+      for (const n of play.notes) {
+        const at = startMs + n.onsetBeats * beatMs;
+        last = Math.max(last, at);
+        adapter.emitNote(noteAt(n.midi, at, source));
+      }
+      break;
+    }
     case "rhythm": {
       const beatMs = 60000 / play.tempoBpm;
       for (const b of play.onsetsBeats) {

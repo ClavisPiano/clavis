@@ -75,6 +75,42 @@ function describeChordError(error: AttemptError, names?: NoteNamer): string {
   }
 }
 
+/** "Bar 3: LH", from a performance error's detail (R27). */
+function barAndHand(detail: AttemptError["detail"]): string {
+  const measure = num(detail, "measure");
+  const hand = text(detail, "hand");
+  const who = hand === "lh" ? "LH" : hand === "rh" ? "RH" : undefined;
+  const bar = measure === undefined ? undefined : `Bar ${String(measure)}`;
+  if (bar !== undefined && who !== undefined) return `${bar}: ${who}`;
+  return bar ?? who ?? "A note";
+}
+
+/** Errors of a two-hand performance (R27), which name the bar and the hand: "Bar 3: LH late". */
+function describePerformanceError(error: AttemptError, names?: NoteNamer): string {
+  const { code, detail } = error;
+  const where = barAndHand(detail);
+  const expected = num(detail, "expected");
+  const played = num(detail, "played");
+  switch (code) {
+    case "note.wrong":
+      return names && expected !== undefined && played !== undefined
+        ? `${where} played ${names(played)} instead of ${names(expected)}`
+        : `${where} wrong note`;
+    case "note.missed":
+      return names && expected !== undefined
+        ? `${where} missed ${names(expected)}`
+        : `${where} missed a note`;
+    case "note.extra":
+      return `${where} extra note`;
+    case "note.early":
+      return `${where} early`;
+    case "note.late":
+      return `${where} late`;
+    default:
+      return "Something was off";
+  }
+}
+
 /** One short sentence for an error code. With `names` (reading items) notes are named. */
 /**
  * An option label inside a sentence: a plain capitalised word ("Minor") drops its capital, while
@@ -102,6 +138,7 @@ export function describeError(error: AttemptError, names?: NoteNamer): string {
     }
   }
   if (code.startsWith("chord.")) return describeChordError(error, names);
+  if (code.startsWith("note.")) return describePerformanceError(error, names);
   if (code.startsWith(CONFUSION_PREFIX)) {
     const [expected, played] = code.slice(CONFUSION_PREFIX.length).split("-");
     if (expected !== undefined && played !== undefined && expected !== "" && played !== "") {

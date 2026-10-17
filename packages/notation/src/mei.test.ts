@@ -82,6 +82,53 @@ const percussionRhythm: ScoreSpec = {
   meter: { beats: 4, beatValue: 4 },
 };
 
+/** Core's FIXTURE_GRAND_STAFF: G major, 4/4, treble over bass, ids running on across staves. */
+const grandStaff: ScoreSpec = {
+  staves: [
+    {
+      clef: "treble",
+      lines: 5,
+      measures: [
+        [
+          note("n1", "B", 0, 4, { value: 4, dots: 0 }),
+          note("n2", "A", 0, 4, { value: 4, dots: 0 }),
+          note("n3", "G", 0, 4, { value: 4, dots: 0 }),
+          note("n4", "A", 0, 4, { value: 4, dots: 0 }),
+        ],
+        [
+          note("n5", "G", 0, 4, { value: 2, dots: 0 }),
+          { kind: "rest", duration: { value: 2, dots: 0 } },
+        ],
+      ],
+    },
+    {
+      clef: "bass",
+      lines: 5,
+      measures: [
+        [
+          {
+            kind: "note",
+            id: "n6",
+            pitches: [
+              { step: "G", alter: 0, octave: 2 },
+              { step: "B", alter: 0, octave: 2 },
+              { step: "D", alter: 0, octave: 3 },
+            ],
+            duration: { value: 1, dots: 0 },
+          },
+        ],
+        [
+          note("n7", "D", 0, 3, { value: 4, dots: 0 }),
+          { kind: "rest", duration: { value: 4, dots: 0 } },
+          note("n8", "G", 0, 2, { value: 2, dots: 0 }),
+        ],
+      ],
+    },
+  ],
+  key: { tonic: "G", mode: "major" },
+  meter: { beats: 4, beatValue: 4 },
+};
+
 describe("toMei golden output", () => {
   it("bass F3 in G major: gestural sharp from the key signature", () => {
     expect(toMei(bassF3GMajor)).toMatchInlineSnapshot(`
@@ -238,6 +285,75 @@ describe("toMei golden output", () => {
                       <layer n="1">
                         <note xml:id="n5" pname="b" oct="4" dur="2" tie="t"/>
                         <rest dur="2"/>
+                      </layer>
+                    </staff>
+                  </measure>
+                </section>
+              </score>
+            </mdiv>
+          </body>
+        </music>
+      </mei>
+      "
+    `);
+  });
+});
+
+describe("toMei grand staff golden output (R27)", () => {
+  it("treble over bass in one braced staffGrp, both staves in every measure", () => {
+    expect(toMei(grandStaff)).toMatchInlineSnapshot(`
+      "<?xml version="1.0" encoding="UTF-8"?>
+      <mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.0">
+        <meiHead>
+          <fileDesc>
+            <titleStmt>
+              <title/>
+            </titleStmt>
+            <pubStmt/>
+          </fileDesc>
+        </meiHead>
+        <music>
+          <body>
+            <mdiv>
+              <score>
+                <scoreDef keysig="1s" meter.count="4" meter.unit="4">
+                  <staffGrp symbol="brace" bar.thru="true">
+                    <staffDef n="1" lines="5" clef.shape="G" clef.line="2"/>
+                    <staffDef n="2" lines="5" clef.shape="F" clef.line="4"/>
+                  </staffGrp>
+                </scoreDef>
+                <section>
+                  <measure n="1">
+                    <staff n="1">
+                      <layer n="1">
+                        <note xml:id="n1" pname="b" oct="4" dur="4"/>
+                        <note xml:id="n2" pname="a" oct="4" dur="4"/>
+                        <note xml:id="n3" pname="g" oct="4" dur="4"/>
+                        <note xml:id="n4" pname="a" oct="4" dur="4"/>
+                      </layer>
+                    </staff>
+                    <staff n="2">
+                      <layer n="1">
+                        <chord xml:id="n6" dur="1">
+                          <note xml:id="n6-1" pname="g" oct="2"/>
+                          <note xml:id="n6-2" pname="b" oct="2"/>
+                          <note xml:id="n6-3" pname="d" oct="3"/>
+                        </chord>
+                      </layer>
+                    </staff>
+                  </measure>
+                  <measure n="2">
+                    <staff n="1">
+                      <layer n="1">
+                        <note xml:id="n5" pname="g" oct="4" dur="2"/>
+                        <rest dur="2"/>
+                      </layer>
+                    </staff>
+                    <staff n="2">
+                      <layer n="1">
+                        <note xml:id="n7" pname="d" oct="3" dur="4"/>
+                        <rest dur="4"/>
+                        <note xml:id="n8" pname="g" oct="2" dur="2"/>
                       </layer>
                     </staff>
                   </measure>
