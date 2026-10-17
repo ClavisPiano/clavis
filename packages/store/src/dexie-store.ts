@@ -7,6 +7,12 @@ import {
   type Snapshot,
 } from "@clavis/core";
 import { Dexie, type Table } from "dexie";
+import {
+  DexieBlobStore,
+  type BlobRecord,
+  type BlobStore,
+  type BlobStoreOptions,
+} from "./blob-store.js";
 
 /** Stored event row: the event plus a 0/1 flag (booleans are not indexable in IndexedDB). */
 type EventRow = LearningEvent & { synced: 0 | 1 };
@@ -34,6 +40,7 @@ export class DexieEventStore implements EventStore {
     events: Table<EventRow, string>;
     snapshots: Table<Snapshot, string>;
     meta: Table<MetaRow, string>;
+    blobs: Table<BlobRecord, string>;
   };
 
   constructor(options: DexieEventStoreOptions = {}) {
@@ -47,7 +54,20 @@ export class DexieEventStore implements EventStore {
       snapshots: "key",
       meta: "key",
     });
+    // v2 (T4.5) adds recordings. Existing tables carry over untouched; no data migration is needed
+    // because the new table starts empty.
+    db.version(2).stores({
+      events: "id, at, [at+id], synced",
+      snapshots: "key",
+      meta: "key",
+      blobs: "key, createdAt",
+    });
     this.db = db as typeof this.db;
+  }
+
+  /** Local recordings (T4.5) in the same database. */
+  blobStore(options?: BlobStoreOptions): BlobStore {
+    return new DexieBlobStore(this.db, this.db.blobs, options);
   }
 
   close(): void {

@@ -19,6 +19,8 @@ export interface Env {
   VAPID_PRIVATE_KEY?: string;
   /** VAPID contact claim, a `mailto:` or `https:` URL. */
   VAPID_SUBJECT?: string;
+  /** R2 bucket for recordings, keyed `${userId}/${name}`. */
+  BLOBS: R2Bucket;
   /** Test seam for the clock (unix ms). Never set in production. */
   now?: () => number;
 }

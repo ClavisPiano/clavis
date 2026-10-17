@@ -88,6 +88,18 @@ The practice cue (spec 14) is a daily push notification at a time the learner pi
 - Cue settings are device-local on the client (device meta, not a synced setting): a push subscription belongs to one browser, and the right time and habit differ per device. The Worker holds a copy with each subscription. The client re-sends it when settings are saved and when the Settings page opens, so a changed time zone is picked up.
 - iOS delivers web push only to an app installed to the Home Screen (16.4 or later). The Settings page detects standalone mode and explains this otherwise.
 
+## Recordings (R2)
+
+Recordings are stored in an R2 bucket bound as `BLOBS`. Create it once before the first deploy (the deploy fails while the bucket is missing):
+
+```sh
+pnpm --filter @clavis/worker exec wrangler r2 bucket create clavis-blobs
+```
+
+- `PUT|GET|DELETE /api/blobs/:name`. Auth is the same as sync. `PUT` and `DELETE` also need an `Origin` header equal to `EXPECTED_ORIGIN`. The stored key is always `<userId>/<name>` with the user id from the token. `name` matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` and has no `..`.
+- `PUT` accepts `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/wav` and `audio/mpeg`, up to 20 MiB (413 above that, 415 for other types). `GET` returns the stored content type with `cache-control: private`.
+- There is no server-side listing or quota yet. The client keeps its own copies under a size cap (200 MB) and uploads oldest first.
+
 ## Finding the workers.dev URL
 
 The deploy log ends with `https://clavis.<your-subdomain>.workers.dev`. It is also shown in the dashboard under Workers & Pages, clavis. The subdomain is chosen once per account under Workers & Pages, Account details.

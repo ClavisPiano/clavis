@@ -274,3 +274,42 @@ describe("fetch transport", () => {
     ).rejects.toThrow("offline");
   });
 });
+
+describe("afterSync hook", () => {
+  const make = (result: SyncResult, afterSync: () => Promise<unknown>) =>
+    createSyncController({
+      run: () => Promise.resolve(result),
+      afterSync,
+      now: () => 1,
+      isVisible: () => true,
+      isOnline: () => true,
+      doc: new EventTarget(),
+      win: new EventTarget(),
+    });
+
+  it("runs after a successful sync without making the sync wait for it", async () => {
+    const never = new Promise<void>(() => undefined);
+    const after = vi.fn(() => never);
+    const c = make(ok(), after);
+    await c.trigger("sessionEnd"); // resolves although the hook never does
+    await Promise.resolve();
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(c.state.status).toBe("idle");
+  });
+
+  it("does not run when signed out or on error, and swallows hook failures", async () => {
+    const after = vi.fn(() => Promise.resolve());
+    for (const outcome of ["signedOut", "error", "offline"] as const) {
+      await make(ok({ outcome }), after).trigger("start");
+    }
+    await Promise.resolve();
+    expect(after).not.toHaveBeenCalled();
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const failing = make(ok(), () => Promise.reject(new Error("boom")));
+    await failing.trigger("start");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(failing.state.status).toBe("idle");
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});

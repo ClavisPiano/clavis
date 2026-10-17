@@ -1,6 +1,7 @@
 import { DEFAULT_PULL_LIMIT, PullRequest, PushRequest } from "@clavis/core";
 import { authenticate } from "./auth/guard";
 import { handleAuth } from "./auth/handlers";
+import { handleBlob } from "./blobs";
 import type { Env } from "./env";
 import { API_HEADERS, json, methodNotAllowed } from "./http";
 import { handlePush as handlePushApi } from "./push/handlers";
@@ -84,6 +85,7 @@ async function handleApi(request: Request, url: URL, env: Env): Promise<Response
   if (url.pathname.startsWith("/api/push/")) return handlePushApi(request, url, env);
   if (url.pathname === "/api/sync/push") return handlePush(request, env);
   if (url.pathname === "/api/sync/pull") return handlePull(request, url, env);
+  if (url.pathname.startsWith("/api/blobs/")) return handleBlob(request, url, env);
   return json({ error: "not_found" }, 404);
 }
 
