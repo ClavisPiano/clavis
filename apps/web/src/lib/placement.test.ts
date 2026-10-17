@@ -13,6 +13,7 @@ function state(over: Partial<LearnerState> = {}): LearnerState {
     daily: {},
     keyOfDayHistory: [],
     pieces: {},
+    imported: {},
     settings: {},
     eventCount: 1,
     warnings: 0,

@@ -25,6 +25,8 @@ export const MAX_VOICE_LEAP = 5;
 interface Spec {
   roman: string;
   degrees: readonly [number, number, number];
+  /** Semitones above the tonic of root, third and fifth. When set, these replace `degrees`. */
+  semitones?: readonly [number, number, number];
 }
 
 function specs(key: Key): Spec[] {
@@ -37,6 +39,11 @@ function specs(key: Key): Spec[] {
 
 /** Pitch classes of a chord. Harmonic minor is used so that minor V has the raised 7th. */
 function chordChromas(key: Key, s: Spec): [number, number, number] {
+  if (s.semitones !== undefined) {
+    const [x, y, z] = s.semitones;
+    const tc = tonicChroma(key);
+    return [(tc + x) % 12, (tc + y) % 12, (tc + z) % 12];
+  }
   const t = 60 + tonicChroma(key);
   const pc = (d: number): number => degreeToMidi(key, d, t, { minorVariant: "harmonic" }) % 12;
   const [a, b, c] = s.degrees;
@@ -86,26 +93,83 @@ export const MAJOR_ROMAN_ROOTS: Readonly<Record<string, number>> = {
   vi: 6,
 };
 
-/** Roman numerals `progression` accepts (major keys). */
+/** Roman numerals of the diatonic major chords (I, ii, iii, IV, V, vi). */
 export const MAJOR_ROMANS: readonly string[] = Object.keys(MAJOR_ROMAN_ROOTS);
 
+type Triad = readonly [number, number, number];
+
 /**
- * A chord progression in a major key as a bass root plus three close-position upper voices, one
- * `Chord` per numeral (I, ii, iii, IV, V, vi). Voiced like `cadence`, so a progression and a
- * cadence sound alike. Throws RangeError for a minor key, an unknown numeral or an empty list.
+ * Triads by Roman numeral and mode, as semitones above the tonic of root, third and fifth. Major:
+ * the diatonic chords I ii iii IV V vi plus the colour chords iv (borrowed from the parallel
+ * minor), bVII and V/V (the secondary dominant, major, on the second degree). Minor: i iv v VI III
+ * VII from the natural minor and a major V with the raised 7th (harmonic minor).
+ */
+export const ROMAN_TRIADS: Readonly<Record<Key["mode"], Readonly<Record<string, Triad>>>> = {
+  major: {
+    I: [0, 4, 7],
+    ii: [2, 5, 9],
+    iii: [4, 7, 11],
+    IV: [5, 9, 0],
+    V: [7, 11, 2],
+    vi: [9, 0, 4],
+    iv: [5, 8, 0],
+    bVII: [10, 2, 5],
+    "V/V": [2, 6, 9],
+  },
+  minor: {
+    i: [0, 3, 7],
+    iv: [5, 8, 0],
+    v: [7, 10, 2],
+    VI: [8, 0, 3],
+    III: [3, 7, 10],
+    VII: [10, 2, 5],
+    V: [7, 11, 2],
+  },
+};
+
+/** Roman numerals `romanChord` and `progression` accept in `mode`. */
+export function romansForMode(mode: Key["mode"]): string[] {
+  return Object.keys(ROMAN_TRIADS[mode]);
+}
+
+/** True when `roman` is a chord of `mode` (case matters: V and v are different chords). */
+export function isRomanInMode(mode: Key["mode"], roman: string): boolean {
+  return Object.hasOwn(ROMAN_TRIADS[mode], roman);
+}
+
+function triadFor(mode: Key["mode"], roman: string): Triad {
+  const triad = isRomanInMode(mode, roman) ? ROMAN_TRIADS[mode][roman] : undefined;
+  if (triad === undefined) throw new RangeError(`unknown ${mode} Roman numeral: ${roman}`);
+  return triad;
+}
+
+/**
+ * Pitch classes (0 to 11) of a chord named by Roman numeral in `key`, root first. Throws
+ * RangeError for a numeral the key's mode does not have.
+ */
+export function romanChord(key: Key, roman: string): [number, number, number] {
+  const [x, y, z] = triadFor(key.mode, roman);
+  const tc = tonicChroma(key);
+  return [(tc + x) % 12, (tc + y) % 12, (tc + z) % 12];
+}
+
+/**
+ * A chord progression as a bass root plus three close-position upper voices, one `Chord` per
+ * numeral (see `ROMAN_TRIADS` for the numerals of each mode). Voiced like `cadence`, so a
+ * progression and a cadence sound alike. Throws RangeError for an unknown numeral or an empty
+ * list.
  */
 export function progression(
   key: Key,
   romans: readonly string[],
   opts: CadenceOptions = {},
 ): Chord[] {
-  if (key.mode !== "major") throw new RangeError("progression supports major keys only");
   if (romans.length === 0) throw new RangeError("progression needs at least one chord");
-  const sp = romans.map((roman): Spec => {
-    const root = MAJOR_ROMAN_ROOTS[roman];
-    if (root === undefined) throw new RangeError(`unknown Roman numeral: ${roman}`);
-    return { roman, degrees: [root, root + 2, root + 4] };
-  });
+  const sp = romans.map((roman): Spec => ({
+    roman,
+    degrees: [1, 3, 5],
+    semitones: triadFor(key.mode, roman),
+  }));
   return voiceLead(key, sp, opts);
 }
 

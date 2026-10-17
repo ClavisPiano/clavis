@@ -88,6 +88,10 @@
       {/each}
     </ol>
   </details>
+
+  <p class="import">
+    <a href={resolve("/pieces/import")} data-testid="import-piece">Import a piece from a file</a>
+  </p>
 </section>
 
 <style>
@@ -164,5 +168,15 @@
 
   .state {
     font-size: 0.875rem;
+  }
+
+  .import {
+    margin: var(--space-3) 0 0;
+  }
+
+  .import a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch-target);
   }
 </style>

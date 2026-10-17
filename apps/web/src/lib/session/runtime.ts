@@ -6,6 +6,7 @@ import {
   StimulusPlayer,
   TapInputAdapter,
   getAudioContextManager,
+  isMidiSupported,
   type FakeClock,
   type InputAdapter,
   type Instrument,
@@ -19,6 +20,7 @@ import {
   type LearningEvent,
   type StimulusSpec,
 } from "@clavis/core";
+import { loadMilestones } from "@clavis/content";
 import { scoreAttempt } from "@clavis/scoring";
 import { AUTO_CONTINUE_META_KEY, parseAutoContinueSec } from "../auto-continue";
 import { effectiveSettings } from "../home";
@@ -27,7 +29,7 @@ import { getLearnerState } from "../learner";
 import { getNotationClient } from "../notation/shared";
 import { appGenerators, appPieces, generatorFor, pieceInputs } from "../pieces";
 import { createNotationViewPort, type NotationViewPort } from "../notation/view-port";
-import { createInput, detachFakeInput } from "../input";
+import { MIDI_INPUT_META_KEY, createInput, detachFakeInput, parseMidiInputId } from "../input";
 import { createPractisedReporter } from "../practice-cue-browser";
 import { SessionMachine, type SessionDeps } from "./machine";
 import { findOpenSessions } from "./open";
@@ -44,6 +46,8 @@ export interface SessionRuntime {
   tap: TapInputAdapter | undefined;
   /** What to offer after the session (Keep going, Learn something new), from the current state. */
   nextSteps(elapsedSec: number): NextSteps;
+  /** Title of a piece, library or imported, for the run summary. */
+  pieceTitle(pieceId: string): string | undefined;
   /** Short piano note for key presses. No-op when silent. */
   tone(midi: number): void;
   /** Call from a user gesture before `machine.start()` or `resume()`. */
@@ -79,7 +83,8 @@ export async function createSessionRuntime(
   // Fake input has no audio context: use performance.now for everything so nothing depends on the
   // browser starting an AudioContext (headless WebKit may not). Silent audio with tap input has
   // nothing that needs the context clock either. The mic and audible stimuli share the context.
-  const performanceClock = fake || (params.silent && params.inputKind === "tap");
+  const performanceClock =
+    fake || (params.silent && (params.inputKind === "tap" || params.inputKind === "midi"));
   const contextNowMs = performanceClock
     ? (): number => performance.now()
     : (): number => audio.getContext().currentTime * 1000;
@@ -106,9 +111,14 @@ export async function createSessionRuntime(
   }
   const stimulusPlayer = new StimulusPlayer(clockSource, instrument);
 
-  const handle = createInput(params.inputKind, {
+  // MIDI is chosen in settings, but a browser without Web MIDI (or a stored choice from another
+  // browser profile) falls back to the mic.
+  const inputKind = params.inputKind === "midi" && !isMidiSupported() ? "mic" : params.inputKind;
+  const midiInputId = parseMidiInputId(await store.getMeta(MIDI_INPUT_META_KEY));
+  const handle = createInput(inputKind, {
     clock: { now: contextNowMs, schedule },
     ...(performanceClock ? { tapClockMs: contextNowMs } : {}),
+    ...(midiInputId === undefined ? {} : { midiInputId }),
   });
   // At the piano the on-screen keys answer too, so the learner can practise anywhere. Away mode's
   // main input already is the keyboard, and placement is for the instrument alone.
@@ -162,6 +172,7 @@ export async function createSessionRuntime(
       ? { extraNewItems: effectiveSettings(service.state.settings).newItemsPerDay }
       : {}),
     graph,
+    milestones: loadMilestones(),
     // Placement (R19): the plan replaces the composer and nothing but its result is stored.
     ...(placement ? { placement: { plan: placementPlan(graph, createRng(seed)) } } : {}),
     compose: (input) =>
@@ -169,17 +180,22 @@ export async function createSessionRuntime(
         ? composePieceRun({
             state: input.state,
             graph: input.graph,
-            pieces: appPieces(),
+            pieces: appPieces(input.state),
             pieceId: params.run,
             now: input.now,
             tzOffsetMin: input.tzOffsetMin,
-            generators: appGenerators(),
+            generators: appGenerators(input.state),
           })
-        : composeSession({ ...input, ...pieceInputs() }),
+        : // Chords (HANDS) need an input that can hear them: only MIDI does, today.
+          composeSession({
+            ...input,
+            ...pieceInputs(input.state),
+            polyphonic: inputKind === "midi",
+          }),
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
       if (!node) throw new Error(`Unknown skill node ${item.nodeId}`);
-      return generatorFor(item.generator).generate(node, item.params, ctx);
+      return generatorFor(item.generator, service.state).generate(node, item.params, ctx);
     },
     player: {
       play: (spec) => stimulusPlayer.play(spec),
@@ -225,8 +241,9 @@ export async function createSessionRuntime(
   };
   const machine = new SessionMachine(deps);
 
-  if (fake) {
-    // Test hook: lets Playwright see what the current item expects. Never exposed otherwise.
+  if (fake || (params.silent && params.inputKind === "midi")) {
+    // Test hook: lets Playwright see what the current item expects. Never exposed otherwise
+    // (MIDI exposes it only with `?audio=silent`, which real use never sets).
     Object.defineProperty(window, "__clavisSession", {
       configurable: true,
       get: () => machine.debug(),
@@ -239,6 +256,9 @@ export async function createSessionRuntime(
       machine,
       tap,
       notation,
+      pieceTitle(pieceId) {
+        return appPieces(service.state).find((p) => p.id === pieceId)?.title;
+      },
       nextSteps(elapsedSec) {
         return computeNextSteps({
           state: service.state,
@@ -248,6 +268,7 @@ export async function createSessionRuntime(
           mode: params.mode,
           budgetSec: machine.budgetSec,
           elapsedSec,
+          polyphonic: inputKind === "midi",
         });
       },
       tone(midi) {
@@ -296,8 +317,8 @@ export async function createSessionRuntime(
         machine.finish();
         notation.hide();
         input.stop();
-        if (fake) {
-          detachFakeInput();
+        if (fake) detachFakeInput();
+        if (fake || (params.silent && params.inputKind === "midi")) {
           Reflect.deleteProperty(window, "__clavisSession");
           Reflect.deleteProperty(window, "__clavisExamplesPlayed");
         }

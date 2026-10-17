@@ -83,3 +83,52 @@ describe("attemptEvents", () => {
     expect(events[1]?.durationSec).toBeLessThanOrEqual(0.6);
   });
 });
+
+describe("replay of chords", () => {
+  const chordInstance = {
+    presentation: {},
+    display: {},
+    stimulus: {
+      tempoBpm: 60,
+      events: [0, 1, 2, 3].map((atSec) => ({
+        atSec,
+        midi: [84],
+        durationSec: 0.1,
+        velocity: 0.4,
+        role: "count-in",
+      })),
+    },
+    expected: {
+      responseWindowMs: 20000,
+      play: {
+        kind: "chordLine",
+        chords: [
+          { roman: "I", symbol: "C", midi: [48, 52, 55], onsetBeats: 0, durationBeats: 2 },
+          { roman: "V", symbol: "G", midi: [43, 47, 50], onsetBeats: 2, durationBeats: 2 },
+        ],
+        tempoBpm: 60,
+        beatsPerBar: 4,
+      },
+    },
+  } as unknown as ItemInstance;
+
+  it("plays the count-in, then each chord as one event at its beat", () => {
+    const spec = buildReplaySpec(chordInstance, { notes: [], frames: [] });
+    const chords = spec.events.filter((e) => e.role === "target");
+    expect(chords.map((e) => e.midi)).toEqual([
+      [48, 52, 55],
+      [43, 47, 50],
+    ]);
+    expect((chords[1]?.atSec ?? 0) - (chords[0]?.atSec ?? 0)).toBeCloseTo(2, 5);
+    expect(spec.events.filter((e) => e.role === "count-in")).toHaveLength(4);
+  });
+
+  it("lets the tones of a played chord ring until the next chord, not the next tone", () => {
+    const events = attemptEvents({
+      notes: [note(48, 0), note(52, 20), note(55, 40), note(43, 2000), note(47, 2020)],
+      frames: [],
+    });
+    expect(events).toHaveLength(5);
+    for (const e of events.slice(0, 3)) expect(e.durationSec).toBeGreaterThan(0.5);
+  });
+});

@@ -16,7 +16,6 @@
   import { createSessionRuntime, type SessionRuntime } from "../../lib/session/runtime";
   import { followUpSearch } from "../../lib/next-steps";
   import { minutesLabel } from "../../lib/home";
-  import { appPieces } from "../../lib/pieces";
 
   type Phase = "loading" | "failed" | "ready";
 
@@ -44,7 +43,7 @@
   const runResult = $derived.by(() => {
     if (view.kind !== "summary" || !view.summary.run) return undefined;
     const run = view.summary.run;
-    return { ...run, title: appPieces().find((x) => x.id === run.pieceId)?.title ?? "the piece" };
+    return { ...run, title: runtime?.pieceTitle(run.pieceId) ?? "the piece" };
   });
   /** After the session, or on the Nothing-due screen: what else to offer today. */
   const steps = $derived(
@@ -278,6 +277,14 @@
   </p>
 {/snippet}
 
+{#snippet chordLabels(chords: { roman: string; symbol: string }[])}
+  <p class="chord-labels" data-testid="chord-labels" aria-label="Chords to play">
+    {#each chords as c, i (i)}
+      <span class="chord"><span class="deg">{c.roman}</span> {c.symbol}</span>
+    {/each}
+  </p>
+{/snippet}
+
 {#snippet nextStepLinks()}
   {#if steps && (steps.keepGoing || steps.learn)}
     <h2>Keep going?</h2>
@@ -437,6 +444,10 @@
     {:else if view.kind === "presenting"}
       <section class="card" data-testid="presenting">
         <p class="prompt" aria-live="polite">{view.prompt}</p>
+        {#if view.item.chords}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render chordLabels(view.item.chords)}
+        {/if}
         {#if view.item.keyNotes}
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
           {@render keyNotesLine(view.item.keyNotes)}
@@ -464,6 +475,10 @@
           <p class="eyebrow">Step {view.phaseIndex + 1} of {view.phaseCount}</p>
         {/if}
         <p class="prompt" aria-live="polite" data-testid="prompt">{view.prompt}</p>
+        {#if view.item.chords}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render chordLabels(view.item.chords)}
+        {/if}
         {#if showPad}
           <button
             type="button"
@@ -567,6 +582,10 @@
         <p class="result" class:good={view.feedback.correct} data-testid="result">
           {view.feedback.correct ? "Correct" : "Not quite"}
         </p>
+        {#if view.item.chords}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render chordLabels(view.item.chords)}
+        {/if}
         {#if view.feedback.answer}
           <p class="answer" data-testid="answer">{view.feedback.answer}</p>
         {/if}
@@ -720,6 +739,14 @@
             {/if}
           </div>
         {/if}
+        {#if view.summary.milestones}
+          <div class="moment" data-testid="milestones">
+            <h2>{view.summary.milestones.length === 1 ? "New milestone" : "New milestones"}</h2>
+            {#each view.summary.milestones as m (m.nodeId)}
+              <p data-testid="milestone" data-node={m.nodeId}>{m.statement}</p>
+            {/each}
+          </div>
+        {/if}
         {#if view.summary.nodeChanges.length > 0}
           <h2>Progress</h2>
           <ul class="issues" data-testid="node-changes">
@@ -846,7 +873,8 @@
     font-size: 1.15rem;
   }
 
-  .key-notes {
+  .key-notes,
+  .chord-labels {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
@@ -854,7 +882,8 @@
     font-size: 1.15rem;
   }
 
-  .key-note .deg {
+  .key-note .deg,
+  .chord .deg {
     color: var(--color-text-muted);
     font-size: 0.9rem;
   }
@@ -1034,6 +1063,10 @@
 
   .moment p {
     margin: 0;
+  }
+
+  .moment p + p {
+    margin-top: var(--space-2);
   }
 
   .confirm-actions {

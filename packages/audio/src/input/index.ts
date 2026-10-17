@@ -4,3 +4,4 @@ export * from "./tap-adapter.js";
 export * from "./fake-adapter.js";
 export * from "./mic-adapter.js";
 export * from "./composite-adapter.js";
+export * from "./midi.js";
