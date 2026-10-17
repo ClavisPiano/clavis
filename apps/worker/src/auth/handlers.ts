@@ -296,6 +296,32 @@ const POST_ROUTES: Record<string, PostHandler> = {
   "/api/auth/logout": () => Promise.resolve(logout()),
 };
 
+/** Seconds a client should wait after a 429; the limiters count over 60 s windows. */
+export const RATE_LIMIT_RETRY_AFTER_S = 60;
+
+/** Which limiter guards a route. Signed-in routes (passkeys, logout) are not rate limited. */
+function limiterFor(path: string, env: Env): RateLimit | undefined {
+  if (path === "/api/auth/recovery") return env.AUTH_RECOVERY_LIMITER;
+  if (path.startsWith("/api/auth/register/") || path.startsWith("/api/auth/login/")) {
+    return env.AUTH_LIMITER;
+  }
+  return undefined;
+}
+
+/**
+ * True when the client is over its limit. Keyed on the client IP. Fails open: if the limiter
+ * itself errors, the request goes through, because locking everyone out is worse than a short gap.
+ */
+async function rateLimited(request: Request, limiter: RateLimit): Promise<boolean> {
+  const key = request.headers.get("cf-connecting-ip") ?? "unknown";
+  try {
+    return !(await limiter.limit({ key })).success;
+  } catch (error) {
+    console.error("auth rate limiter failed, allowing request", error);
+    return false;
+  }
+}
+
 /** Routes `/api/me` and `/api/auth/*`. */
 export async function handleAuth(request: Request, url: URL, env: Env): Promise<Response> {
   const repo = createAuthRepo(d1Sql(env.DB));
@@ -308,5 +334,11 @@ export async function handleAuth(request: Request, url: URL, env: Env): Promise<
   if (request.method !== "POST") return methodNotAllowed("POST");
   const blocked = csrfFailure(request, env);
   if (blocked) return blocked;
+  const limiter = limiterFor(url.pathname, env);
+  if (limiter && (await rateLimited(request, limiter))) {
+    return json({ error: "rate_limited" }, 429, {
+      "retry-after": String(RATE_LIMIT_RETRY_AFTER_S),
+    });
+  }
   return handler(request, env, repo);
 }

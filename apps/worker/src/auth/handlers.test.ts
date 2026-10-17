@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import worker from "../index";
 import type { Env } from "../env";
-import { ORIGIN, RP_ID, makeEnv } from "../test-support";
-import { CHALLENGE_TTL_MS, RECOVERY_CODE_COUNT, SESSION_TTL_SECONDS } from "./handlers";
+import { ORIGIN, RP_ID, fakeLimiter, makeEnv } from "../test-support";
+import {
+  CHALLENGE_TTL_MS,
+  RATE_LIMIT_RETRY_AFTER_S,
+  RECOVERY_CODE_COUNT,
+  SESSION_TTL_SECONDS,
+} from "./handlers";
 import { SoftwareAuthenticator } from "./software-authenticator";
 
 interface Opts {
   origin?: string | null;
   contentType?: string | null;
   cookie?: string;
+  ip?: string;
 }
 
 const post = (env: Env, path: string, body: unknown, opts: Opts = {}) => {
@@ -16,6 +22,7 @@ const post = (env: Env, path: string, body: unknown, opts: Opts = {}) => {
   if (opts.contentType !== null) headers["content-type"] = opts.contentType ?? "application/json";
   if (opts.origin !== null) headers.origin = opts.origin ?? ORIGIN;
   if (opts.cookie) headers.cookie = opts.cookie;
+  if (opts.ip) headers["cf-connecting-ip"] = opts.ip;
   return worker.fetch(
     new Request(`${ORIGIN}${path}`, { method: "POST", headers, body: JSON.stringify(body) }),
     env,
@@ -434,5 +441,62 @@ describe("add passkey", () => {
       { cookie: otherCookie },
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("rate limiting", () => {
+  it("limits recovery per client IP and answers 429 with retry-after", async () => {
+    const { env } = setup();
+    env.AUTH_RECOVERY_LIMITER = fakeLimiter(5);
+    const attempt = (ip: string) =>
+      post(env, "/api/auth/recovery", { code: "AAAA-AAAA-AAAA-AAAA" }, { ip });
+    for (let i = 0; i < 5; i++) expect((await attempt("203.0.113.7")).status).toBe(401);
+    const limited = await attempt("203.0.113.7");
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe(String(RATE_LIMIT_RETRY_AFTER_S));
+    expect(await limited.json()).toEqual({ error: "rate_limited" });
+    // Another client is unaffected.
+    expect((await attempt("198.51.100.2")).status).toBe(401);
+  });
+
+  it("register and login share the general limiter, and recovery has its own", async () => {
+    const { env } = setup();
+    const general = fakeLimiter(2);
+    const recovery = fakeLimiter();
+    env.AUTH_LIMITER = general;
+    env.AUTH_RECOVERY_LIMITER = recovery;
+    const ip = "203.0.113.9";
+    expect((await post(env, "/api/auth/register/options", {}, { ip })).status).toBe(200);
+    expect((await post(env, "/api/auth/login/options", {}, { ip })).status).toBe(200);
+    expect((await post(env, "/api/auth/login/verify", {}, { ip })).status).toBe(429);
+    expect(general.keys).toEqual([ip, ip, ip]);
+    // Recovery is counted separately, so it is not blocked by the general limit.
+    expect((await post(env, "/api/auth/recovery", { code: "x" }, { ip })).status).not.toBe(429);
+    expect(recovery.keys).toEqual([ip]);
+  });
+
+  it("does not limit signed-in routes or /api/me", async () => {
+    const { env } = setup();
+    env.AUTH_LIMITER = fakeLimiter(0);
+    env.AUTH_RECOVERY_LIMITER = fakeLimiter(0);
+    expect((await post(env, "/api/auth/logout", {})).status).toBe(200);
+    expect((await post(env, "/api/auth/passkeys/options", {})).status).toBe(401);
+    expect((await get(env, "/api/me")).status).toBe(401);
+  });
+
+  it("checks Origin before counting, so cross-site requests do not use up the limit", async () => {
+    const { env } = setup();
+    const general = fakeLimiter(1);
+    env.AUTH_LIMITER = general;
+    const evil = await post(env, "/api/auth/login/options", {}, { origin: "https://evil.example" });
+    expect(evil.status).toBe(403);
+    expect(general.keys).toEqual([]);
+  });
+
+  it("fails open when the limiter itself errors", async () => {
+    const { env } = setup();
+    env.AUTH_LIMITER = { limit: () => Promise.reject(new Error("limiter down")) };
+    const res = await post(env, "/api/auth/login/options", {});
+    expect(res.status).toBe(200);
   });
 });

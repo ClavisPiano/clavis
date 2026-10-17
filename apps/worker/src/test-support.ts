@@ -126,6 +126,21 @@ export function fakeBucket(): R2Bucket & { keys: () => string[] } {
 
 export const SECRET = "test-secret-not-real";
 
+/** A rate limiter that allows `limit` calls per key, then refuses. Infinite by default. */
+export function fakeLimiter(limit = Number.POSITIVE_INFINITY): RateLimit & { keys: string[] } {
+  const counts = new Map<string, number>();
+  const keys: string[] = [];
+  return {
+    keys,
+    limit: ({ key }) => {
+      keys.push(key);
+      const n = (counts.get(key) ?? 0) + 1;
+      counts.set(key, n);
+      return Promise.resolve({ success: n <= limit });
+    },
+  };
+}
+
 export function makeEnv(overrides: Partial<Env> = {}): { env: Env; seen: string[] } {
   const seen: string[] = [];
   const ASSETS = {
@@ -143,6 +158,8 @@ export function makeEnv(overrides: Partial<Env> = {}): { env: Env; seen: string[
     SESSION_SECRET: SECRET,
     DB: fakeD1(),
     BLOBS: fakeBucket(),
+    AUTH_LIMITER: fakeLimiter(),
+    AUTH_RECOVERY_LIMITER: fakeLimiter(),
     RP_ID,
     EXPECTED_ORIGIN: ORIGIN,
     ...overrides,
