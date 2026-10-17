@@ -2,6 +2,7 @@
   "name": "@clavis/worker",
   "version": "0.0.0",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @clavis/web build && wrangler dev",

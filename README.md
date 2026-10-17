@@ -22,3 +22,12 @@ pnpm format       # prettier --write
 - `packages/core`: learning model, pure TypeScript
 - `packages/audio`, `packages/notation`, `packages/scoring`, `packages/content`
 - `apps/web`, `apps/worker`: added in M0 (T0.2, T0.5)
+
+## Licence
+
+Clavis is source-available, not open source. You can read, run and modify it for noncommercial purposes. Commercial use is reserved to the copyright holder.
+
+- Code: [PolyForm Noncommercial License 1.0.0](LICENSE)
+- Learning content (skill graph, concept cards, tips, piece library, `docs/content`, audio fixtures): [CC BY-NC 4.0](LICENSE-CONTENT)
+- Third-party components keep their own licences: [`docs/licences.md`](docs/licences.md)
+- Contributing requires agreeing to the [CLA](CLA.md): [`CONTRIBUTING.md`](CONTRIBUTING.md)
