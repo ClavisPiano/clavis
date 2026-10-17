@@ -68,6 +68,26 @@ pnpm --filter @clavis/worker exec wrangler d1 migrations apply clavis --local
 - Endpoints (all JSON; every POST needs `content-type: application/json` and an `Origin` header equal to `EXPECTED_ORIGIN`): `POST /api/auth/register/options|verify`, `login/options|verify`, `recovery`, `passkeys/options|verify` (signed in), `logout`, and `GET /api/me`. The `options` endpoints return `{ challengeId, options }`; pass `challengeId` back with the browser response to the matching `verify` endpoint. Challenges are single use and expire after 5 minutes.
 - Follow-up: there is no rate limiting yet. Add a Cloudflare rate limiting rule (or the Workers rate limit binding) on `/api/auth/*`, in particular `/api/auth/recovery`, before opening sign-ups widely.
 
+## Practice cue (Web Push)
+
+The practice cue (spec 14) is a daily push notification at a time the learner picks. The Worker sends it from a cron trigger (`triggers.crons` is `*/15 * * * *` in `wrangler.jsonc`, so cues land within 15 minutes of the chosen time).
+
+- Generate a VAPID key pair once per environment (the private key never goes in the repo):
+
+  ```sh
+  node apps/worker/scripts/generate-vapid-keys.mjs
+  pnpm --filter @clavis/worker exec wrangler secret put VAPID_PRIVATE_KEY   # paste the private value
+  ```
+
+  Put the public value in `vars.VAPID_PUBLIC_KEY` in `wrangler.jsonc` (it is served to browsers at `GET /api/push/key`) and set `vars.VAPID_SUBJECT` to a `mailto:` or `https:` contact for push services. For local `wrangler dev`, put all three in `apps/worker/.dev.vars`. Rotating the pair invalidates every subscription: browsers keep the old key, so the push service rejects sends and those rows are pruned, and learners switch the reminder off and on again to resubscribe. With the public key empty, `/api/push/key` returns 503 and the cron does nothing.
+- Apply the `0002_push.sql` migration (`wrangler d1 migrations apply clavis --remote`). It adds `push_subscriptions` (one row per device endpoint, with the cue time, weekday mask, `tz_offset_min`, habit phrase, `last_sent_day` and `last_practised_day`).
+- Endpoints (signed in, JSON, `Origin` must equal `EXPECTED_ORIGIN`): `PUT /api/push/subscription`, `DELETE /api/push/subscription` (`{ endpoint }`, only removes the caller's own endpoint), `POST /api/push/practised` (`{ day }`, the learner day, R6, so today's cue is skipped on all of that user's devices). `GET /api/push/key` needs no session.
+- A cue is due when the learner-local time (UTC plus the stored offset) is within 15 minutes after the chosen time, that weekday is selected, nothing was sent for today's learner day (04:00 rollover) and the learner has not been reported as practised. Sending uses VAPID (ES256 JWT) and `aes128gcm` encryption via WebCrypto only (`apps/worker/src/push/webpush.ts`, tested against the RFC 8291 vector). Endpoints answering 404 or 410 are deleted; other failures are retried on the next tick while the cue is still in its window.
+- Subscription endpoints must be plain public https URLs (no IP literals, ports or credentials), because the Worker POSTs to them.
+- The free plan allows 50 subrequests per invocation, so one run sends at most 40 pushes (`MAX_SENDS_PER_RUN`). Raise it on a paid plan or shard by user.
+- Cue settings are device-local on the client (device meta, not a synced setting): a push subscription belongs to one browser, and the right time and habit differ per device. The Worker holds a copy with each subscription. The client re-sends it when settings are saved and when the Settings page opens, so a changed time zone is picked up.
+- iOS delivers web push only to an app installed to the Home Screen (16.4 or later). The Settings page detects standalone mode and explains this otherwise.
+
 ## Recordings (R2)
 
 Recordings are stored in an R2 bucket bound as `BLOBS`. Create it once before the first deploy (the deploy fails while the bucket is missing):

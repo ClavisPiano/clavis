@@ -18,7 +18,13 @@
     // EXPECTED_ORIGIN=http://localhost:8787), or passkeys will not verify locally.
     "RP_ID": "clavis.clavis-7fc.workers.dev",
     "EXPECTED_ORIGIN": "https://clavis.clavis-7fc.workers.dev",
+    // Web Push (practice cue). The public key is not secret; VAPID_PRIVATE_KEY is a secret set with
+    // `wrangler secret put` (see docs/deploy.md). Regenerating the pair invalidates subscriptions.
+    "VAPID_PUBLIC_KEY": "BNUo4yRGSwioVBd4FvI1AyShhfM8TAVBvsXrcBt3Cc41aWToEMNrGSm0dNXPlUAQll2loSFEYuGx1Fxy7en4CEA",
+    "VAPID_SUBJECT": "mailto:claude@nichobbs.id.au",
   },
+  // Practice cue: check every 15 minutes which reminders are due (see push/due.ts).
+  "triggers": { "crons": ["*/15 * * * *"] },
   // Accounts and passkeys. The production database was created with
   //   pnpm --filter @clavis/worker exec wrangler d1 create clavis
   // Apply migrations with `wrangler d1 migrations apply clavis --remote` (see docs/deploy.md).

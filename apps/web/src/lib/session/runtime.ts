@@ -30,6 +30,7 @@ import { getNotationClient } from "../notation/shared";
 import { appGenerators, appPieces, generatorFor, pieceInputs } from "../pieces";
 import { createNotationViewPort, type NotationViewPort } from "../notation/view-port";
 import { MIDI_INPUT_META_KEY, createInput, detachFakeInput, parseMidiInputId } from "../input";
+import { createPractisedReporter } from "../practice-cue-browser";
 import { SessionMachine, type SessionDeps } from "./machine";
 import { findOpenSessions } from "./open";
 import { parseLatency, type SessionParams } from "./params";
@@ -139,6 +140,9 @@ export async function createSessionRuntime(
     randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
   });
 
+  // Skips today's practice cue once a minute of practice is logged (T6.4).
+  const reportPractised = createPractisedReporter(store);
+
   const storedHeadphones = await store.getMeta(HEADPHONES_META_KEY);
   const known =
     typeof storedHeadphones === "boolean"
@@ -205,7 +209,7 @@ export async function createSessionRuntime(
     createSingInput: () => createInput("mic").adapter,
     score: scoreAttempt,
     append: async (events: LearningEvent[]) => {
-      await service.append(events);
+      reportPractised(await service.append(events));
     },
     getState: () => service.state,
     clock: { contextNowMs, wallNow: () => Date.now(), schedule },

@@ -1,0 +1,130 @@
+import { daysBetween, learnerDay } from "@clavis/core";
+import { z } from "zod";
+import { authenticate } from "../auth/guard";
+import { fromBase64Url } from "../auth/session";
+import { d1Sql } from "../auth/sql";
+import { nowMs, type Env } from "../env";
+import { csrfFailure, json, methodNotAllowed } from "../http";
+import { weekdaysToMask } from "./due";
+import { createPushRepo } from "./repo";
+
+const MAX_BODY_BYTES = 16 * 1024;
+export const MAX_HABIT_CHARS = 60;
+
+/**
+ * The endpoint is a URL we will POST to from the Worker, so refuse anything that is not a plain
+ * public https URL: no credentials, no custom port, no IP literal, no single-label or local host.
+ */
+export function isAcceptableEndpoint(text: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") return false;
+  if (url.port !== "") return false;
+  const host = url.hostname;
+  if (!host.includes(".") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (host.startsWith("[") || /^[\d.]+$/.test(host)) return false;
+  return true;
+}
+
+const Endpoint = z.string().max(2048).refine(isAcceptableEndpoint);
+const Key = (bytes: number) =>
+  z
+    .string()
+    .max(256)
+    .refine((v) => fromBase64Url(v)?.length === bytes);
+
+const SubscribeBody = z.object({
+  subscription: z.object({
+    endpoint: Endpoint,
+    keys: z.object({ p256dh: Key(65), auth: Key(16) }),
+  }),
+  cue: z.object({
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    weekdays: z
+      .array(z.number().int().min(0).max(6))
+      .min(1)
+      .max(7)
+      .refine((d) => new Set(d).size === d.length),
+    habit: z
+      .string()
+      .max(MAX_HABIT_CHARS)
+      .transform((h) => h.trim()),
+  }),
+  tzOffsetMin: z.number().int().min(-840).max(840),
+});
+const UnsubscribeBody = z.object({ endpoint: z.string().max(2048) });
+const PractisedBody = z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
+
+async function readBody<S extends z.ZodType>(
+  request: Request,
+  schema: S,
+): Promise<z.output<S> | null> {
+  const raw = await request.arrayBuffer();
+  if (raw.byteLength > MAX_BODY_BYTES) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder().decode(raw));
+  } catch {
+    return null;
+  }
+  const parsed = schema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+const invalidRequest = (): Response => json({ error: "invalid_request" }, 400);
+
+/** Routes `/api/push/*`. */
+export async function handlePush(request: Request, url: URL, env: Env): Promise<Response> {
+  if (url.pathname === "/api/push/key") {
+    if (request.method !== "GET") return methodNotAllowed("GET");
+    if (!env.VAPID_PUBLIC_KEY) return json({ error: "not_configured" }, 503);
+    return json({ publicKey: env.VAPID_PUBLIC_KEY });
+  }
+  const isSubscription = url.pathname === "/api/push/subscription";
+  if (!isSubscription && url.pathname !== "/api/push/practised") {
+    return json({ error: "not_found" }, 404);
+  }
+  const allowed = isSubscription ? ["PUT", "DELETE"] : ["POST"];
+  if (!allowed.includes(request.method)) return methodNotAllowed(allowed.join(", "));
+  const blocked = csrfFailure(request, env);
+  if (blocked) return blocked;
+  const userId = await authenticate(request, env);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
+  const repo = createPushRepo(d1Sql(env.DB));
+
+  if (isSubscription && request.method === "PUT") {
+    const body = await readBody(request, SubscribeBody);
+    if (!body) return invalidRequest();
+    await repo.upsert(
+      {
+        endpoint: body.subscription.endpoint,
+        userId,
+        p256dh: body.subscription.keys.p256dh,
+        auth: body.subscription.keys.auth,
+        timeLocal: body.cue.time,
+        weekdays: weekdaysToMask(body.cue.weekdays),
+        tzOffsetMin: body.tzOffsetMin,
+        habit: body.cue.habit,
+      },
+      nowMs(env),
+    );
+    return json({ ok: true });
+  }
+  if (isSubscription) {
+    const body = await readBody(request, UnsubscribeBody);
+    if (!body) return invalidRequest();
+    // Same answer whether the endpoint is unknown or someone else's, so ids cannot be probed.
+    await repo.deleteOwned(userId, body.endpoint);
+    return json({ ok: true });
+  }
+  const body = await readBody(request, PractisedBody);
+  if (!body || Number.isNaN(Date.parse(body.day))) return invalidRequest();
+  // Any real time zone is within a day of UTC, so a day far from now is a bad clock or a probe.
+  if (Math.abs(daysBetween(learnerDay(nowMs(env), 0), body.day)) > 2) return invalidRequest();
+  await repo.markPractised(userId, body.day);
+  return json({ ok: true });
+}
