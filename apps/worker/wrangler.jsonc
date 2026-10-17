@@ -13,25 +13,26 @@
   "vars": {
     "VERSION": "dev",
     // WebAuthn relying party. RP_ID is the bare host, EXPECTED_ORIGIN the exact origin the app is
-    // served from (checked on every auth POST). Defaults suit `wrangler dev`; change both to the
-    // workers.dev host before the first production deploy, or passkeys will not verify.
-    "RP_ID": "localhost",
-    "EXPECTED_ORIGIN": "http://localhost:8787",
-    // Web Push (practice cue). The public key is not secret; VAPID_PRIVATE_KEY is: see docs/deploy.md
-    // for key generation. Leave the public key empty until keys exist (cues are then disabled).
-    "VAPID_PUBLIC_KEY": "",
-    "VAPID_SUBJECT": "mailto:admin@example.invalid",
+    // served from (checked on every auth POST). Set to the production workers.dev host; for
+    // `wrangler dev`, override both in apps/worker/.dev.vars (RP_ID=localhost,
+    // EXPECTED_ORIGIN=http://localhost:8787), or passkeys will not verify locally.
+    "RP_ID": "clavis.clavis-7fc.workers.dev",
+    "EXPECTED_ORIGIN": "https://clavis.clavis-7fc.workers.dev",
+    // Web Push (practice cue). The public key is not secret; VAPID_PRIVATE_KEY is a secret set with
+    // `wrangler secret put` (see docs/deploy.md). Regenerating the pair invalidates subscriptions.
+    "VAPID_PUBLIC_KEY": "BNUo4yRGSwioVBd4FvI1AyShhfM8TAVBvsXrcBt3Cc41aWToEMNrGSm0dNXPlUAQll2loSFEYuGx1Fxy7en4CEA",
+    "VAPID_SUBJECT": "mailto:claude@nichobbs.id.au",
   },
   // Practice cue: check every 15 minutes which reminders are due (see push/due.ts).
   "triggers": { "crons": ["*/15 * * * *"] },
-  // Accounts and passkeys. Create the database once, then paste its id below:
+  // Accounts and passkeys. The production database was created with
   //   pnpm --filter @clavis/worker exec wrangler d1 create clavis
   // Apply migrations with `wrangler d1 migrations apply clavis --remote` (see docs/deploy.md).
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "clavis",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "9bba0857-9b94-47f9-8190-53c3612dea0e",
       "migrations_dir": "migrations",
     },
   ],
