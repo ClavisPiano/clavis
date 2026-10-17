@@ -17,6 +17,7 @@
   import { appPieces } from "../lib/pieces";
   import { pieceCard } from "../lib/piece-card";
   import { PLACEMENT_SKIPPED_META_KEY, shouldOfferPlacement } from "../lib/placement";
+  import { benchmarkMonth, needsBenchmark } from "@clavis/core";
 
   const learner = useLearner();
   let now = $state(Date.now());
@@ -84,6 +85,10 @@
     snap && !firstRun && learner.status === "ready"
       ? pieceCard(appPieces(snap), snap, learner.ctx.graph)
       : undefined,
+  );
+  /** Once a month (T6.5): prompt for a benchmark while this month has none. */
+  const benchmarkDue = $derived(
+    snap && !firstRun ? needsBenchmark(snap, benchmarkMonth(now, deviceTzOffsetMin())) : false,
   );
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
   const week = $derived(weekProgress(cells, settings.weeklyTargetDays));
@@ -207,6 +212,19 @@
 
 {#if pieces}
   <PieceCard card={pieces} />
+{/if}
+
+{#if benchmarkDue}
+  <section class="card" data-testid="benchmark-prompt" aria-labelledby="benchmark-h">
+    <h2 id="benchmark-h">Monthly benchmark</h2>
+    <p>
+      Record yourself playing one piece, start to finish. Next to earlier months, you can hear how
+      far you have come.
+    </p>
+    <a href={resolve("/progress/benchmarks/record")} data-testid="benchmark-record-link"
+      >Record this month's benchmark</a
+    >
+  </section>
 {/if}
 
 {#if snap && today && !firstRun}

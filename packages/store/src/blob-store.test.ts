@@ -38,6 +38,12 @@ describe("DexieBlobStore", () => {
     expect(await blobs.get("missing")).toBeUndefined();
   });
 
+  it("stores a downloaded blob as already uploaded", async () => {
+    const { blobs } = open(1000);
+    await blobs.put({ key: "d.webm", blob: blob(10), pinned: true, uploaded: true });
+    expect(await blobs.get("d.webm")).toMatchObject({ pinned: true, uploaded: true });
+  });
+
   it("lists metadata only, oldest first", async () => {
     const { blobs } = open(1000);
     await blobs.put({ key: "b", blob: blob(1), createdAt: 20 });
