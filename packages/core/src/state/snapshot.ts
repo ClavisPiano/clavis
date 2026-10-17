@@ -31,7 +31,8 @@ export function restoreSnapshot(
   if (
     typeof o.eventCount !== "number" ||
     typeof o.nodes !== "object" ||
-    typeof o.pieces !== "object"
+    typeof o.pieces !== "object" ||
+    typeof o.imported !== "object"
   ) {
     return undefined;
   }

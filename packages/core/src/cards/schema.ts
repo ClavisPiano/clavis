@@ -3,7 +3,7 @@ import { cadenceStimulus } from "../items/build.js";
 import { COUNT_IN_PITCH, COUNT_IN_VELOCITY, rhythmPitch } from "../items/rhythm.js";
 import type { StimulusEvent, StimulusSpec } from "../stimulus/types.js";
 import { spelledToMidi, type ScoreSpec, type SpelledPitch, type Step } from "../score/schema.js";
-import { MAJOR_ROMANS, progression } from "../theory/cadence.js";
+import { isRomanInMode, progression } from "../theory/cadence.js";
 import { degreeToMidi } from "../theory/degrees.js";
 import { ALL_KEYS, tonicChroma, type Key, type MinorVariant } from "../theory/keys.js";
 import { majorSignature, minorSignature } from "../theory/tonal.js";
@@ -32,19 +32,23 @@ export const CardExampleSchema = z.discriminatedUnion("kind", [
     afterCadence: z.boolean(),
   }),
   /**
-   * A major-key chord progression from Roman numerals (I, ii, iii, IV, V, vi), one chord per
-   * beat, optionally after the cadence. Always major: a minor key of the day plays the parallel
-   * major.
+   * A chord progression from Roman numerals, one chord per beat, optionally after the cadence.
+   * Major unless `mode` is "minor" (numerals are checked against that mode, see `ROMAN_TRIADS`).
+   * It sounds in the parallel key of the day's tonic, so a minor key of the day plays a major
+   * progression in major and a major key of the day plays a minor one in minor.
    */
-  z.strictObject({
-    kind: z.literal("progression"),
-    label: z.string().min(1),
-    romans: z
-      .array(z.string().refine((r) => MAJOR_ROMANS.includes(r), "unknown major Roman numeral"))
-      .min(2)
-      .max(8),
-    afterCadence: z.boolean(),
-  }),
+  z
+    .strictObject({
+      kind: z.literal("progression"),
+      label: z.string().min(1),
+      mode: z.enum(["major", "minor"]).optional(),
+      romans: z.array(z.string().min(1)).min(2).max(8),
+      afterCadence: z.boolean(),
+    })
+    .refine((e) => e.romans.every((r) => isRomanInMode(e.mode ?? "major", r)), {
+      message: "unknown Roman numeral for the mode",
+      path: ["romans"],
+    }),
   /** A rhythm on one pitch, after four count-in clicks. Onsets in beats from the downbeat. */
   z.strictObject({
     kind: z.literal("rhythm"),
@@ -112,7 +116,7 @@ export function cardExampleStimulus(example: CardExample, keyOfDay: Key): Stimul
     example.kind === "rhythm" || example.kind === "staff"
       ? keyOfDay
       : example.kind === "progression"
-        ? parallelKey(keyOfDay, "major")
+        ? parallelKey(keyOfDay, example.mode ?? "major")
         : parallelKey(keyOfDay, example.mode ?? keyOfDay.mode);
   const tonicMidi = 60 + tonicChroma(key);
   const variant: { minorVariant: MinorVariant } | undefined =

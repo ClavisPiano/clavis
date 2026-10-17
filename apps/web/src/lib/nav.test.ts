@@ -3,8 +3,14 @@ import { NAV_ITEMS, isActive } from "./nav";
 import { parseSessionMode } from "./session-mode";
 
 describe("isActive", () => {
-  const [home, settings] = NAV_ITEMS;
-  if (!home || !settings) throw new Error("nav items missing");
+  const find = (href: string) => {
+    const item = NAV_ITEMS.find((i) => i.href === href);
+    if (!item) throw new Error(`nav item ${href} missing`);
+    return item;
+  };
+  const home = find("/");
+  const settings = find("/settings");
+  const progress = find("/progress");
 
   it.each([
     [home, "/", true],
@@ -13,6 +19,10 @@ describe("isActive", () => {
     [settings, "/settings/x", true],
     [settings, "/settingsx", false],
     [settings, "/", false],
+    [progress, "/progress", true],
+    [progress, "/progress/", true],
+    [progress, "/progressive", false],
+    [home, "/progress", false],
   ] as const)("%j at %s -> %s", (item, path, expected) => {
     expect(isActive(item, path)).toBe(expected);
   });

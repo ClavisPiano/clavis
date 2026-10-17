@@ -7,6 +7,7 @@ import itemPresented from "./item.presented.json";
 import attemptCompleted from "./attempt.completed.json";
 import nodeIntroduced from "./node.introduced.json";
 import placementCompleted from "./placement.completed.json";
+import contentImported from "./content.imported.json";
 import pieceCompleted from "./piece.completed.json";
 import sessionEnded from "./session.ended.json";
 
@@ -20,6 +21,7 @@ export const eventFixtures: Readonly<Record<string, unknown>> = {
   "node.introduced": nodeIntroduced,
   "placement.completed": placementCompleted,
   "piece.completed": pieceCompleted,
+  "content.imported": contentImported,
   "session.ended": sessionEnded,
 };
 
