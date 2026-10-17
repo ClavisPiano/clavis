@@ -64,15 +64,14 @@ An earlier run, while the whole Playwright suite ran in parallel on the same loa
 
 Reading: size passes with a wide margin (1.76 MB against 5 MB). On a loaded desktop, cold init from cache is already around the 1.5 s limit and warm p95 around the 100 ms limit. An iPad 9th gen (A13) is slower than a desktop core, so both timing thresholds are at real risk. The module creation step (decoding 8 MB of base64 and compiling the WASM) dominates cold init. Possible mitigations if the devices are borderline, to try before choosing the fallback: keep the worker alive across the session so the cost is paid once, ship the `.wasm` as a separate file and use `WebAssembly.instantiateStreaming` (needs a Verovio build with the WASM external, not the npm single-file module), and preload on the first READ-capable launch. The 128 MB initial heap is also worth watching on iPhone.
 
-## Device results (to be filled by the user)
+## Device results
 
 On each device, open <https://clavis.clavis-7fc.workers.dev/dev/notation> in Safari (after the branch is deployed), tap **Benchmark**, wait for the table, then tap **Benchmark** a second time. The second run measures cold init with the worker script in the HTTP cache, which is the number the decision uses. Tap **Copy JSON** and paste it under the device heading. Repeat once as the installed PWA (Add to Home Screen), and once in airplane mode after one online load if you want the offline path (note the service worker does not cache this chunk yet, so offline will fail until T3.4). Close other apps first, and note the iOS version (it is in the user agent).
 
 | Device | Run | Cold init (ms) | First render (ms) | Warm p50 (ms) | Warm p95 (ms) | WASM heap | Notes |
 |---|---|---|---|---|---|---|---|
 | iPhone, iOS 18.7, Safari 27.0.1 (installed PWA, T3.4 runtime) | cached | 138 | 16 | 3 | 7 | n/a | Measured 2026-10-12 through the T3.4 client on `/dev/notation` |
-| iPad 9th gen, iPadOS | 1 (first) | | | | | | |
-| iPad 9th gen, iPadOS | 2 (cached) | | | | | | |
+| iPad 9th gen, iPadOS | not run | | | | | | Waived: the decision was accepted on the iPhone numbers (2026-10-17) |
 
 Paste the JSON for each run below:
 
@@ -90,4 +89,4 @@ Paste the JSON for each run below:
 
 ## Decision
 
-**Keep Verovio (provisional, iPad confirmation outstanding).** On the iPhone the T3.4 runtime cold-starts in 138 ms and renders at 7 ms p95, an order of magnitude inside the 1.5 s and 100 ms limits, and far faster than the desktop CI runners. An A13 iPad is slower than a current iPhone but not by 10x, so the floor device is very likely to pass; the iPad run below confirms it. The size threshold passes on desktop. The two timing thresholds are decided on the iPad 9th gen numbers above (second run for cold init, warm p95 for rendering). If both pass, keep Verovio and proceed with T3.3 and T3.4 as planned. If either fails, build `SvgStaffRenderer` behind `NotationRenderer` for READ and keep Verovio lazy for M7 imports.
+**Keep Verovio.** Accepted on the iPhone evidence on 2026-10-17, without the iPad 9th gen run. On the iPhone the T3.4 runtime cold-starts in 138 ms and renders at 7 ms p95, an order of magnitude inside the 1.5 s and 100 ms limits. Brotli size (1.76 MB) is well inside 5 MB. An A13 iPad is slower than a current iPhone but not by 10x, so the floor device is expected to pass. If a floor iPad later shows cold init above 1.5 s or warm p95 above 100 ms, the fallback still applies: build `SvgStaffRenderer` behind `NotationRenderer` for READ and keep Verovio lazy for M7 imports.
