@@ -42,7 +42,7 @@ export interface UploadQueueDeps {
   store: {
     list(): Promise<BlobMeta[]>;
     get(key: string): Promise<BlobRecord | undefined>;
-    markUploaded(key: string): Promise<void>;
+    markUploaded(key: string, uploaded: Pick<BlobMeta, "createdAt" | "size">): Promise<void>;
   };
   /** Throws `BlobAuthError`, `BlobRejectedError`, or any other error (retryable). */
   upload: (record: BlobRecord) => Promise<void>;
@@ -78,7 +78,8 @@ export function createUploadQueue(deps: UploadQueueDeps): UploadQueue {
           attempt++;
           try {
             await deps.upload(record);
-            await deps.store.markUploaded(record.key);
+            // Only this version: a replacement written during the upload stays pending.
+            await deps.store.markUploaded(record.key, record);
             result.uploaded++;
             break;
           } catch (error) {

@@ -138,6 +138,31 @@ describe("account store", () => {
     expect(t.onSignedIn).toHaveBeenCalledOnce();
   });
 
+  it("a sign in whose /api/me read fails says so, and still tells sync", async () => {
+    const meFn = vi
+      .fn()
+      .mockRejectedValueOnce(new AccountError("unauthorized", "no", 401))
+      .mockRejectedValueOnce(new AccountError("network", "offline"));
+    const t = setup({ me: meFn });
+    await t.store.refresh();
+    expect(await t.store.signIn()).toBe(false);
+    expect(t.store.snapshot.account.kind).toBe("unknown");
+    expect(t.store.snapshot.offline).toBe(true);
+    expect(t.store.snapshot.error?.kind).toBe("network");
+    // The session cookie exists, so sync may run and claim local data.
+    expect(t.onSignedIn).toHaveBeenCalledOnce();
+  });
+
+  it("a recovery sign in whose session did not stick is an error, not signed in", async () => {
+    const t = setup();
+    await t.store.refresh();
+    expect(await t.store.recover("CODE-1")).toBe(false);
+    expect(t.store.snapshot.account.kind).toBe("anonymous");
+    expect(t.store.snapshot.error?.kind).toBe("unauthorized");
+    expect(t.store.snapshot.suggestPasskey).toBe(false);
+    expect(t.onSignedIn).not.toHaveBeenCalled();
+  });
+
   it("a rejected passkey login stays anonymous", async () => {
     const t = setup({
       loginVerify: vi.fn(() => Promise.reject(new AccountError("rejected", "no", 401))),

@@ -213,6 +213,43 @@ describe("sync controller", () => {
     stop();
   });
 
+  it("a sign out during an in-flight run is not undone when that run finishes ok", async () => {
+    let finish: (r: SyncResult) => void = () => undefined;
+    const t = setup(
+      () =>
+        new Promise<SyncResult>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const run = t.controller.trigger("manual");
+    t.controller.notifySignedOut();
+    finish(ok({ pushed: 1 }));
+    await run;
+    expect(t.controller.state.status).toBe("signedOut");
+    // Timer syncs stay off: the stale ok run did not clear signedOut.
+    t.setImpl(() => ok());
+    await t.controller.trigger("timer");
+    expect(t.calls()).toBe(1);
+  });
+
+  it("a sign in during an in-flight 401 run still ends signed in", async () => {
+    let finish: (r: SyncResult) => void = () => undefined;
+    const t = setup(
+      () =>
+        new Promise<SyncResult>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const run = t.controller.trigger("start");
+    const signIn = t.controller.notifySignedIn();
+    t.setImpl(() => ok());
+    finish({ outcome: "signedOut", pushed: 0, pulledNew: 0, skipped: 0 });
+    await run;
+    await signIn;
+    expect(t.controller.state.status).toBe("idle");
+    expect(t.calls()).toBe(2);
+  });
+
   it("notifySignedIn clears signedOut and syncs immediately", async () => {
     const t = setup(() => ({ outcome: "signedOut", pushed: 0, pulledNew: 0, skipped: 0 }));
     await t.controller.trigger("start");
