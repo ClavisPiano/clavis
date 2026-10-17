@@ -1,5 +1,13 @@
 import type { AsyncSql, Statement } from "../auth/sql";
 
+/**
+ * Devices one user may hold a cue on. Each cron run sends at most `MAX_SENDS_PER_RUN` pushes, so
+ * without a cap one account could register endpoints until it crowds everyone else out. A new
+ * device over the cap replaces that user's oldest subscription instead of being refused, so
+ * turning the reminder on always works on the device in hand.
+ */
+export const MAX_SUBSCRIPTIONS_PER_USER = 10;
+
 /** One stored push subscription (one per device) with its cue settings. */
 export interface PushSubscriptionRow {
   endpoint: string;
@@ -20,7 +28,10 @@ export interface PushSubscriptionRow {
 export type NewPushSubscription = Omit<PushSubscriptionRow, "lastSentDay" | "lastPractisedDay">;
 
 export interface PushRepo {
-  /** Insert or replace by endpoint. A different user taking over an endpoint resets the sent day. */
+  /**
+   * Insert or replace by endpoint. A different user taking over an endpoint resets the sent day.
+   * Then drops the user's oldest subscriptions beyond `MAX_SUBSCRIPTIONS_PER_USER`.
+   */
   upsert(sub: NewPushSubscription, nowMs: number): Promise<void>;
   /** Delete only when the endpoint belongs to `userId`. Returns whether a row was removed. */
   deleteOwned(userId: string, endpoint: string): Promise<boolean>;
@@ -47,30 +58,49 @@ interface Raw extends Record<string, unknown> {
 export function createPushRepo(sql: AsyncSql): PushRepo {
   return {
     async upsert(sub, nowMs) {
-      await sql.run(
-        `INSERT INTO push_subscriptions
-           (endpoint, user_id, p256dh, auth, time_local, weekdays, tz_offset_min, habit, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (endpoint) DO UPDATE SET
-           last_sent_day = CASE WHEN user_id = excluded.user_id THEN last_sent_day END,
-           last_practised_day = CASE WHEN user_id = excluded.user_id THEN last_practised_day END,
-           user_id = excluded.user_id,
-           p256dh = excluded.p256dh,
-           auth = excluded.auth,
-           time_local = excluded.time_local,
-           weekdays = excluded.weekdays,
-           tz_offset_min = excluded.tz_offset_min,
-           habit = excluded.habit`,
-        sub.endpoint,
-        sub.userId,
-        sub.p256dh,
-        sub.auth,
-        sub.timeLocal,
-        sub.weekdays,
-        sub.tzOffsetMin,
-        sub.habit,
-        nowMs,
-      );
+      await sql.batch([
+        {
+          query: `INSERT INTO push_subscriptions
+             (endpoint, user_id, p256dh, auth, time_local, weekdays, tz_offset_min, habit, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (endpoint) DO UPDATE SET
+             last_sent_day = CASE WHEN user_id = excluded.user_id THEN last_sent_day END,
+             last_practised_day = CASE WHEN user_id = excluded.user_id THEN last_practised_day END,
+             user_id = excluded.user_id,
+             p256dh = excluded.p256dh,
+             auth = excluded.auth,
+             time_local = excluded.time_local,
+             weekdays = excluded.weekdays,
+             tz_offset_min = excluded.tz_offset_min,
+             habit = excluded.habit`,
+          bindings: [
+            sub.endpoint,
+            sub.userId,
+            sub.p256dh,
+            sub.auth,
+            sub.timeLocal,
+            sub.weekdays,
+            sub.tzOffsetMin,
+            sub.habit,
+            nowMs,
+          ],
+        },
+        {
+          // The endpoint just written is always kept, even when its row is the oldest.
+          query: `DELETE FROM push_subscriptions
+           WHERE user_id = ? AND endpoint <> ? AND endpoint NOT IN (
+             SELECT endpoint FROM push_subscriptions WHERE user_id = ? AND endpoint <> ?
+             ORDER BY created_at DESC, endpoint DESC LIMIT ?
+           )`,
+          bindings: [
+            sub.userId,
+            sub.endpoint,
+            sub.userId,
+            sub.endpoint,
+            MAX_SUBSCRIPTIONS_PER_USER - 1,
+          ],
+        },
+      ]);
     },
 
     async deleteOwned(userId, endpoint) {

@@ -35,7 +35,7 @@ async function setup() {
   const add = async (name: string, over: Partial<NewPushSubscription> = {}) => {
     await repo.upsert(
       {
-        endpoint: `https://push.example.com/${name}`,
+        endpoint: `https://fcm.googleapis.com/fcm/send/${name}`,
         userId: "u1",
         ...(await keyMaterial()),
         timeLocal: "08:00",
@@ -47,6 +47,13 @@ async function setup() {
       0,
     );
   };
+  // One user per device, for tests with more devices than one user may hold.
+  let users = 0;
+  const addForUser = async (name: string, over: Partial<NewPushSubscription> = {}) => {
+    const userId = `user${String(users++)}`;
+    sqlite.prepare("INSERT INTO users (id, created_at) VALUES (?, 0)").run(userId);
+    await add(name, { userId, ...over });
+  };
   const state = (): Record<string, string | null> => {
     const rows = sqlite
       .prepare("SELECT endpoint, last_sent_day FROM push_subscriptions")
@@ -55,7 +62,7 @@ async function setup() {
     for (const r of rows) out[r.endpoint.split("/").pop() ?? ""] = r.last_sent_day;
     return out;
   };
-  return { env, sqlite, add, state };
+  return { env, sqlite, add, addForUser, state };
 }
 
 function fakeFetch(statusFor: (url: string) => number = () => 201) {
@@ -87,8 +94,8 @@ describe("runPracticeCues", () => {
     const first = await runPracticeCues(env, { nowMs: NOW, fetch: http.fn });
     expect(first).toMatchObject({ due: 2, sent: 2, pruned: 0, failed: 0 });
     expect(http.urls.sort()).toEqual([
-      "https://push.example.com/due-also",
-      "https://push.example.com/due-sydney",
+      "https://fcm.googleapis.com/fcm/send/due-also",
+      "https://fcm.googleapis.com/fcm/send/due-sydney",
     ]);
     expect(state()).toEqual({
       "due-sydney": "2026-10-12",
@@ -114,7 +121,7 @@ describe("runPracticeCues", () => {
     );
     const http = fakeFetch();
     await runPracticeCues(env, { nowMs: NOW, fetch: http.fn });
-    expect(http.urls).toEqual(["https://push.example.com/a"]);
+    expect(http.urls).toEqual(["https://fcm.googleapis.com/fcm/send/a"]);
     await runPracticeCues(env, { nowMs: NOW + 15 * 60_000, fetch: http.fn });
     await runPracticeCues(env, { nowMs: NOW, fetch: http.fn });
     expect(http.urls).toHaveLength(1);
@@ -141,7 +148,7 @@ describe("runPracticeCues", () => {
     // The flaky one is retried on the next tick, the sent one is not.
     const retry = fakeFetch();
     await runPracticeCues(env, { nowMs: NOW + 15 * 60_000 - 6 * 60_000, fetch: retry.fn });
-    expect(retry.urls).toEqual(["https://push.example.com/flaky"]);
+    expect(retry.urls).toEqual(["https://fcm.googleapis.com/fcm/send/flaky"]);
   });
 
   it("sends the notification payload with the habit phrase, or a default", async () => {
@@ -159,18 +166,58 @@ describe("runPracticeCues", () => {
     const len = (text: string) =>
       new TextEncoder().encode(JSON.stringify({ title: CUE_TITLE, body: text, url: "/" })).length;
     const overhead = 21 + 65 + 16 + 1;
-    expect(bodies.get("https://push.example.com/habit")).toBe(
+    expect(bodies.get("https://fcm.googleapis.com/fcm/send/habit")).toBe(
       len("After my morning coffee") + overhead,
     );
-    expect(bodies.get("https://push.example.com/plain")).toBe(len(CUE_DEFAULT_BODY) + overhead);
+    expect(bodies.get("https://fcm.googleapis.com/fcm/send/plain")).toBe(
+      len(CUE_DEFAULT_BODY) + overhead,
+    );
   });
 
   it("caps sends per run to stay inside the subrequest limit", async () => {
-    const { env, add } = await setup();
-    for (let i = 0; i < MAX_SENDS_PER_RUN + 5; i++) await add(`s${String(i)}`);
+    const { env, addForUser } = await setup();
+    for (let i = 0; i < MAX_SENDS_PER_RUN + 5; i++) await addForUser(`s${String(i)}`);
     const http = fakeFetch();
     const result = await runPracticeCues(env, { nowMs: NOW, fetch: http.fn });
     expect(result).toMatchObject({ due: MAX_SENDS_PER_RUN + 5, sent: MAX_SENDS_PER_RUN });
+  });
+
+  it("sends cues left over by the cap on the next run, before newly due ones, and only once", async () => {
+    const { env, addForUser, state } = await setup();
+    for (let i = 0; i < MAX_SENDS_PER_RUN + 5; i++) await addForUser(`early${String(i)}`);
+    // Due from 08:15 local, so they compete with the leftovers on the next run.
+    for (let i = 0; i < MAX_SENDS_PER_RUN; i++) {
+      await addForUser(`late${String(i)}`, { timeLocal: "08:15" });
+    }
+    await runPracticeCues(env, { nowMs: NOW, fetch: fakeFetch().fn });
+    const next = fakeFetch();
+    const result = await runPracticeCues(env, { nowMs: NOW + 15 * 60_000, fetch: next.fn });
+    expect(result.sent).toBe(MAX_SENDS_PER_RUN);
+    const early = Object.entries(state()).filter(([name]) => name.startsWith("early"));
+    expect(early.every(([, day]) => day === "2026-10-12")).toBe(true);
+    // Every early cue went out exactly once across the two runs.
+    const third = fakeFetch();
+    await runPracticeCues(env, { nowMs: NOW + 15 * 60_000, fetch: third.fn });
+    expect(third.urls.some((u) => u.includes("/early"))).toBe(false);
+    expect(next.urls.filter((u) => u.includes("/early"))).toHaveLength(5);
+  });
+
+  it("prunes stored endpoints outside the push service allowlist without sending to them", async () => {
+    const { env, add, sqlite, state } = await setup();
+    await add("ok");
+    sqlite
+      .prepare(
+        `INSERT INTO push_subscriptions
+           (endpoint, user_id, p256dh, auth, time_local, weekdays, tz_offset_min, habit, created_at)
+         SELECT 'https://attacker.example/hook', user_id, p256dh, auth, time_local, weekdays,
+                tz_offset_min, habit, created_at FROM push_subscriptions`,
+      )
+      .run();
+    const http = fakeFetch();
+    const result = await runPracticeCues(env, { nowMs: NOW, fetch: http.fn });
+    expect(http.urls).toEqual(["https://fcm.googleapis.com/fcm/send/ok"]);
+    expect(result).toMatchObject({ sent: 1, pruned: 1 });
+    expect(state()).toEqual({ ok: "2026-10-12" });
   });
 
   it("does nothing without VAPID keys", async () => {
@@ -205,7 +252,7 @@ describe("worker scheduled handler", () => {
     } finally {
       globalThis.fetch = real;
     }
-    expect(urls).toEqual(["https://push.example.com/a"]);
+    expect(urls).toEqual(["https://fcm.googleapis.com/fcm/send/a"]);
     expect(state()).toEqual({ a: "2026-10-12" });
   });
 });
