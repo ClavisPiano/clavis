@@ -66,7 +66,7 @@ Reading: size passes with a wide margin (1.76 MB against 5 MB). On a loaded desk
 
 ## Device results
 
-On each device, open <https://clavis.clavis-7fc.workers.dev/dev/notation> in Safari (after the branch is deployed), tap **Benchmark**, wait for the table, then tap **Benchmark** a second time. The second run measures cold init with the worker script in the HTTP cache, which is the number the decision uses. Tap **Copy JSON** and paste it under the device heading. Repeat once as the installed PWA (Add to Home Screen), and once in airplane mode after one online load if you want the offline path (note the service worker does not cache this chunk yet, so offline will fail until T3.4). Close other apps first, and note the iOS version (it is in the user agent).
+The iPad 9th gen run was waived when the decision was accepted on the iPhone numbers (see Decision). To re-measure a device later: on each device, open <https://clavis.clavis-7fc.workers.dev/dev/notation> in Safari (after the branch is deployed), tap **Benchmark**, wait for the table, then tap **Benchmark** a second time. The second run measures cold init with the worker script in the HTTP cache, which is the number the decision uses. Tap **Copy JSON** and paste it under the device heading. Repeat once as the installed PWA (Add to Home Screen), and once in airplane mode after one online load if you want the offline path (note the service worker does not cache this chunk yet, so offline will fail until T3.4). Close other apps first, and note the iOS version (it is in the user agent).
 
 | Device | Run | Cold init (ms) | First render (ms) | Warm p50 (ms) | Warm p95 (ms) | WASM heap | Notes |
 |---|---|---|---|---|---|---|---|
