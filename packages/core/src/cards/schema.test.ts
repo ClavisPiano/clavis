@@ -102,6 +102,31 @@ describe("cardExampleStimulus", () => {
     expect(spec.events.map((e) => e.atSec)).toEqual([0, beat]);
   });
 
+  it("plays a minor progression in the parallel minor key and checks numerals per mode", () => {
+    const example: CardExample = {
+      kind: "progression",
+      label: "p",
+      mode: "minor",
+      romans: ["i", "VII", "VI", "V"],
+      afterCadence: true,
+    };
+    const spec = cardExampleStimulus(example, { tonic: "D", mode: "major" });
+    expect(spec.events.filter((e) => e.role === "cadence")).toHaveLength(4);
+    const chords = spec.events.filter((e) => e.role === undefined);
+    // Roots of Dm, C, Bb, A (D minor: i VII VI V).
+    expect(chords.map((e) => (e.midi[0] ?? 0) % 12)).toEqual([2, 0, 10, 9]);
+    const ok = ConceptCardSchema.safeParse({ ...card, examples: [example] });
+    expect(ok.success).toBe(true);
+    // "I" and "IV" are major-key numerals, "i" and "iv" minor-key ones.
+    const wrong = [
+      { ...example, romans: ["I", "IV"] },
+      { ...example, mode: undefined, romans: ["i", "iv"] },
+    ];
+    for (const ex of wrong) {
+      expect(ConceptCardSchema.safeParse({ ...card, examples: [ex] }).success).toBe(false);
+    }
+  });
+
   it("rejects progression examples with unknown numerals or too few chords", () => {
     const base = { kind: "progression", label: "p", afterCadence: false };
     const bad = [

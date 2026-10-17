@@ -82,7 +82,7 @@
   /** Pieces (MP): the current tune, what is played through, and what unlocks the rest. */
   const pieces = $derived(
     snap && !firstRun && learner.status === "ready"
-      ? pieceCard(appPieces(), snap, learner.ctx.graph)
+      ? pieceCard(appPieces(snap), snap, learner.ctx.graph)
       : undefined,
   );
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
@@ -246,6 +246,9 @@
     </ol>
     <p class="muted" data-testid="week-progress">
       This week: {week.daysPractised} of {week.target} days
+    </p>
+    <p>
+      <a href={resolve("/progress")} data-testid="see-progress">See your progress</a>
     </p>
   </section>
 {/if}

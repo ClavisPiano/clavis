@@ -1,4 +1,5 @@
 import type { SettingsPatch } from "../events/schema.js";
+import type { Piece } from "../pieces/schema.js";
 import type { GradedAttempt } from "../grading/mastery.js";
 import type { GeneratorId, NodeState, SkillGraph } from "../graph/schema.js";
 import type { LearnerDay } from "../learning/day.js";
@@ -27,6 +28,12 @@ export interface NodeRecord {
   byFamily?: Partial<Record<KeyFamily, NodeState>>;
   introducedAt?: number;
   placementFloor?: NodeState;
+  /**
+   * When the node first reached `mastered`: the event time and learner day (T6.3). Set once and
+   * never cleared, so a drop and a regain keep the first date. Placement counts, on the day of the
+   * placement event read at UTC.
+   */
+  firstMastered?: { at: number; day: LearnerDay };
 }
 
 /** A graded attempt plus the key family it was played in (key-dependent nodes only). */
@@ -87,12 +94,25 @@ export interface PieceRecord {
   completedAt?: number;
 }
 
+/** A piece the learner imported (T7.4), as the latest `content.imported` event for its id left it. */
+export interface ImportedPieceRecord {
+  piece: Piece;
+  source: "musicxml" | "mxl";
+  partIndex: number;
+  staff: number;
+  /** The `(at, id)` of the event that wrote this record: the later one wins. */
+  at: number;
+  eventId: string;
+}
+
 export interface LearnerState {
   cards: Record<string, CardRecord>;
   nodes: Record<string, NodeRecord>;
   attempts: Record<string, StoredAttempt[]>;
   /** Piece progress by piece id (MP). */
   pieces: Record<string, PieceRecord>;
+  /** Pieces the learner imported, by piece id (T7.4). Unlocked from the start, see `listPieces`. */
+  imported: Record<string, ImportedPieceRecord>;
   sessions: Record<string, SessionRecord>;
   /** Key `${sessionId}:${itemId}`. Pruned when the session ends. */
   presented: Record<string, PresentationRecord>;

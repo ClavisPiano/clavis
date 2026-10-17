@@ -70,6 +70,34 @@ export const LineTargetSchema = z
   });
 export type LineTarget = z.infer<typeof LineTargetSchema>;
 
+/**
+ * A progression of block chords played together, one chord per entry (T5.3). Graded by performance
+ * alignment (`alignPerformance` in scoring) against every chord tone, so it needs polyphonic input
+ * (MIDI, or the on-screen keys). The roman numeral and symbol travel with each chord so feedback
+ * can say "in the IV chord" without theory at scoring time.
+ */
+export const ChordLineTargetSchema = z.strictObject({
+  kind: z.literal("chordLine"),
+  chords: z
+    .array(
+      z.strictObject({
+        /** "I", "IV", "vi". */
+        roman: z.string().min(1),
+        /** "C", "F", "Am". */
+        symbol: z.string().min(1),
+        /** The chord tones, octave exact. */
+        midi: z.array(midi).min(2),
+        /** Onset in beats from the first chord (first is 0). */
+        onsetBeats: z.number().min(0),
+        durationBeats: z.number().positive(),
+      }),
+    )
+    .min(1),
+  tempoBpm: z.number().positive(),
+  beatsPerBar: z.int().positive(),
+});
+export type ChordLineTarget = z.infer<typeof ChordLineTargetSchema>;
+
 export const ChoiceOptionSchema = z.strictObject({
   /** Stable id, recorded in errors: "major", "minor". */
   id: z.string().min(1),
@@ -103,6 +131,7 @@ export const PlayTargetSchema = z.discriminatedUnion("kind", [
   SequenceTargetSchema,
   RhythmTargetSchema,
   LineTargetSchema,
+  ChordLineTargetSchema,
   ChoiceTargetSchema,
 ]);
 export type PlayTarget = z.infer<typeof PlayTargetSchema>;
