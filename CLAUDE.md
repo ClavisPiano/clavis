@@ -1,6 +1,6 @@
 # Clavis
 
-Clavis is an offline-first piano and ear-training PWA: a skill graph plus spaced repetition drives short daily sessions, and sung or played answers are graded from the microphone, MIDI or an on-screen keyboard. Read `docs/specs/` for the product and architecture, and `docs/implementation-plan.md` for spec resolutions (R1-R25) and the task list. Work on one plan task at a time.
+Clavis is an offline-first piano and ear-training PWA: a skill graph plus spaced repetition drives short daily sessions, and sung or played answers are graded from the microphone, MIDI or an on-screen keyboard. Read `docs/specs/` for the product and architecture, and `docs/implementation-plan.md` for spec resolutions (R1-R28) and the task list. Work on one plan task at a time.
 
 ## Commands
 
