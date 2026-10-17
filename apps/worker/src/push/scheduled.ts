@@ -3,7 +3,7 @@ import { d1Sql } from "../auth/sql";
 import type { Env } from "../env";
 import { dueSubscriptions } from "./due";
 import { isAcceptableEndpoint } from "./endpoint";
-import { createPushRepo } from "./repo";
+import { createPushRepo, type PushSubscriptionRow } from "./repo";
 import { sendWebPush, type VapidKeys } from "./webpush";
 
 /**
@@ -41,13 +41,14 @@ export async function runPracticeCues(env: Env, options: CueRunOptions): Promise
     subject: env.VAPID_SUBJECT,
   };
   const repo = createPushRepo(d1Sql(env.DB));
-  const rows = await repo.listAll();
   // Rows stored before the push service allowlist existed: never send to them, just drop them.
-  const gone = rows.filter((r) => !isAcceptableEndpoint(r.endpoint)).map((r) => r.endpoint);
-  const due = dueSubscriptions(
-    rows.filter((r) => isAcceptableEndpoint(r.endpoint)),
-    options.nowMs,
-  );
+  const allowed: PushSubscriptionRow[] = [];
+  const gone: string[] = [];
+  for (const row of await repo.listAll()) {
+    if (isAcceptableEndpoint(row.endpoint)) allowed.push(row);
+    else gone.push(row.endpoint);
+  }
+  const due = dueSubscriptions(allowed, options.nowMs);
   result.due = due.length;
   const batch = due.slice(0, MAX_SENDS_PER_RUN);
   const sent: { endpoint: string; day: string }[] = [];

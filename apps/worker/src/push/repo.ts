@@ -104,18 +104,12 @@ export function createPushRepo(sql: AsyncSql): PushRepo {
     },
 
     async deleteOwned(userId, endpoint) {
-      const owned = await sql.all<{ n: number }>(
-        "SELECT COUNT(*) AS n FROM push_subscriptions WHERE endpoint = ? AND user_id = ?",
+      const removed = await sql.all<{ endpoint: string }>(
+        "DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ? RETURNING endpoint",
         endpoint,
         userId,
       );
-      if (!owned[0]?.n) return false;
-      await sql.run(
-        "DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?",
-        endpoint,
-        userId,
-      );
-      return true;
+      return removed.length > 0;
     },
 
     async markPractised(userId, day) {

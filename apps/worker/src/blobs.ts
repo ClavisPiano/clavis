@@ -88,6 +88,7 @@ export async function handleBlob(request: Request, url: URL, env: Env): Promise<
       return json({ error: "unsupported_media_type" }, 415);
     }
     const declared = Number(request.headers.get("content-length") ?? "0");
+    if (!Number.isFinite(declared) || declared < 0) return json({ error: "invalid_request" }, 400);
     if (declared > MAX_BLOB_BYTES) return json({ error: "payload_too_large" }, 413);
     const bytes = await readLimited(request, MAX_BLOB_BYTES);
     if (bytes === null) return json({ error: "payload_too_large" }, 413);
