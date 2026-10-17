@@ -113,6 +113,10 @@ importers:
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)
 
   apps/worker:
+    dependencies:
+      '@clavis/core':
+        specifier: workspace:*
+        version: link:../../packages/core
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 5.20261010.1

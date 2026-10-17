@@ -13,5 +13,10 @@
   "vars": {
     "VERSION": "dev",
   },
+  // SESSION_SECRET is a secret, never put it here: `wrangler secret put SESSION_SECRET`.
+  "durable_objects": {
+    "bindings": [{ "name": "USER_EVENTS", "class_name": "UserEvents" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserEvents"] }],
   "observability": { "enabled": true },
 }
