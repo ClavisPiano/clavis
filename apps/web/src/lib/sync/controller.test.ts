@@ -194,6 +194,39 @@ describe("sync controller", () => {
     expect(t.controller.state.status).toBe("error");
     expect(pulled).toHaveBeenCalledTimes(1);
   });
+
+  it("a manual trigger runs even while signed out", async () => {
+    const t = setup(() => ({ outcome: "signedOut", pushed: 0, pulledNew: 0, skipped: 0 }));
+    await t.controller.trigger("start");
+    await t.controller.trigger("manual");
+    expect(t.calls()).toBe(2);
+  });
+
+  it("notifySignedOut shows signedOut, keeps lastSyncedAt and silences the timer", async () => {
+    const t = setup(() => ok());
+    const stop = t.controller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    t.controller.notifySignedOut();
+    expect(t.controller.state).toEqual({ status: "signedOut", lastSyncedAt: 1_000_000 });
+    await vi.advanceTimersByTimeAsync(SYNC_INTERVAL_MS * 2);
+    expect(t.calls()).toBe(1);
+    stop();
+  });
+
+  it("notifySignedIn clears signedOut and syncs immediately", async () => {
+    const t = setup(() => ({ outcome: "signedOut", pushed: 0, pulledNew: 0, skipped: 0 }));
+    await t.controller.trigger("start");
+    expect(t.controller.state.status).toBe("signedOut");
+    t.setImpl(() => ok({ pushed: 3 }));
+    await t.controller.notifySignedIn();
+    expect(t.calls()).toBe(2);
+    expect(t.controller.state).toEqual({ status: "idle", lastSyncedAt: 1_000_000 });
+    // Timer syncs run again because signedOut was cleared.
+    const stop = t.controller.start();
+    await vi.advanceTimersByTimeAsync(SYNC_INTERVAL_MS);
+    expect(t.calls()).toBe(4);
+    stop();
+  });
 });
 
 describe("fetch transport", () => {

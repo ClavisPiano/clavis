@@ -3,6 +3,7 @@
   import { resolve } from "$app/paths";
   import { MidiAdapter, isMidiSupported, type MidiDeviceInfo } from "@clavis/audio";
   import { createUlidGenerator } from "@clavis/core";
+  import AccountSection from "../../lib/account/AccountSection.svelte";
   import { useLearner } from "../../lib/learner.svelte";
   import {
     AWAY_BUDGET_OPTIONS_MIN,
@@ -421,6 +422,8 @@
 {:else if learner.status === "loading"}
   <p>Loading...</p>
 {/if}
+
+<AccountSection />
 
 <h2>Tools</h2>
 <ul>
