@@ -49,7 +49,6 @@ const nodes: SkillNode[] = [
 const generate = (node: SkillNode, params: Record<string, unknown>, mode: "away" | "instrument") =>
   progressionId.generate(node, params as never, {
     rng: createRng(11),
-    voiceRange: { low: 48, high: 72 },
     mode,
   });
 

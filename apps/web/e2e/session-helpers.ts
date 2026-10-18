@@ -6,29 +6,11 @@ import { expect, type Page } from "@playwright/test";
  */
 
 /**
- * Sing the current sung phase through the fake input, one note every 400 ms. With `wrongAt`, that
- * note is three semitones off. Does nothing when the item expects no singing.
+ * Answer whatever the current listening phase expects, correctly. With `wrongAt`, that note of a
+ * sequence or line is a semitone off.
  */
-export async function singCurrentPhase(page: Page, o: { wrongAt?: number } = {}): Promise<void> {
+export async function answerCurrentPhase(page: Page, o: { wrongAt?: number } = {}): Promise<void> {
   await page.evaluate((wrongAt) => {
-    const session = window.__clavisSession;
-    const fake = window.__clavisFakeInput;
-    const sing = session?.expected?.sing;
-    if (!session || !fake || !sing) return;
-    const base = fake.nowMs() + 300;
-    const midis = sing.kind === "sungPitch" ? [sing.targetMidi] : sing.midi;
-    midis.forEach((midi, i) => {
-      const hz = 440 * 2 ** ((midi + (i === wrongAt ? 3 : 0) - 69) / 12);
-      for (let t = 0; t <= 300; t += 20) {
-        fake.emitFrame({ hz, confidence: 1, atMs: base + i * 400 + t });
-      }
-    });
-  }, o.wrongAt);
-}
-
-/** Answer whatever the current listening phase expects, correctly. */
-export async function answerCurrentPhase(page: Page): Promise<void> {
-  await page.evaluate(() => {
     const session = window.__clavisSession;
     const fake = window.__clavisFakeInput;
     const expected = session?.expected;
@@ -43,17 +25,25 @@ export async function answerCurrentPhase(page: Page): Promise<void> {
       } else if (play.kind === "pitchClass" || play.kind === "exactPitch") {
         fake.emitNote(play.targetMidi, { onsetMs: base });
       } else if (play.kind === "sequence") {
-        play.midi.forEach((midi, i) => fake.emitNote(midi, { onsetMs: base + i * 400 }));
+        play.midi.forEach((midi, i) =>
+          fake.emitNote(midi + (i === wrongAt ? 1 : 0), { onsetMs: base + i * 400 }),
+        );
       } else if (play.kind === "line") {
         const beatMs = 60000 / play.tempoBpm;
         play.midi.forEach((midi, i) =>
-          fake.emitNote(midi, { onsetMs: base + (play.onsetsBeats[i] ?? 0) * beatMs }),
+          fake.emitNote(midi + (i === wrongAt ? 1 : 0), {
+            onsetMs: base + (play.onsetsBeats[i] ?? 0) * beatMs,
+          }),
         );
       } else if (play.kind === "chordLine") {
         const beatMs = 60000 / play.tempoBpm;
         for (const c of play.chords) {
           for (const midi of c.midi) fake.emitNote(midi, { onsetMs: base + c.onsetBeats * beatMs });
         }
+      } else if (play.kind === "performance") {
+        const beatMs = 60000 / play.tempoBpm;
+        for (const n of play.notes)
+          fake.emitNote(n.midi, { onsetMs: base + n.onsetBeats * beatMs });
       } else {
         const beatMs = 60000 / play.tempoBpm;
         for (const beat of play.onsetsBeats) {
@@ -61,7 +51,7 @@ export async function answerCurrentPhase(page: Page): Promise<void> {
         }
       }
     }
-  });
+  }, o.wrongAt);
 }
 
 /** Click through the whole session until the summary shows. Returns the phases it answered. */
@@ -91,8 +81,9 @@ export async function runToSummary(page: Page): Promise<string[]> {
       else await page.waitForTimeout(100);
     } else if (state === "listening") {
       const phase = await page.evaluate(() => window.__clavisSession?.phase ?? "");
-      if (phase === "listening-practice") {
-        // Degree items open with a practice step: nothing is marked until Ready.
+      if (phase === "listening-practice" || phase === "listening-cue") {
+        // Degree items open with a practice step, and by-ear items with the sing or hum cue:
+        // nothing is marked until Ready.
         await page
           .getByTestId("ready")
           .click({ timeout: 2_000 })
@@ -100,8 +91,7 @@ export async function runToSummary(page: Page): Promise<string[]> {
         continue;
       }
       answered.push(phase);
-      if (phase === "listening-sing") await singCurrentPhase(page);
-      else await answerCurrentPhase(page);
+      await answerCurrentPhase(page);
       // Leave the phase before looking again (a phase ends once the answer is complete).
       await page.waitForFunction((before) => window.__clavisSession?.phase !== before, phase, {
         timeout: 20_000,

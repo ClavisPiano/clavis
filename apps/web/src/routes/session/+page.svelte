@@ -67,10 +67,7 @@
   // The on-screen keyboard answers like the external one: it is the only input in Away mode, and an
   // extra one at the piano, so the learner can practise anywhere.
   const showKeyboard = $derived(
-    runtime?.tap !== undefined &&
-      view.kind === "listening" &&
-      (params?.mode !== "away" || view.phase === "play" || view.practice) &&
-      !choices,
+    runtime?.tap !== undefined && view.kind === "listening" && !view.cue && !choices,
   );
   const awayKeys = $derived(
     awayKeyboard(view.kind === "listening" ? view.item.inputRange : undefined),
@@ -79,13 +76,20 @@
     showKeyboard &&
       expected?.play?.kind === "rhythm" &&
       view.kind === "listening" &&
-      !view.practice,
+      !view.practice &&
+      !view.cue,
   );
   const practiceHelp = $derived(
     view.kind === "listening" && view.practice
       ? params?.mode === "away"
         ? "Work it out on the keyboard below. Nothing is marked until you press Ready."
         : "Work it out on your own piano; the app is not listening yet. Nothing is marked until you press Ready."
+      : undefined,
+  );
+
+  const cueHelp = $derived(
+    view.kind === "listening" && view.cue
+      ? "Nothing is listening to your voice. Hear it again if you like, then press Ready and play it."
       : undefined,
   );
 
@@ -476,9 +480,6 @@
       </section>
     {:else if view.kind === "listening"}
       <section class="card" data-testid="listening">
-        {#if view.phaseCount > 1}
-          <p class="eyebrow">Step {view.phaseIndex + 1} of {view.phaseCount}</p>
-        {/if}
         <p class="prompt" aria-live="polite" data-testid="prompt">{view.prompt}</p>
         {#if view.item.chords}
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
@@ -504,6 +505,7 @@
         {/if}
         {#if hint}<p class="hint" data-testid="hint">{hint}</p>{/if}
         {#if practiceHelp}<p class="hint" data-testid="practice-help">{practiceHelp}</p>{/if}
+        {#if cueHelp}<p class="hint" data-testid="cue-help">{cueHelp}</p>{/if}
         {#if view.canHear}
           <div class="row" role="group" aria-label="Hear it again">
             <button
@@ -541,14 +543,14 @@
           </div>
         {/if}
         <div class="row">
-          {#if view.practice}
+          {#if view.practice || view.cue}
             <button
               type="button"
               class="primary"
               data-testid="ready"
               onclick={() => machine?.ready()}
             >
-              Ready, mark my answer
+              {view.cue ? "Ready, I will play it" : "Ready, mark my answer"}
             </button>
           {:else if !choices}
             <button

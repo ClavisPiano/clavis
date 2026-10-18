@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { answerCurrentPhase, runToSummary, singCurrentPhase } from "./session-helpers";
+import { answerCurrentPhase, runToSummary } from "./session-helpers";
 
 /*
  * T6.6 (R28): a learner whose "Degrees 1, 3, 5" is fluent is asked "Was that right?" before
@@ -127,8 +127,7 @@ async function answerUntilAsked(page: Page): Promise<void> {
           .catch(() => undefined);
         continue;
       }
-      if (phase === "listening-sing") await singCurrentPhase(page);
-      else await answerCurrentPhase(page);
+      await answerCurrentPhase(page);
       await page.waitForFunction((before) => window.__clavisSession?.phase !== before, phase, {
         timeout: 20_000,
       });

@@ -67,7 +67,7 @@ describe("scoreAttempt with a choice item", () => {
     const wrong = scoreAttempt({ ...input, choice: { id: "minor", atMs: 1500 } });
     expect(wrong.outcome.correct).toBe(false);
     expect(wrong.errors[0]?.code).toBe("choice.wrong");
-    expect(wrong.errors[0]?.detail).toMatchObject({ part: "play" });
+    expect(wrong.errors[0]?.detail).not.toHaveProperty("part");
   });
 
   it("times out without a pick", () => {

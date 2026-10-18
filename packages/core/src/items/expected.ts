@@ -6,9 +6,9 @@ import { z } from "zod";
  * types. Everything scoring needs is therefore precomputed here as data, for
  * example degree labels, so scoring never calls theory functions.
  *
- * R12: an attempt can have a sung part and a played part. At the instrument
- * both must be right for the attempt to be correct; in Away mode the single
- * part (`sing`, or `play` via taps) decides.
+ * R29: only the played part is graded, so every generator emits `play` and none emits `sing`.
+ * The `sing` targets are kept so that anything written under R12 (a sung part and a played part,
+ * both of which had to be right) still parses. Nothing reads them.
  */
 
 const midi = z.int().min(0).max(127);
@@ -98,6 +98,41 @@ export const ChordLineTargetSchema = z.strictObject({
 });
 export type ChordLineTarget = z.infer<typeof ChordLineTargetSchema>;
 
+/** The hand that plays a note: `rh` for the treble staff, `lh` for the bass staff (R27). */
+export const HandSchema = z.enum(["lh", "rh"]);
+export type Hand = z.infer<typeof HandSchema>;
+
+/**
+ * A grand-staff performance (R27): every note of both hands, octave exact and in time, graded by
+ * performance alignment (`alignPerformance` in scoring), so it needs polyphonic input (MIDI). Each
+ * note keeps its score id and its hand so errors can name the bar, beat and hand ("bar 3: LH
+ * late") and mark the note on the staff.
+ */
+export const PerformanceTargetSchema = z
+  .strictObject({
+    kind: z.literal("performance"),
+    notes: z
+      .array(
+        z.strictObject({
+          /** The score note id (`n3`), or `n3.1` for a tone of a chord, as `expectedFromScore`. */
+          id: z.string().min(1),
+          midi,
+          /** Onset in beats from the downbeat of the first bar, so bar and beat follow from it. */
+          onsetBeats: z.number().min(0),
+          durationBeats: z.number().positive(),
+          hand: HandSchema,
+        }),
+      )
+      .min(1),
+    tempoBpm: z.number().positive(),
+    beatsPerBar: z.int().positive(),
+  })
+  .refine((p) => new Set(p.notes.map((n) => n.id)).size === p.notes.length, {
+    message: "performance note ids must be unique",
+    path: ["notes"],
+  });
+export type PerformanceTarget = z.infer<typeof PerformanceTargetSchema>;
+
 export const ChoiceOptionSchema = z.strictObject({
   /** Stable id, recorded in errors: "major", "minor". */
   id: z.string().min(1),
@@ -132,10 +167,12 @@ export const PlayTargetSchema = z.discriminatedUnion("kind", [
   RhythmTargetSchema,
   LineTargetSchema,
   ChordLineTargetSchema,
+  PerformanceTargetSchema,
   ChoiceTargetSchema,
 ]);
 export type PlayTarget = z.infer<typeof PlayTargetSchema>;
 
+/** Legacy (R29): no generator emits sung targets and scoring ignores them. Parse-only. */
 export const SungPitchTargetSchema = z.strictObject({
   kind: z.literal("sungPitch"),
   /** Octave-agnostic: the sung pitch class must be within tolerance of this note's. */
@@ -152,6 +189,7 @@ export const SungSequenceTargetSchema = z.strictObject({
   degreeLabels: DegreeLabelsSchema.optional(),
 });
 
+/** Legacy (R29): parse-only, see `SungPitchTargetSchema`. */
 export const SingTargetSchema = z.discriminatedUnion("kind", [
   SungPitchTargetSchema,
   SungSequenceTargetSchema,
@@ -160,6 +198,7 @@ export type SingTarget = z.infer<typeof SingTargetSchema>;
 
 export const ExpectedResponseSchema = z
   .strictObject({
+    /** Legacy (R12). Never set for new items and never graded. */
     sing: SingTargetSchema.optional(),
     play: PlayTargetSchema.optional(),
     /** How long after stimulus end a response is accepted before timing out. */

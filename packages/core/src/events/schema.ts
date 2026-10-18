@@ -3,6 +3,7 @@ import { envelopeShape } from "./envelope.js";
 import {
   AttemptCompletedV1,
   AttemptCompletedV2,
+  BenchmarkRecordedV1,
   ContentImportedV1,
   ItemPresentedV1,
   NodeIntroducedV1,
@@ -80,6 +81,7 @@ export const learningEventSchema = z.discriminatedUnion("type", [
   PieceCompletedV1,
   ContentImportedV1,
   SessionEndedV1,
+  BenchmarkRecordedV1,
 ]);
 export type LearningEvent = z.infer<typeof learningEventSchema>;
 export type LearningEventType = LearningEvent["type"];
@@ -119,6 +121,7 @@ export const eventRegistry: Readonly<Record<LearningEventType, EventRegistryEntr
   "piece.completed": { versions: { 1: PieceCompletedV1 }, upcast: identity },
   "content.imported": { versions: { 1: ContentImportedV1 }, upcast: identity },
   "session.ended": { versions: { 1: SessionEndedV1 }, upcast: identity },
+  "benchmark.recorded": { versions: { 1: BenchmarkRecordedV1 }, upcast: identity },
 };
 
 export type ParseEventError =

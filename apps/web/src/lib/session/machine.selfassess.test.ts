@@ -9,14 +9,7 @@ import {
 } from "@clavis/core";
 import { describe, expect, it } from "vitest";
 import { SELF_ASSESS_EVERY, SessionMachine, type SessionState } from "./machine";
-import {
-  FakeNotation,
-  logOf,
-  makeHarness,
-  playCorrect,
-  singCorrect,
-  type Harness,
-} from "./test-harness";
+import { FakeNotation, logOf, makeHarness, playCorrect, type Harness } from "./test-harness";
 
 /*
  * Self-assessment (T6.6, R28, spec 8.4): before feedback, on every third answer to a fluent or
@@ -135,14 +128,19 @@ async function answerItem(r: Rig): Promise<SessionState> {
   for (;;) {
     const s = await until(r, (x) => x.kind === "listening" || AFTER_ANSWER.has(x.kind));
     if (s.kind !== "listening") return s;
+    if (s.cue) {
+      // Play by ear (R29): the ungraded "sing or hum it" step waits for Ready.
+      r.machine.ready();
+      await until(r, (x) => !(x.kind === "listening" && x.cue));
+      continue;
+    }
     const expected = r.machine.debug().expected;
     if (!expected) throw new Error("no expected response");
     const start = r.h.clock.ctxMs + 200;
     const play = expected.play;
-    if (s.phase === "sing") singCorrect(r.h.input, expected, start);
-    else if (play?.kind === "choice") r.machine.answerChoice(play.options[0]?.id ?? "");
+    if (play?.kind === "choice") r.machine.answerChoice(play.options[0]?.id ?? "");
     else playCorrect(r.h.input, expected, start + 500);
-    await until(r, (x) => !(x.kind === "listening" && x.phase === s.phase));
+    await until(r, (x) => x.kind !== "listening");
   }
 }
 

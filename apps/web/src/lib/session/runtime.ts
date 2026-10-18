@@ -206,7 +206,6 @@ export async function createSessionRuntime(
     },
     input,
     notation,
-    createSingInput: () => createInput("mic").adapter,
     score: scoreAttempt,
     append: async (events: LearningEvent[]) => {
       reportPractised(await service.append(events));
@@ -286,12 +285,12 @@ export async function createSessionRuntime(
           .catch(() => undefined);
       },
       async unlock() {
-        // Every mode can ask for sung answers, so set up capture now: changing the iOS audio
-        // session category later would interrupt the running context.
-        if (!fake) await audio.unlock({ capture: true });
+        // Only a microphone answer needs capture. Set it up now: changing the iOS audio session
+        // category later would interrupt the running context.
+        if (!fake) await audio.unlock({ capture: inputKind === "mic" });
       },
       playExample(spec) {
-        if (!fake) void audio.unlock({ capture: true });
+        if (!fake) void audio.unlock({ capture: inputKind === "mic" });
         if (fake) {
           const w = window as unknown as { __clavisExamplesPlayed?: number };
           w.__clavisExamplesPlayed = (w.__clavisExamplesPlayed ?? 0) + 1;

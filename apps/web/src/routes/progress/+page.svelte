@@ -5,7 +5,9 @@
   import {
     CALIBRATION_WINDOW_DAYS,
     calibration,
+    benchmarkMonth,
     fluencyTrends,
+    needsBenchmark,
     learnerDay,
     milestones,
     practiceDays,
@@ -64,6 +66,10 @@
       ? upcomingMilestones(learner.state, learner.ctx.graph, content, 3)
       : [],
   );
+  const benchmarkDue = $derived(
+    learner.state ? needsBenchmark(learner.state, benchmarkMonth(now, deviceTzOffsetMin())) : false,
+  );
+  const benchmarkCount = $derived(Object.keys(learner.state?.benchmarks ?? {}).length);
   const hasPractice = $derived(days.some((d) => d.practised));
   const calib = $derived(events ? calibration(events, today, CALENDAR_WEEKS) : undefined);
   const calibSpark = $derived(
@@ -111,6 +117,27 @@
   <p class="map-link">
     <a href={resolve("/progress/map")} data-testid="skill-map-link">See your skill map</a>
   </p>
+
+  {#if benchmarkDue || benchmarkCount > 0}
+    <section class="card" aria-labelledby="bm-h" data-testid="benchmark-card">
+      <h2 id="bm-h">Monthly benchmark</h2>
+      {#if benchmarkDue}
+        <p>
+          <a href={resolve("/progress/benchmarks/record")} data-testid="benchmark-record-link"
+            >Record this month's benchmark</a
+          >
+        </p>
+      {/if}
+      {#if benchmarkCount > 0}
+        <p>
+          <a href={resolve("/progress/benchmarks")} data-testid="benchmarks-link"
+            >Listen to your benchmarks</a
+          >
+          <span class="muted">({benchmarkCount} {benchmarkCount === 1 ? "month" : "months"})</span>
+        </p>
+      {/if}
+    </section>
+  {/if}
 
   <section class="card" aria-labelledby="ms-h">
     <h2 id="ms-h">Milestones</h2>

@@ -17,7 +17,6 @@ import {
   type LearningEvent,
   type NodeState,
   type NoteEvent,
-  type PitchFrame,
   type PlacementAttempt,
   type PlacementItem,
   type PlacementPlan,
@@ -35,8 +34,8 @@ import {
   type Milestone,
 } from "@clavis/core";
 import type { InputAdapter } from "@clavis/audio";
-import { combineParts, type ScoreInput, type ScoreResult } from "@clavis/scoring";
-import { checkPlayDone, checkSingDone, type DoneCheck } from "./completion";
+import type { ScoreInput, ScoreResult } from "@clavis/scoring";
+import { checkPlayDone, type DoneCheck } from "./completion";
 import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
 import type { NotationMark, NotationPort } from "../notation/port";
 import {
@@ -56,7 +55,10 @@ import { noteNamer } from "./spelling";
  * injected, so the whole flow runs in unit tests with fakes.
  *
  *   idle -> [headphones] -> preparing -> [orient] -> ( [intro] -> presenting -> listening
- *     (sing, then play) -> [selfAssess] -> feedback )* -> summary
+ *     ([cue], play) -> [selfAssess] -> feedback )* -> summary
+ *
+ * Items that set `cue` (play it by ear, R29) pause after the stimulus for an ungraded "sing or hum
+ * it" step: nothing listens and nothing is timed until `ready()`. Only the played answer is graded.
  *
  * `selfAssess` (spec 8.4, R28) asks "Was that right?" before feedback on some answers to fluent
  * and mastered skills; see `#selfAssessable`.
@@ -77,9 +79,12 @@ import { noteNamer } from "./spelling";
  * in ms (`clock.contextNowMs()`), the same clock as `player.play().endAt` and the input adapters.
  */
 
-export type Phase = "sing" | "play";
+/** The graded part of an item. Only playing is graded (R29); the type stays for the state shape. */
+export type Phase = "play";
 
-export const DEFAULT_VOICE_RANGE: VoiceRange = { low: 48, high: 72 };
+/** The cue shown after hearing a play-by-ear item (R29). */
+export const CUE_PROMPT = "Sing or hum it, out loud or in your head";
+
 export const DEFAULT_GATE_TAIL_MS = { headphones: 150, speakers: 400 } as const;
 
 export interface LatencyOffsets {
@@ -121,11 +126,6 @@ export interface SessionDeps {
   player: SessionPlayer;
   /** The main input: the mic at the instrument, the tap keyboard in Away mode. */
   input: InputAdapter;
-  /**
-   * Away mode only: builds the mic input for sung parts when `input` is not the mic. Called only
-   * when the plan has an item that needs singing.
-   */
-  createSingInput?: () => InputAdapter;
   score(input: ScoreInput): ScoreResult;
   append(events: LearningEvent[]): Promise<void>;
   /** The current derived learner state (already includes events appended so far). */
@@ -250,6 +250,8 @@ export type SessionState =
       prompt: string;
       /** Practice step: input is not scored until `ready()`, and the response window has not started. */
       practice: boolean;
+      /** Cue step (R29): sing or hum it, ungraded. Like practice, nothing is scored until `ready()`. */
+      cue: boolean;
       /** The stimulus can be heard again (not for reading items). */
       canHear: boolean;
       /** The target note alone can be heard again (the stimulus also has a cadence). */
@@ -296,31 +298,20 @@ interface Current {
   phases: Phase[];
   phaseIdx: number;
   stimulusEndMs: number;
-  /** Reference time per phase for scoring (stimulus end for the first, phase start after). */
+  /** Reference time for scoring: the stimulus end, or the moment of Ready after a practice or cue step. */
   refMs: Partial<Record<Phase, number>>;
   phaseStartMs: number;
-  /** In the practice step: the first phase is open for trying, not yet for answering. */
+  /** In the practice or cue step: the first phase is open for trying, not yet for answering. */
   practicing: boolean;
   gateMs: number;
   /** Quiet time after the stimulus before answers count. Zero when nothing was played. */
   tailMs: number;
   playNotes: NoteEvent[];
-  singFrames: PitchFrame[];
   /** The option picked, for choice items. */
   choice?: { id: string; atMs: number };
 }
 
 type Listener = (state: SessionState) => void;
-
-export function phasesFor(expected: ExpectedResponse, mode: SessionMode): Phase[] {
-  const sing = expected.sing !== undefined;
-  const play = expected.play !== undefined;
-  // R12: at the instrument, sing then play, and both must be right. In Away mode the sung part
-  // stands alone.
-  if (mode === "away") return sing ? ["sing"] : ["play"];
-  if (sing && play) return ["sing", "play"];
-  return play ? ["play"] : ["sing"];
-}
 
 const NODE_RANK_ORDER: readonly NodeState[] = [
   "locked",
@@ -354,15 +345,7 @@ export function choiceQuestion(options: readonly ChoiceOption[]): string {
   return `${labels.slice(0, -1).join(", ")} or ${last}?`;
 }
 
-export function promptFor(
-  phase: Phase,
-  phases: readonly Phase[],
-  expected: ExpectedResponse,
-  mode: SessionMode,
-  display = false,
-): string {
-  if (phase === "sing") return "Sing it";
-  if (phases.length > 1) return "Now play it";
+export function promptFor(expected: ExpectedResponse, mode: SessionMode, display = false): string {
   const play = expected.play;
   if (play?.kind === "choice") return choiceQuestion(play.options);
   if (display && play) {
@@ -372,6 +355,10 @@ export function promptFor(
     if (play.kind === "sequence") return "Play these notes";
     if (play.kind === "line") return "Play this phrase";
     if (play.kind === "chordLine") return "Play these chords with your left hand";
+    if (play.kind === "performance") {
+      const hands = new Set(play.notes.map((n) => n.hand));
+      return hands.size > 1 ? "Play this with both hands" : "Play this phrase";
+    }
   }
   if (play?.kind === "rhythm") return mode === "away" ? "Tap the rhythm" : "Play the rhythm";
   return mode === "away" ? "Tap it on the keyboard" : "Play it";
@@ -398,7 +385,6 @@ export class SessionMachine {
   #sessionAttempts: Record<string, number> = {};
   #attempts = 0;
   #correct = 0;
-  #singInput: InputAdapter | undefined;
   #headphones: boolean | undefined;
   #headphonesAnswer: ((v: boolean) => void) | undefined;
   #latency: LatencyOffsets;
@@ -491,7 +477,9 @@ export class SessionMachine {
         s.kind === "listening"
           ? s.practice
             ? "listening-practice"
-            : `listening-${s.phase}`
+            : s.cue
+              ? "listening-cue"
+              : `listening-${s.phase}`
           : s.kind,
       expected:
         s.kind === "listening" || s.kind === "presenting" ? cur?.instance.expected : undefined,
@@ -587,7 +575,7 @@ export class SessionMachine {
     if (this.#state.kind === "listening" && !this.#cur?.practicing) this.#endPhase();
   }
 
-  /** Practice step: stop practising and open the answer. Timing starts now. */
+  /** Practice or cue step: stop and open the answer. Timing starts now. */
   ready(): void {
     const cur = this.#cur;
     if (this.#state.kind !== "listening" || !cur?.practicing) return;
@@ -641,9 +629,7 @@ export class SessionMachine {
     if (s.kind !== "feedback" || !cur) return;
     this.#cancelTimers();
     this.#d.player.stop();
-    this.#d.player.play(
-      buildReplaySpec(cur.instance, { notes: cur.playNotes, frames: cur.singFrames }),
-    );
+    this.#d.player.play(buildReplaySpec(cur.instance, { notes: cur.playNotes }));
   }
 
   /** The app went to the background. Stops sound and input; `resume` picks the step back up. */
@@ -729,7 +715,6 @@ export class SessionMachine {
     this.#hideNotation();
     this.#stopActivity();
     this.#d.input.stop();
-    this.#singInput?.stop();
     this.#setState({ kind: "error", message: e instanceof Error ? e.message : String(e) });
   }
 
@@ -761,7 +746,6 @@ export class SessionMachine {
     this.#d.player.stop();
     this.#d.input.pause();
     this.#d.input.setExpectedRange?.(null);
-    this.#singInput?.pause();
   }
 
   /** Envelope fields shared by every event; the caller adds `type` and the payload. */
@@ -849,17 +833,8 @@ export class SessionMachine {
 
     await this.#prepareNotation();
 
-    // Which inputs does this plan need?
-    const needsMic = this.#items.some(({ planned }) =>
-      d.graph.generators.find((g) => g.id === planned.generator)?.requires.includes("mic"),
-    );
-    // Sung answers always use the mic. Away mode (keys only) and a MIDI keyboard have none of their
-    // own, so they open one only for plans that need it (items that require "mic").
-    const keysOnly = d.mode === "away" || d.input.source === "midi";
-    if (keysOnly && d.input.source !== "mic" && needsMic && d.createSingInput) {
-      this.#singInput = d.createSingInput();
-    }
-    const micUsed = d.input.source === "mic" || this.#singInput !== undefined;
+    // The mic is only used as the played input. Nobody is graded on their voice (R29).
+    const micUsed = d.input.source === "mic";
     if (d.askHeadphones === true && micUsed && this.#headphones === undefined) {
       const answer = await new Promise<boolean>((resolve) => {
         this.#headphonesAnswer = resolve;
@@ -874,13 +849,11 @@ export class SessionMachine {
     try {
       await d.player.load?.();
       await d.input.start();
-      await this.#singInput?.start();
     } catch (e) {
       const what = e instanceof Error ? e.message : String(e);
       throw new Error(`Could not start audio or the microphone: ${what}`, { cause: e });
     }
     d.input.pause();
-    this.#singInput?.pause();
 
     this.#sessionId = d.newId();
     this.#startedWall = d.clock.wallNow();
@@ -968,7 +941,6 @@ export class SessionMachine {
   #loadPlacementItem(item: PlacementItem): void {
     const d = this.#d;
     const index = this.#placementAttempts.length;
-    const settings = d.getState().settings;
     const planned: PlannedItem = {
       itemId: item.itemId,
       nodeId: item.nodeId,
@@ -982,10 +954,6 @@ export class SessionMachine {
     const instance = d.generate(planned, {
       rng,
       preferredKey: { tonic: "C", mode: "major" },
-      voiceRange: {
-        low: settings.voiceRangeLow ?? DEFAULT_VOICE_RANGE.low,
-        high: settings.voiceRangeHigh ?? DEFAULT_VOICE_RANGE.high,
-      },
       keyboardRange: DEFAULT_KEYBOARD_RANGE,
       mode: "instrument",
     });
@@ -994,7 +962,7 @@ export class SessionMachine {
       planned,
       instance,
       block: item.section === "EAR" ? "ear" : "read",
-      phases: phasesFor(instance.expected, "instrument"),
+      phases: ["play"],
       phaseIdx: 0,
       stimulusEndMs: 0,
       refMs: {},
@@ -1003,7 +971,6 @@ export class SessionMachine {
       gateMs: 0,
       tailMs: 0,
       playNotes: [],
-      singFrames: [],
     };
     // Nothing is logged for a placement item.
     this.#presentedLogged = true;
@@ -1108,15 +1075,10 @@ export class SessionMachine {
     const d = this.#d;
     const plan = this.#plan;
     if (!plan) return;
-    const settings = d.getState().settings;
     const rng = createRng((d.seed + Math.imul(index + 1, 0x9e3779b1)) >>> 0);
     const instance = d.generate(entry.planned, {
       rng,
       preferredKey: plan.key,
-      voiceRange: {
-        low: settings.voiceRangeLow ?? DEFAULT_VOICE_RANGE.low,
-        high: settings.voiceRangeHigh ?? DEFAULT_VOICE_RANGE.high,
-      },
       keyboardRange: DEFAULT_KEYBOARD_RANGE,
       mode: d.mode,
     });
@@ -1125,7 +1087,7 @@ export class SessionMachine {
       planned: entry.planned,
       instance,
       block: entry.block,
-      phases: phasesFor(instance.expected, d.mode),
+      phases: ["play"],
       phaseIdx: 0,
       stimulusEndMs: 0,
       refMs: {},
@@ -1134,7 +1096,6 @@ export class SessionMachine {
       gateMs: 0,
       tailMs: 0,
       playNotes: [],
-      singFrames: [],
     };
     this.#presentedLogged = false;
     this.#presentCurrent();
@@ -1208,15 +1169,9 @@ export class SessionMachine {
     };
   }
 
-  #adapterFor(phase: Phase): InputAdapter {
-    return phase === "sing" ? (this.#singInput ?? this.#d.input) : this.#d.input;
-  }
-
   #tailMs(): number {
     // Exact-key inputs (keys, MIDI) hear no speaker bleed, so only the mic needs the tail.
-    const mic =
-      (this.#d.input.source !== "tap" && this.#d.input.source !== "midi") ||
-      this.#singInput !== undefined;
+    const mic = this.#d.input.source !== "tap" && this.#d.input.source !== "midi";
     if (!mic) return 0;
     const tails = this.#d.gateTailMs ?? DEFAULT_GATE_TAIL_MS;
     return this.#headphones === true ? tails.headphones : tails.speakers;
@@ -1230,12 +1185,10 @@ export class SessionMachine {
     cur.phaseIdx = 0;
     cur.practicing = false;
     cur.playNotes = [];
-    cur.singFrames = [];
     cur.refMs = {};
     this.#unsubscribeInput();
     this.#cancelTimers();
     d.input.pause();
-    this.#singInput?.pause();
     const display = cur.instance.display ?? this.#staffFor(cur);
     if (display && d.notation) {
       this.#presentNotation(cur, display, d.notation);
@@ -1268,7 +1221,7 @@ export class SessionMachine {
     this.#setState({
       kind: "presenting",
       item: this.#itemView(cur),
-      prompt: cur.instance.display ? this.#promptFor(cur, cur.phases[0] ?? "play") : "Listen",
+      prompt: cur.instance.display ? this.#promptFor(cur) : "Listen",
     });
     void this.#enqueue(async () => {
       this.#notationShown = true;
@@ -1290,27 +1243,28 @@ export class SessionMachine {
     });
   }
 
-  #promptFor(cur: Current, phase: Phase): string {
-    return promptFor(
-      phase,
-      cur.phases,
-      cur.instance.expected,
-      this.#d.mode,
-      cur.instance.display !== undefined,
-    );
+  #promptFor(cur: Current): string {
+    return promptFor(cur.instance.expected, this.#d.mode, cur.instance.display !== undefined);
   }
 
   #beginPhase(index: number): void {
     const cur = this.#cur;
     if (!cur) return;
-    if (index === 0 && this.#wantsPractice(cur)) {
+    const hold = index === 0 ? this.#holdFor(cur) : undefined;
+    if (hold) {
       // Nothing listens and no clock runs until the learner is ready (`ready()`).
       cur.practicing = true;
       cur.phaseIdx = 0;
-      this.#setState(this.#listeningState(cur, 0, true));
+      this.#setState(this.#listeningState(cur, 0, hold));
       return;
     }
     this.#openPhase(index, false);
+  }
+
+  /** The step to hold before the answer opens: the cue to sing or hum (R29), or practice. */
+  #holdFor(cur: Current): "cue" | "practice" | undefined {
+    if (cur.instance.cue === true && !this.#d.placement) return "cue";
+    return this.#wantsPractice(cur) ? "practice" : undefined;
   }
 
   /**
@@ -1337,7 +1291,7 @@ export class SessionMachine {
     return isEarly(stage) ? staff : undefined;
   }
 
-  #listeningState(cur: Current, index: number, practice: boolean): SessionState {
+  #listeningState(cur: Current, index: number, hold?: "cue" | "practice"): SessionState {
     const phase = cur.phases[index] ?? "play";
     const events = cur.instance.stimulus.events;
     const canHear = cur.instance.display === undefined && events.length > 0;
@@ -1349,14 +1303,16 @@ export class SessionMachine {
       phase,
       phaseIndex: index,
       phaseCount: cur.phases.length,
-      prompt: practice ? "Find the note" : this.#promptFor(cur, phase),
-      practice,
+      prompt:
+        hold === "cue" ? CUE_PROMPT : hold === "practice" ? "Find the note" : this.#promptFor(cur),
+      practice: hold === "practice",
+      cue: hold === "cue",
       canHear,
       canHearNote,
     };
   }
 
-  /** Open a phase for answers. After practice the reference time is now, not the stimulus end. */
+  /** Open a phase for answers. After practice or the cue the reference time is now, not the stimulus end. */
   #openPhase(index: number, afterPractice: boolean): void {
     const cur = this.#cur;
     if (!cur) return;
@@ -1368,23 +1324,18 @@ export class SessionMachine {
     const ref = index === 0 && !afterPractice ? cur.stimulusEndMs : now;
     cur.refMs[phase] = ref;
     cur.phaseStartMs = ref;
-    // Events before this time are the stimulus (or the voice that just stopped), never answers.
+    // Events before this time are the stimulus, never answers.
     cur.gateMs =
       index === 0 && !afterPractice ? cur.stimulusEndMs + cur.tailMs : now + this.#tailMs();
-    const adapter = this.#adapterFor(phase);
+    const adapter = d.input;
     this.#unsubs.push(
       adapter.onNote((n) => {
-        this.#onNote(n, phase);
-      }),
-      adapter.onFrame((f) => {
-        this.#onFrame(f, phase);
+        this.#onNote(n);
       }),
     );
-    if (phase === "play" && cur.instance.inputRange) {
-      adapter.setExpectedRange?.(cur.instance.inputRange);
-    }
+    if (cur.instance.inputRange) adapter.setExpectedRange?.(cur.instance.inputRange);
     adapter.resume();
-    this.#setState(this.#listeningState(cur, index, false));
+    this.#setState(this.#listeningState(cur, index));
     const deadline = ref + cur.instance.expected.responseWindowMs;
     this.#schedule(deadline - now, () => {
       this.#endPhase();
@@ -1398,38 +1349,25 @@ export class SessionMachine {
     return 0;
   }
 
-  #onNote(raw: NoteEvent, phase: Phase): void {
+  #onNote(raw: NoteEvent): void {
     const cur = this.#cur;
-    if (this.#state.kind !== "listening" || cur?.phases[cur.phaseIdx] !== phase) return;
+    if (this.#state.kind !== "listening" || !cur) return;
     if (cur.practicing) return;
     const note: NoteEvent = { ...raw, onsetMs: raw.onsetMs - this.#offset(raw.source) };
     if (note.offsetMs !== undefined) note.offsetMs -= this.#offset(raw.source);
     if (note.onsetMs < cur.gateMs) return;
     // Choice items are answered with buttons; stray notes from the mic mean nothing.
     if (cur.instance.expected.play?.kind === "choice") return;
-    if (phase === "play") cur.playNotes.push(note);
-    this.#check();
-  }
-
-  #onFrame(raw: PitchFrame, phase: Phase): void {
-    const cur = this.#cur;
-    if (this.#state.kind !== "listening" || cur?.phases[cur.phaseIdx] !== phase) return;
-    if (cur.practicing) return;
-    const frame: PitchFrame = { ...raw, atMs: raw.atMs - this.#offset("mic") };
-    if (frame.atMs < cur.gateMs) return;
-    if (phase === "sing") cur.singFrames.push(frame);
+    cur.playNotes.push(note);
     this.#check();
   }
 
   #check(): void {
     const cur = this.#cur;
     if (!cur || this.#state.kind !== "listening") return;
-    const phase = cur.phases[cur.phaseIdx];
     const now = this.#d.clock.contextNowMs();
     let result: DoneCheck = { done: false };
-    if (phase === "sing" && cur.instance.expected.sing) {
-      result = checkSingDone(cur.instance.expected.sing, cur.singFrames, now);
-    } else if (phase === "play" && cur.instance.expected.play) {
+    if (cur.instance.expected.play) {
       result = checkPlayDone(cur.instance.expected.play, cur.playNotes, now);
     }
     this.#quietCancel?.();
@@ -1447,64 +1385,31 @@ export class SessionMachine {
   #endPhase(): void {
     const cur = this.#cur;
     if (!cur || this.#state.kind !== "listening") return;
-    const phase = cur.phases[cur.phaseIdx];
-    if (!phase) return;
     this.#cancelTimers();
     this.#unsubscribeInput();
-    this.#adapterFor(phase).pause();
-    if (phase === "play") this.#d.input.setExpectedRange?.(null);
-    const nextIdx = cur.phaseIdx + 1;
-    if (nextIdx < cur.phases.length) {
-      this.#beginPhase(nextIdx);
-    } else {
-      void this.#enqueue(() => this.#completeItem(false));
-    }
+    this.#d.input.pause();
+    this.#d.input.setExpectedRange?.(null);
+    void this.#enqueue(() => this.#completeItem(false));
   }
 
+  /** Grade the played answer (R29). The cue is never graded. */
   #score(cur: Current): {
     outcome: AttemptOutcome;
     subScores: ScoreResult["subScores"];
     errors: AttemptError[];
     source: InputSource;
   } {
-    const d = this.#d;
     const expected = cur.instance.expected;
     const isChoice = expected.play?.kind === "choice";
-    let sing: ScoreResult | undefined;
-    let play: ScoreResult | undefined;
-    if (cur.phases.includes("sing") && expected.sing) {
-      sing = d.score({
-        expected,
-        notes: [],
-        frames: cur.singFrames,
-        stimulusEndMs: cur.refMs.sing ?? cur.stimulusEndMs,
-        source: this.#adapterFor("sing").source,
-        part: "sing",
-      });
-    }
-    if (cur.phases.includes("play") && expected.play) {
-      play = d.score({
-        expected,
-        notes: cur.playNotes,
-        frames: [],
-        ...(cur.choice ? { choice: cur.choice } : {}),
-        stimulusEndMs: cur.refMs.play ?? cur.stimulusEndMs,
-        source: isChoice ? "tap" : this.#playSource(cur),
-        part: "play",
-      });
-    }
-    if (!play && !sing) throw new Error("item has nothing to score");
-    const subScores: ScoreResult["subScores"] = {};
-    if (sing?.subScores.sing !== undefined) subScores.sing = sing.subScores.sing;
-    if (play?.subScores.play !== undefined) subScores.play = play.subScores.play;
-    // R12: correct only when every part is; errors tagged with their part.
-    const combined = combineParts({ sing, play });
-    return {
-      outcome: combined.outcome,
-      subScores,
-      errors: combined.errors,
-      source: play ? (isChoice ? "tap" : this.#playSource(cur)) : this.#adapterFor("sing").source,
-    };
+    const source: InputSource = isChoice ? "tap" : this.#playSource(cur);
+    const result = this.#d.score({
+      expected,
+      notes: cur.playNotes,
+      ...(cur.choice ? { choice: cur.choice } : {}),
+      stimulusEndMs: cur.refMs.play ?? cur.stimulusEndMs,
+      source,
+    });
+    return { outcome: result.outcome, subScores: result.subScores, errors: result.errors, source };
   }
 
   /**
@@ -1534,10 +1439,9 @@ export class SessionMachine {
       let errors: AttemptError[] = [];
       let source: InputSource;
       if (skipped) {
-        const last = cur.phases[cur.phases.length - 1] ?? "play";
         outcome = { correct: false, latencyMs: expected.responseWindowMs, retries: 0 };
         errors = [{ code: "response.skipped" }];
-        source = this.#adapterFor(last).source;
+        source = d.input.source;
       } else {
         const scored = this.#score(cur);
         outcome = { ...scored.outcome, latencyMs: Math.max(0, scored.outcome.latencyMs) };
@@ -1769,7 +1673,6 @@ export class SessionMachine {
     this.#pending = undefined;
     if (pending) await d.append(pending.events);
     d.input.stop();
-    this.#singInput?.stop();
     const elapsedSec = Math.round(this.elapsedSec());
     let placed: PlacedNode[] | undefined;
     const placement = d.placement;
@@ -1874,6 +1777,12 @@ export function feedbackMarks(
       e.code === "chord.missed";
     const id = marksNote && typeof index === "number" ? ids[index] : undefined;
     if (id !== undefined) wrong.add(id);
+    // A performance (R27) names the note by id; a chord tone `n3.1` marks its chord `n3`.
+    const noteId = e.detail?.id;
+    if ((e.code === "note.wrong" || e.code === "note.missed") && typeof noteId === "string") {
+      const base = noteId.split(".")[0] ?? noteId;
+      if (ids.includes(base)) wrong.add(base);
+    }
   }
   return ids.map((noteId) => ({ noteId, kind: wrong.has(noteId) ? "wrong" : "target" }));
 }
