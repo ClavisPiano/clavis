@@ -974,4 +974,23 @@ describe("keep going and learn more", () => {
       (plain.machine.plan?.diagnostics.newAllowance ?? 0) + 5,
     );
   });
+
+  it("recovery composes the shorter welcome-back plan with nothing new", async () => {
+    const first = await makeHarness({ budgetSec: 90 });
+    await runWholeSession(first);
+    const history = await first.log();
+    const plain = await makeHarness({ history, idSalt: 77 });
+    await plain.machine.start();
+    const back = await makeHarness({ history, idSalt: 88, recovery: true });
+    await back.machine.start();
+    expect(plain.machine.plan?.recovery).toBeUndefined();
+    expect(back.machine.plan?.recovery).toBe(true);
+    expect(back.machine.plan?.budgetSec).toBe((plain.machine.plan?.budgetSec ?? 0) / 2);
+    const planned = [
+      ...(back.machine.plan?.blocks.ear ?? []),
+      ...(back.machine.plan?.blocks.read ?? []),
+    ];
+    expect(planned.some((i) => i.isNew)).toBe(false);
+    expect(back.machine.plan?.introductions).toEqual([]);
+  });
 });

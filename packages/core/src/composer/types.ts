@@ -32,6 +32,12 @@ export interface ComposeInput {
    */
   skills?: readonly string[];
   /**
+   * Welcome back (R30): a shorter, lighter session for a learner who has been away. Half the
+   * budget (at least `RECOVERY_MIN_BUDGET_SEC`), due items only: no new items, no introductions and
+   * no extra new items. Instrument sessions only; ignored in Away mode and in practice.
+   */
+  recovery?: boolean;
+  /**
    * Learn more today: extra new items allowed in this plan on top of what is left of the daily
    * cap (the caller passes one batch, the `newItemsPerDay` setting). Nothing is stored, so it
    * applies to this plan only. Ignored for practice.
@@ -92,6 +98,8 @@ export interface SessionPlan {
    * (always "A", R16). Empty for EAR introductions.
    */
   introductionKeyFamilies: Record<string, KeyFamily>;
+  /** Present and true only for a welcome-back plan (R30). */
+  recovery?: true;
   /** Present and true only for a practice plan. */
   practice?: true;
   diagnostics: {

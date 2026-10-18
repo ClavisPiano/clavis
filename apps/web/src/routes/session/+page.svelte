@@ -361,15 +361,19 @@
           ? "Practise more"
           : params?.learn
             ? "Learn something new"
-            : params?.mode === "away"
-              ? "Away session"
-              : "Session"}
+            : params?.recovery
+              ? "Welcome back"
+              : params?.mode === "away"
+                ? "Away session"
+                : "Session"}
       </h1>
       <p data-testid="session-intro">
         {#if params?.practice}
           Extra practice on skills you have started. This does not change your review schedule.
         {:else if params?.learn}
           One more batch of new material today, then the usual review.
+        {:else if params?.recovery}
+          A shorter review of what is due after your time away. Nothing new today.
         {:else if params?.mode === "away"}
           A short ear session with no piano. Headphones are best.
         {:else}

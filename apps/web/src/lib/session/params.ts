@@ -25,6 +25,11 @@ export interface SessionParams {
    */
   learn: boolean;
   /**
+   * `?welcome=1`: the shorter "welcome back" review after missed days (R30). Instrument mode only;
+   * practice, a piece run and learn win over it.
+   */
+  recovery: boolean;
+  /**
    * `?run=piece.<id>`: play that piece through, every phrase in order (MP). Instrument mode only;
    * anything else is ignored.
    */
@@ -74,6 +79,12 @@ export function parseSessionParams(
     skills:
       searchParams.get("practice") === "1" ? parseSkills(searchParams.get("skills")) : undefined,
     learn: searchParams.get("practice") !== "1" && searchParams.get("learn") === "1",
+    recovery:
+      mode === "instrument" &&
+      searchParams.get("practice") !== "1" &&
+      searchParams.get("learn") !== "1" &&
+      searchParams.get("welcome") === "1" &&
+      !PIECE_ID.test(searchParams.get("run") ?? ""),
     headphones: headphones ?? (inputKind === "fake" ? true : undefined),
     run:
       mode === "instrument" && PIECE_ID.test(searchParams.get("run") ?? "")

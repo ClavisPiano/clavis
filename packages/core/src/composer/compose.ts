@@ -15,7 +15,13 @@ import { rankDue } from "../scheduler/rank.js";
 import type { CardState } from "../scheduler/card.js";
 import { medianDurationSec, TASK_STRANDS } from "../state/reduce.js";
 import type { LearnerState } from "../state/types.js";
-import { allocate, DEFAULT_BUDGET_SEC, SCALE_ORIENT_SEC } from "./budget.js";
+import {
+  allocate,
+  DEFAULT_BUDGET_SEC,
+  RECOVERY_BUDGET_SHARE,
+  RECOVERY_MIN_BUDGET_SEC,
+  SCALE_ORIENT_SEC,
+} from "./budget.js";
 import { interleave } from "./interleave.js";
 import { rankWeakest } from "./practice.js";
 import { keyFamily, type KeyFamily } from "../theory/keys.js";
@@ -524,19 +530,30 @@ export function composeSession(input: ComposeInput): SessionPlan {
   const registry: Registry = input.generators ?? GENERATORS;
   const today = learnerDay(input.now, input.tzOffsetMin);
   const settingsBudget = mode === "away" ? state.settings.awayBudgetSec : state.settings.budgetSec;
-  const budgetSec = input.budgetSec ?? settingsBudget ?? DEFAULT_BUDGET_SEC[mode];
-  if (!Number.isFinite(budgetSec) || budgetSec <= 0) {
-    throw new RangeError(`budgetSec must be positive, got ${String(budgetSec)}`);
+  const baseBudgetSec = input.budgetSec ?? settingsBudget ?? DEFAULT_BUDGET_SEC[mode];
+  if (!Number.isFinite(baseBudgetSec) || baseBudgetSec <= 0) {
+    throw new RangeError(`budgetSec must be positive, got ${String(baseBudgetSec)}`);
   }
+  // Welcome back (R30): instrument sessions only, and a practice round is its own thing.
+  const recovery = input.recovery === true && mode === "instrument" && input.practice !== true;
+  const budgetSec = recovery
+    ? Math.min(
+        baseBudgetSec,
+        Math.max(RECOVERY_MIN_BUDGET_SEC, Math.round(baseBudgetSec * RECOVERY_BUDGET_SHARE)),
+      )
+    : baseBudgetSec;
 
   const key = keyOfDay(state, graph, input.now, input.tzOffsetMin);
   const dayFamily = keyFamily(key);
   const introducedToday = state.daily[today]?.newItems ?? 0;
   const extraNew = Math.max(0, Math.floor(input.extraNewItems ?? 0));
-  const newAllowance = input.practice
-    ? 0
-    : newItemAllowance({ introducedToday, cap: state.settings.newItemsPerDay }) + extraNew;
-  const notes: string[] = [];
+  // Practice and welcome back (R30) take nothing new: a returning learner reviews first, and the
+  // daily allowance is left for the next session.
+  const newAllowance =
+    input.practice || recovery
+      ? 0
+      : newItemAllowance({ introducedToday, cap: state.settings.newItemsPerDay }) + extraNew;
+  const notes: string[] = recovery ? ["welcome back: shorter, review only"] : [];
 
   const skillSet = input.skills === undefined ? undefined : new Set(input.skills);
   const infos = new Map<string, NodeInfo>();
@@ -611,7 +628,13 @@ export function composeSession(input: ComposeInput): SessionPlan {
     )?.node;
   if (chosen) {
     if (newAllowance > 0) intro = chosen;
-    else notes.push("daily new-item cap reached: introduction deferred");
+    else {
+      notes.push(
+        recovery
+          ? "welcome back: introduction deferred"
+          : "daily new-item cap reached: introduction deferred",
+      );
+    }
   }
 
   const famRank = (fam: KeyFamily | undefined): number =>
@@ -908,6 +931,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     },
     introductions,
     introductionKeyFamilies,
+    ...(recovery ? { recovery: true as const } : {}),
     ...(input.practice ? { practice: true as const } : {}),
     diagnostics: {
       dueCount: ear.due.length + readAll.due.length + apply.due.length,

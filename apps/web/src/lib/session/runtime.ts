@@ -172,6 +172,7 @@ export async function createSessionRuntime(
     ...(params.learn && !placement
       ? { extraNewItems: effectiveSettings(service.state.settings).newItemsPerDay }
       : {}),
+    ...(params.recovery && !placement ? { recovery: true } : {}),
     graph,
     milestones: loadMilestones(),
     // Placement (R19): the plan replaces the composer and nothing but its result is stored. Its

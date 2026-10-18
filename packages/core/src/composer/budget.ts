@@ -1,6 +1,11 @@
 import type { SessionMode } from "../learning/rating.js";
 
 export const DEFAULT_BUDGET_SEC = { instrument: 720, away: 300 } as const;
+/** Welcome back (R30) uses this share of the normal budget... */
+export const RECOVERY_BUDGET_SHARE = 0.5;
+/** ...but never less than this many seconds. */
+export const RECOVERY_MIN_BUDGET_SEC = 180;
+
 /** Budgets at or below this are time pressured (spec 6.2). */
 export const TIME_PRESSURE_SEC = 300;
 export const MIN_ORIENT_SEC = 30;

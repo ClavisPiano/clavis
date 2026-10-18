@@ -13,7 +13,7 @@
     todaySummary,
     weekProgress,
   } from "../lib/home";
-  import { nextSteps, startWouldBeEmpty } from "../lib/next-steps";
+  import { nextSteps, startWouldBeEmpty, welcomeBackOffer } from "../lib/next-steps";
   import PieceCard from "../lib/components/PieceCard.svelte";
   import { appPieces } from "../lib/pieces";
   import { pieceCard } from "../lib/piece-card";
@@ -119,6 +119,18 @@
       : undefined,
   );
   const afterSession = $derived(steps !== undefined && (steps.keepGoing || steps.learn));
+  /** After several missed days (R30): offer a shorter session that only reviews. */
+  const welcomeBack = $derived(
+    snap && !firstRun && learner.status === "ready"
+      ? welcomeBackOffer({
+          state: snap,
+          graph: learner.ctx.graph,
+          now,
+          tzOffsetMin: deviceTzOffsetMin(),
+          budgetSec: settings.budgetSec,
+        })
+      : undefined,
+  );
   /** Pieces (MP): the current tune, what is played through, and what unlocks the rest. */
   const pieces = $derived(
     snap && !firstRun && learner.status === "ready"
@@ -250,7 +262,23 @@
   </section>
 {/if}
 
+{#if welcomeBack}
+  <section class="card" data-testid="welcome-back" aria-labelledby="welcome-back-h">
+    <h2 id="welcome-back-h">Welcome back</h2>
+    <p>
+      You last practised {welcomeBack.missed + 1} days ago. Ease back in with a shorter review of what
+      is due, with nothing new. Your usual session is still below.
+    </p>
+  </section>
+{/if}
+
 <div class="actions">
+  {#if welcomeBack && !afterSession}
+    <a class="button primary" href={resolve("/session?welcome=1")} data-testid="welcome-back-start">
+      <strong>Short review</strong>
+      <span>{minutesLabel(welcomeBack.sec)}, nothing new</span>
+    </a>
+  {/if}
   {#if afterSession && steps}
     {#if steps.keepGoing}
       <a class="button primary" href={resolve("/session?practice=1")} data-testid="keep-going">
@@ -275,8 +303,8 @@
   {/if}
   <a
     class="button"
-    class:primary={!afterSession}
-    class:secondary={afterSession}
+    class:primary={!afterSession && !welcomeBack}
+    class:secondary={afterSession || welcomeBack !== undefined}
     href={resolve("/session")}
     data-testid="start-session"
   >

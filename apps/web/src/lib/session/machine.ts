@@ -118,6 +118,8 @@ export interface SessionDeps {
   skills?: readonly string[];
   /** Learn something new: extra new items for this session on top of the daily allowance. */
   extraNewItems?: number;
+  /** Welcome back (R30): compose the shorter, review-only session. */
+  recovery?: boolean;
   graph: SkillGraph;
   /** Capability milestone statements (T6.3). Absent means the summary shows none. */
   milestones?: readonly Milestone[];
@@ -840,6 +842,7 @@ export class SessionMachine {
       ...(d.practice ? { practice: true } : {}),
       ...(d.practice && d.skills ? { skills: d.skills } : {}),
       ...(d.extraNewItems ? { extraNewItems: d.extraNewItems } : {}),
+      ...(d.recovery ? { recovery: true } : {}),
       seed: d.seed,
     });
     const planned =
