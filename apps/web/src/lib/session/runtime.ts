@@ -188,6 +188,8 @@ export async function createSessionRuntime(
             now: input.now,
             tzOffsetMin: input.tzOffsetMin,
             generators: appGenerators(input.state),
+            // A hands-together piece (T5.6) can only be run on a MIDI keyboard.
+            polyphonic: inputKind === "midi",
           })
         : // Chords (HANDS) need an input that can hear them: only MIDI does, today.
           composeSession({

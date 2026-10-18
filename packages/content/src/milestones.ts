@@ -138,6 +138,10 @@ const MILESTONES_V1: unknown[] = [
     nodeId: "apply.piece-ear",
     statement: "You can learn a short tune by ear, then play it from memory.",
   },
+  {
+    nodeId: "apply.pieces-hands",
+    statement: "You can play a short piece with both hands: the tune over left-hand chords.",
+  },
 ];
 
 /**

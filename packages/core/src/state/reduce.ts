@@ -447,9 +447,12 @@ function reduceDrill(
   }
 }
 
-/** The piece phrase a `pieceLine` presentation shows, when it names one. */
+/**
+ * The piece phrase a `pieceLine` presentation shows, when it names one, or a `pieceHands` one
+ * (T5.6): a hands-together piece has its own id, so its phrases are its own record.
+ */
 function pieceHint(generator: GeneratorId, p: JsonObject): Pick<PresentationRecord, "piece"> {
-  if (generator !== "pieceLine") return {};
+  if (generator !== "pieceLine" && generator !== "pieceHands") return {};
   const id = p.piece;
   const phrase = p.phrase;
   if (

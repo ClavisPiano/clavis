@@ -71,7 +71,7 @@ export interface PresentationRecord {
   /** Key hints from the presentation params, when present. */
   tonic?: string;
   mode?: "major" | "minor";
-  /** The piece phrase a `pieceLine` item shows (MP). */
+  /** The piece phrase a `pieceLine` or `pieceHands` item shows (MP, T5.6). */
   piece?: { id: string; phrase: number };
 }
 

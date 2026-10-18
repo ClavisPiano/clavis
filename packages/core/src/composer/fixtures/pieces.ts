@@ -1,10 +1,11 @@
 import type { SkillGraph, SkillNode } from "../../graph/schema.js";
 import { GENERATORS } from "../../items/registry.js";
 import { PIECE_EAR_NODE_ID, createPieceEar } from "../../items/piece-ear.js";
+import { PIECE_HANDS_NODE_ID, createPieceHands } from "../../items/piece-hands.js";
 import { PIECES_NODE_ID, createPieceLine } from "../../items/piece-line.js";
 import type { Generator } from "../../items/types.js";
 import type { GeneratorId } from "../../graph/schema.js";
-import { line } from "../../pieces/line.js";
+import { grandStaff, line } from "../../pieces/line.js";
 import { PieceSchema, type Piece } from "../../pieces/schema.js";
 import { LANDMARKS, READ_GRAPH, STEPS, STUB_READ_GENERATORS } from "./read.js";
 
@@ -118,5 +119,60 @@ export function piecesGenerators(
     ...STUB_READ_GENERATORS,
     pieceLine: createPieceLine(pieces),
     pieceEar: createPieceEar(pieces),
+    pieceHands: createPieceHands(pieces),
+  };
+}
+
+export const ALPHA_HANDS = "piece.alpha-hands";
+
+/**
+ * Alpha for both hands (T5.6): its melody over one chord per bar. Needs steps, and alpha played
+ * through. The fixture nodes stand in for `hands.coord.basic`.
+ */
+export const ALPHA_HANDS_PIECE: Piece = PieceSchema.parse({
+  id: ALPHA_HANDS,
+  title: "alpha for both hands",
+  source: "Traditional",
+  score: grandStaff({
+    key: KEY,
+    meter: METER,
+    treble: bars("C4q D4q E4h", "E4q D4q C4h", "C4q E4q G4h", "G4q E4q C4h"),
+    bass: bars("C3+E3+G3w", "C3+E3+G3w", "C3+E3+G3w", "C3+E3+G3w"),
+  }),
+  phrases: [
+    { firstMeasure: 1, lastMeasure: 2 },
+    { firstMeasure: 3, lastMeasure: 4 },
+  ],
+  requiredNodeIds: [STEPS],
+  handsOf: ALPHA,
+  difficulty: 4,
+});
+
+/** The fixture pieces plus alpha for both hands. */
+export const HANDS_FIXTURE_PIECES: readonly Piece[] = [...FIXTURE_PIECES, ALPHA_HANDS_PIECE];
+
+const handsNode: SkillNode = {
+  ...piecesNode,
+  id: PIECE_HANDS_NODE_ID,
+  title: "Pieces, hands together",
+  itemGenerators: ["pieceHands"],
+};
+
+/** The pieces graph plus the hands-together node, with `pieceHands` needing polyphonic input. */
+export function handsPiecesGraph(): SkillGraph {
+  const g = piecesGraph();
+  return {
+    ...g,
+    generators: [
+      ...g.generators.filter((x) => x.id !== "pieceHands"),
+      {
+        id: "pieceHands",
+        implemented: true,
+        seedDurationSec: 40,
+        awayEligible: false,
+        requires: ["keys", "polyphonic", "notation"],
+      },
+    ],
+    nodes: [...g.nodes, handsNode],
   };
 }

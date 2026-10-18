@@ -27,7 +27,7 @@ export interface BenchmarkOption {
  */
 export function benchmarkOptions(
   library: readonly Piece[],
-  learner: Pick<LearnerState, "nodes">,
+  learner: Pick<LearnerState, "nodes" | "pieces">,
 ): BenchmarkOption[] {
   const listed = listPieces(
     library.filter((p) => !isUserPieceId(p.id)),

@@ -19,9 +19,13 @@ const row = (o: Partial<PieceRow> & Pick<PieceRow, "id" | "title" | "status">): 
 });
 
 function card(rows: PieceRow[]): PieceCardData {
+  const open = rows.filter((r) => r.status === "playing" || r.status === "ready");
+  const oneHand = open.find((r) => r.hand !== "both");
+  const hands = open.find((r) => r.hand === "both");
   return {
     rows,
-    current: rows.find((r) => r.status === "playing" || r.status === "ready"),
+    current: oneHand ?? hands,
+    handsCurrent: oneHand === undefined ? undefined : hands,
     completed: rows.filter((r) => r.status === "completed"),
   };
 }
@@ -125,5 +129,44 @@ describe("PieceCard", () => {
     expect(screen.getByTestId("first-piece-locked")).toBeTruthy();
     expect(screen.queryByTestId("milestones")).toBeNull();
     expect(screen.getByTestId("piece-row").textContent).toContain("Locked: needs Treble landmarks");
+  });
+
+  it("shows a hands-together piece learned alongside, and what unlocks a locked one (T5.6)", () => {
+    render(PieceCard, {
+      card: card([
+        row({ id: "piece.b-lh", title: "Ode to Joy (left hand)", status: "playing", hand: "left" }),
+        row({
+          id: "piece.a-hands",
+          title: "Hot Cross Buns (hands together)",
+          status: "ready",
+          hand: "both",
+          learned: 4,
+        }),
+        row({
+          id: "piece.b-hands",
+          title: "Ode to Joy (hands together)",
+          status: "locked",
+          hand: "both",
+          missing: ["Hands together, block chords"],
+          after: "Ode to Joy",
+        }),
+      ]),
+    });
+    expect(screen.getByTestId("current-piece").getAttribute("data-piece")).toBe("piece.b-lh");
+    const hands = screen.getByTestId("current-hands-piece");
+    expect(within(hands).getByTestId("current-title").textContent).toBe(
+      "Hot Cross Buns (hands together)",
+    );
+    expect(hands.textContent).toContain("Both hands");
+    expect(within(hands).getByTestId("midi-note").textContent).toContain("MIDI keyboard");
+    expect(within(hands).getByTestId("play-through").getAttribute("href")).toContain(
+      "/session?run=piece.a-hands",
+    );
+    const locked = screen
+      .getAllByTestId("piece-row")
+      .find((li) => li.getAttribute("data-piece") === "piece.b-hands");
+    expect(locked?.textContent).toContain(
+      "Locked: needs Hands together, block chords; play Ode to Joy through first",
+    );
   });
 });

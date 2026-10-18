@@ -8,7 +8,7 @@ import { GENERATORS } from "../items/registry.js";
 import type { Generator, ItemParams } from "../items/types.js";
 import { learnerDay } from "../learning/day.js";
 import { listPieces } from "../pieces/list.js";
-import type { Piece } from "../pieces/schema.js";
+import { isHandsPiece, type Piece } from "../pieces/schema.js";
 import { createRng, type Rng } from "../random.js";
 import { newItemAllowance } from "../scheduler/new-items.js";
 import { rankDue } from "../scheduler/rank.js";
@@ -290,19 +290,20 @@ function applyCandidates(
   now: number,
 ): { due: Candidate[]; fresh: Candidate[] } {
   const statuses = listPieces(pieces, state);
-  const current = statuses.find(
-    (s) => s.unlocked && state.pieces[s.piece.id]?.completedAt === undefined,
-  );
   const due: Candidate[] = [];
   const fresh: Candidate[] = [];
+  const freshHands: Candidate[] = [];
   const freshByEar: Candidate[] = [];
   for (const info of infos) {
     const nodeId = info.node.id;
     due.push(...carded(info, state, now));
 
-    // New phrases come from one piece at a time, in phrase order: to read, the current piece; to
-    // play by ear, the first piece whose phrases have all been read and not yet heard.
+    // New phrases come from one piece at a time, in phrase order: to read (one hand, or hands
+    // together, T5.6), the node's current piece, the first unlocked piece of its own that has not
+    // been played through; to play by ear, the first piece whose phrases have all been read and
+    // not yet heard.
     const byEar = info.gens[0] === "pieceEar";
+    const ownPiece = (id: string): boolean => info.universe.some((u) => u.params.piece === id);
     const source = byEar
       ? statuses.find(
           (s) =>
@@ -310,18 +311,31 @@ function applyCandidates(
             phrasesRead(s.piece, state) &&
             info.universe.some((u) => u.params.piece === s.piece.id && !(u.itemId in state.cards)),
         )
-      : current;
+      : statuses.find(
+          (s) =>
+            s.unlocked &&
+            state.pieces[s.piece.id]?.completedAt === undefined &&
+            ownPiece(s.piece.id),
+        );
     if (source === undefined) continue;
     const unseen = info.universe
       .filter((u) => u.params.piece === source.piece.id && state.cards[u.itemId] === undefined)
       .sort((a, b) => Number(a.params.phrase) - Number(b.params.phrase));
     const limit = byEar ? APPLY_NEW_EAR_PHRASES_PER_SESSION : APPLY_NEW_PHRASES_PER_SESSION;
-    for (const u of unseen.slice(0, limit)) {
-      (byEar ? freshByEar : fresh).push({ ...u, nodeId, isNew: true });
-    }
+    const into = byEar ? freshByEar : info.gens[0] === "pieceHands" ? freshHands : fresh;
+    for (const u of unseen.slice(0, limit)) into.push({ ...u, nodeId, isNew: true });
   }
-  // A tune already read comes before the next one: hearing it settles what was just learned.
-  return { due, fresh: [...freshByEar, ...fresh] };
+  // A tune already read comes before the next one: hearing it settles what was just learned. New
+  // one-hand and hands-together phrases (T5.6) take turns, one-hand first, so neither piece waits
+  // for the other under the small new-phrase share.
+  const reading: Candidate[] = [];
+  for (let i = 0; i < Math.max(fresh.length, freshHands.length); i++) {
+    const one = fresh[i];
+    const both = freshHands[i];
+    if (one !== undefined) reading.push(one);
+    if (both !== undefined) reading.push(both);
+  }
+  return { due, fresh: [...freshByEar, ...reading] };
 }
 
 /** A node's listed items that have a card and are due, most overdue first. */
@@ -388,8 +402,10 @@ function phrasesRead(piece: Piece, state: LearnerState): boolean {
 /**
  * A whole-piece run (MP): every phrase of `pieceId`, in order, as the Apply block of a session
  * that has nothing else in it. The runner writes `piece.completed` when the last phrase is done.
- * Throws when the piece is unknown or still locked, or the graph and registry cannot play pieces.
- * The budget is generous because a run is not a timed session.
+ * A hands-together piece (T5.6) is run with `pieceHands`, which needs polyphonic input (MIDI).
+ * Throws when the piece is unknown or still locked, the graph and registry cannot play pieces, or
+ * a hands-together run has no polyphonic input. The budget is generous because a run is not a
+ * timed session.
  */
 export function composePieceRun(input: {
   state: LearnerState;
@@ -399,26 +415,33 @@ export function composePieceRun(input: {
   now: number;
   tzOffsetMin: number;
   generators?: Partial<Record<GeneratorId, Generator>>;
+  /** True with MIDI input (R26). A hands-together piece needs it. */
+  polyphonic?: boolean;
 }): SessionPlan {
   const { state, graph } = input;
   const registry: Registry = input.generators ?? GENERATORS;
+  const status = listPieces(input.pieces, state).find((s) => s.piece.id === input.pieceId);
+  if (status === undefined) throw new RangeError(`unknown piece ${input.pieceId}`);
+  const generator: GeneratorId = isHandsPiece(status.piece) ? "pieceHands" : "pieceLine";
   const node = graph.nodes.find(
     (n) =>
       n.strand === "APPLY" &&
-      n.itemGenerators.includes("pieceLine") &&
+      n.itemGenerators.includes(generator) &&
       nodeEnabled(n, graph, registry),
   );
-  const gen = registry.pieceLine;
+  const gen = registry[generator];
   if (node === undefined || gen === undefined) {
-    throw new RangeError("pieces are not enabled: no APPLY node with a pieceLine generator");
+    throw new RangeError(`pieces are not enabled: no APPLY node with a ${generator} generator`);
   }
-  const status = listPieces(input.pieces, state).find((s) => s.piece.id === input.pieceId);
-  if (status === undefined) throw new RangeError(`unknown piece ${input.pieceId}`);
+  if (generator === "pieceHands" && input.polyphonic !== true) {
+    throw new RangeError(`piece ${input.pieceId} is for both hands: it needs a MIDI keyboard`);
+  }
   if (!status.unlocked) {
-    throw new RangeError(`piece ${input.pieceId} is locked: ${status.missingNodeIds.join(", ")}`);
+    const missing = [...status.missingNodeIds, ...status.missingPieceIds];
+    throw new RangeError(`piece ${input.pieceId} is locked: ${missing.join(", ")}`);
   }
-  const seed = graph.generators.find((g) => g.id === "pieceLine")?.seedDurationSec ?? 25;
-  const estimatedSec = medianDurationSec(state, "pieceLine", seed);
+  const seed = graph.generators.find((g) => g.id === generator)?.seedDurationSec ?? 25;
+  const estimatedSec = medianDurationSec(state, generator, seed);
   const items: PlannedItem[] = gen
     .listItems(node)
     .filter((params) => params.piece === input.pieceId)
@@ -428,7 +451,7 @@ export function composePieceRun(input: {
       return {
         itemId: id,
         nodeId: node.id,
-        generator: "pieceLine" as const,
+        generator,
         params,
         isNew: state.cards[id] === undefined,
         estimatedSec,

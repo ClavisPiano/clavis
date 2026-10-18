@@ -34,6 +34,7 @@ export const GENERATOR_IDS = [
   "trebleNoteRead",
   "pieceLine",
   "pieceEar",
+  "pieceHands",
   "bassChordRead",
   "sightLine",
   "lhPattern",
