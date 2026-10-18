@@ -101,7 +101,7 @@ describe("register", () => {
     expect(new Set(body.recoveryCodes).size).toBe(RECOVERY_CODE_COUNT);
     for (const code of body.recoveryCodes) expect(code).toMatch(/^([A-Z2-9]{4}-){3}[A-Z2-9]{4}$/);
     const setCookie = res.headers.get("set-cookie") ?? "";
-    expect(setCookie).toMatch(/^clavis_session=[^;]+;/);
+    expect(setCookie).toMatch(/^__Host-clavis_session=[^;]+;/);
     for (const attr of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/"]) {
       expect(setCookie).toContain(attr);
     }
@@ -243,7 +243,7 @@ describe("login", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ userId });
     const cookie = cookieOf(res);
-    expect(cookie).toMatch(/^clavis_session=.+/);
+    expect(cookie).toMatch(/^__Host-clavis_session=.+/);
 
     const pull = await get(env, "/api/sync/pull?after=0", cookie);
     expect(pull.status).toBe(200);
@@ -319,7 +319,7 @@ describe("session, me and logout", () => {
   it("/api/me needs a valid session and has the documented shape", async () => {
     const { env, device } = setup();
     expect((await get(env, "/api/me")).status).toBe(401);
-    expect((await get(env, "/api/me", "clavis_session=garbage")).status).toBe(401);
+    expect((await get(env, "/api/me", "__Host-clavis_session=garbage")).status).toBe(401);
     const reg = await register(env, device);
     const { userId } = await reg.res.json<{ userId: string }>();
     const res = await get(env, "/api/me", cookieOf(reg.res));
@@ -343,7 +343,9 @@ describe("session, me and logout", () => {
     const res = await post(env, "/api/auth/logout", {}, { cookie: cookieOf(reg.res) });
     expect(res.status).toBe(200);
     const setCookie = res.headers.get("set-cookie") ?? "";
-    expect(setCookie).toMatch(/^clavis_session=;/);
+    expect(setCookie).toMatch(/^__Host-clavis_session=;/);
+    // The pre-prefix cookie is cleared too, so a user is not left holding a stale one.
+    expect(setCookie).toContain("clavis_session=;");
     expect(setCookie).toContain("Max-Age=0");
     expect(setCookie).toContain("HttpOnly");
   });

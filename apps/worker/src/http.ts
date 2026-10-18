@@ -24,3 +24,31 @@ export function csrfFailure(request: Request, env: Env): Response | null {
     return json({ error: "forbidden" }, 403);
   return null;
 }
+
+/**
+ * Read a request body, giving up as soon as it exceeds `limit` bytes, so a lying or missing
+ * content-length cannot make the Worker buffer more than the cap. Null when over the limit.
+ */
+export async function readLimited(request: Request, limit: number): Promise<Uint8Array | null> {
+  if (!request.body) return new Uint8Array(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = (await reader.read()) as ReadableStreamReadResult<Uint8Array>;
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
+}

@@ -33,7 +33,7 @@ function setup() {
 }
 
 const cookieFor = async (userId: string): Promise<string> =>
-  `clavis_session=${await signSession({ sub: userId, exp: NOW / 1000 + 3600 }, SECRET)}`;
+  `__Host-clavis_session=${await signSession({ sub: userId, exp: NOW / 1000 + 3600 }, SECRET)}`;
 
 interface Opts {
   user?: string | null;

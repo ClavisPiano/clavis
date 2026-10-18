@@ -10,7 +10,7 @@ Deploys run in Cloudflare Workers Builds, connected to this repository from the 
 | --- | --- |
 | Root directory | `/` (the pnpm workspace root) |
 | Build command | `pnpm --filter @clavis/web build` |
-| Deploy command | `npx wrangler deploy --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
+| Deploy command | `npx wrangler d1 migrations apply clavis --remote --config apps/worker/wrangler.jsonc && npx wrangler deploy --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
 | Non-production branch deploy command | `npx wrangler versions upload --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
 | Production branch | `main` |
 | Build variable | `NODE_VERSION=22` if `.nvmrc` is not picked up |
@@ -18,7 +18,8 @@ Deploys run in Cloudflare Workers Builds, connected to this repository from the 
 - The Worker name in the dashboard must match `name` in `apps/worker/wrangler.jsonc` (`clavis`), or the build fails.
 - The static assets directory comes from `wrangler.jsonc` (`../web/build`, relative to the config file), so no output directory is set in the dashboard.
 - `/api/health` reports the deployed commit sha as `version`.
-- Every push to `main` deploys, whether or not CI is green. Merge only green PRs.
+- Migrations run first in the deploy command, so a new migration is live before the code that needs it. The step is a no-op when nothing is pending, and a failed migration stops the deploy. Because the old Worker keeps serving until the deploy finishes, write every migration so the previous code still works against it (add columns and tables, never drop or rename in the same release; remove old columns in a later release). The Workers Builds API token needs D1 edit permission (Workers & Pages, clavis, Settings, Build, API token).
+- Every push to `main` deploys, whether or not CI is green. Merge only green PRs. Workers Builds cannot wait for GitHub checks. Gating a deploy on CI means deploying from a GitHub Actions job that runs after CI passes, which needs a Cloudflare API token stored as a repository secret (this repo deliberately holds none today). Until that is decided, protect `main` with the required `check` and `e2e` status checks so only green PRs can be merged.
 - Other branches upload a non-production version with a preview URL, shown on the PR by the Cloudflare GitHub app. Preview URLs must be enabled for the Worker (Settings, Domains & Routes, Preview URLs). Preview versions get no production traffic.
 
 ## Deploy manually
@@ -42,11 +43,11 @@ Local preview of the full stack: `pnpm --filter @clavis/worker dev` (builds the 
 
   Rotating it signs every user out. For local `wrangler dev`, put `SESSION_SECRET=...` in `apps/worker/.dev.vars` (git-ignored).
 - Each user's events live in a `UserEvents` Durable Object with SQLite storage (binding `USER_EVENTS`). The first deploy applies the `v1` migration in `wrangler.jsonc` (`new_sqlite_classes`). Add new classes or renames as new migration tags, never edit a shipped one.
-- Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `clavis_session` cookie. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
+- Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `__Host-clavis_session` cookie (the older `clavis_session` name is still read). A cookie-authenticated push also needs an `Origin` equal to `EXPECTED_ORIGIN`; bearer callers do not. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
 
 ## Passkey auth (D1)
 
-Passkeys (WebAuthn) are the only login method. Accounts, credentials, recovery code hashes and short-lived challenges live in a D1 database bound as `DB`. Session tokens are the HMAC tokens above, delivered in the `clavis_session` cookie (HttpOnly, Secure, SameSite=Lax, 30 days).
+Passkeys (WebAuthn) are the only login method. Accounts, credentials, recovery code hashes and short-lived challenges live in a D1 database bound as `DB`. Session tokens are the HMAC tokens above, delivered in the `__Host-clavis_session` cookie (HttpOnly, Secure, SameSite=Lax, Path=/, no Domain, 30 days). Sign out also clears the pre-prefix `clavis_session` cookie.
 
 One-time setup:
 

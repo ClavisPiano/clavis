@@ -8,17 +8,22 @@ import {
 } from "@simplewebauthn/server";
 import { z } from "zod";
 import { nowMs, type Env } from "../env";
-import { csrfFailure, json, methodNotAllowed } from "../http";
+import { API_HEADERS, csrfFailure, json, methodNotAllowed, readLimited } from "../http";
 import { authenticate } from "./guard";
 import { createAuthRepo, type AuthRepo, type ChallengeKind } from "./repo";
-import { fromBase64Url, signSession, toBase64Url } from "./session";
+import {
+  COOKIE_NAME,
+  LEGACY_COOKIE_NAME,
+  fromBase64Url,
+  signSession,
+  toBase64Url,
+} from "./session";
 import { d1Sql } from "./sql";
 
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 export const RECOVERY_CODE_COUNT = 10;
 const RP_NAME = "Clavis";
-const COOKIE_NAME = "clavis_session";
 const MAX_AUTH_BODY_BYTES = 64 * 1024;
 
 const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n));
@@ -64,8 +69,8 @@ async function readBody<S extends z.ZodType>(
   request: Request,
   schema: S,
 ): Promise<z.output<S> | null> {
-  const raw = await request.arrayBuffer();
-  if (raw.byteLength > MAX_AUTH_BODY_BYTES) return null;
+  const raw = await readLimited(request, MAX_AUTH_BODY_BYTES);
+  if (raw === null) return null;
   let value: unknown = {};
   if (raw.byteLength > 0) {
     try {
@@ -268,8 +273,15 @@ async function addVerify(request: Request, env: Env, repo: AuthRepo): Promise<Re
   return json({ userId, passkeys: (await repo.listCredentials(userId)).length });
 }
 
+/** Clears the session cookie, and any cookie set under the name used before the `__Host-` prefix. */
 function logout(): Response {
-  return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
+  const headers = new Headers(API_HEADERS);
+  headers.append("set-cookie", sessionCookie("", 0));
+  headers.append(
+    "set-cookie",
+    `${LEGACY_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
+  );
+  return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
 }
 
 async function me(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
