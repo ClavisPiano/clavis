@@ -95,7 +95,7 @@ describe("v1 skill graph", () => {
   });
 
   it("lists every generator once and implements exactly the core registry", () => {
-    expect(graph.generators).toHaveLength(22);
+    expect(graph.generators).toHaveLength(23);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
     // `pieceLine` and `pieceEar` are built over the piece library, so the app injects them; the
     // core registry has the rest.
@@ -106,7 +106,7 @@ describe("v1 skill graph", () => {
     }
   });
 
-  it("enables the ear M2 nodes and the nine reading nodes", () => {
+  it("enables the ear M2 nodes and the ten reading nodes", () => {
     const enabled = graph.nodes.filter((n) => isNodeEnabled(n, graph.generators)).map((n) => n.id);
     for (const id of [
       "ear.degrees.major.135",
@@ -117,8 +117,10 @@ describe("v1 skill graph", () => {
     ]) {
       expect(enabled).toContain(id);
     }
-    // R18: bassNoteRead covers five nodes, rhythmRead one. Grand staff and chords wait for M5.
+    // R18: bassNoteRead covers five nodes, rhythmRead one. T5.10: bassChordRead the bass chords.
+    // The grand staff nodes wait for sightLine.
     expect(enabled.filter((id) => id.startsWith("read.")).sort()).toEqual([
+      "read.bass.chords",
       "read.bass.intervals",
       "read.bass.landmarks",
       "read.bass.skips",
@@ -134,13 +136,17 @@ describe("v1 skill graph", () => {
       "apply.pieces",
       "apply.piece-ear",
     ]);
-    // T5.3: lhPattern enables the root-position chord node only. The other nodes that listed it
-    // moved to the unimplemented lhPatternVariants, so they stay disabled. T5.5: coordTask enables
-    // hands.coord.basic; hands.coord.moving moved to the unimplemented coordTaskMoving.
+    // T5.3: lhPattern enables the root-position chord node. T5.7: lhPatternVariants enables
+    // inversions, broken and pop. The minor leading-tone node has its own unimplemented generator.
+    // T5.5: coordTask enables hands.coord.basic; hands.coord.moving moved to coordTaskMoving.
     expect(enabled.filter((id) => id.startsWith("hands."))).toEqual([
       "hands.lh.triads.root",
+      "hands.lh.inversions",
+      "hands.lh.broken",
+      "hands.lh.pop",
       "hands.coord.basic",
     ]);
+    expect(enabled).not.toContain("hands.minor.leadingTone");
     // T7.2: the melody stage is the only by-ear task that exists. Harmonising and real recordings
     // have their own generators, so `ear.real.phrase` and the later BYEAR nodes stay disabled.
     expect(enabled.filter((id) => id.startsWith("byear."))).toEqual(["byear.melody.simple"]);
@@ -157,24 +163,29 @@ describe("v1 skill graph", () => {
     ).toBe(true);
   });
 
-  it("serves the other lhPattern nodes with an unimplemented generator (T5.3)", () => {
+  it("serves the left-hand pattern nodes, leaving the minor one disabled (T5.3, T5.7)", () => {
     const variants = graph.nodes.filter((n) => n.itemGenerators.includes("lhPatternVariants"));
     expect(variants.map((n) => n.id)).toEqual([
       "hands.lh.inversions",
       "hands.lh.broken",
       "hands.lh.pop",
-      "hands.minor.leadingTone",
     ]);
+    expect(
+      graph.nodes.filter((n) => n.itemGenerators.includes("lhPatternMinor")).map((n) => n.id),
+    ).toEqual(["hands.minor.leadingTone"]);
     expect(
       graph.nodes.filter((n) => n.itemGenerators.includes("lhPattern")).map((n) => n.id),
     ).toEqual(["hands.lh.triads.root"]);
-    for (const id of ["lhPattern", "lhPatternVariants"]) {
+    for (const id of ["lhPattern", "lhPatternVariants", "lhPatternMinor"]) {
       const info = graph.generators.find((g) => g.id === id);
       expect(info?.requires).toContain("polyphonic");
       expect(info?.awayEligible).toBe(false);
     }
-    expect(graph.generators.find((g) => g.id === "lhPatternVariants")?.implemented).toBe(false);
-    expect(graph.generators.find((g) => g.id === "lhPattern")?.requires).toContain("notation");
+    expect(graph.generators.find((g) => g.id === "lhPatternVariants")?.implemented).toBe(true);
+    expect(graph.generators.find((g) => g.id === "lhPatternMinor")?.implemented).toBe(false);
+    for (const id of ["lhPattern", "lhPatternVariants"]) {
+      expect(graph.generators.find((g) => g.id === id)?.requires).toContain("notation");
+    }
   });
 
   it("serves hands together over block chords only, MIDI only and never Away (T5.5)", () => {

@@ -33,7 +33,7 @@ describe("fixtures", () => {
   });
 
   it("old v1 fixtures still parse and upcast to v2", () => {
-    expect(legacyEventFixtures).toHaveLength(2);
+    expect(legacyEventFixtures).toHaveLength(3);
     for (const old of legacyEventFixtures) {
       expect((old as Obj).v).toBe(1);
       const r = parseEvent(old);

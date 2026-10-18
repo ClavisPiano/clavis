@@ -1,0 +1,15 @@
+{
+  "id": "01JBX00000000000000000A005",
+  "deviceId": "dev-laptop",
+  "at": 1760000004000,
+  "type": "attempt.completed",
+  "v": 1,
+  "sessionId": "01JBX00000000000000000S001",
+  "itemId": "item-1",
+  "nodeId": "degree.1-5",
+  "outcome": { "correct": false, "latencyMs": 1840, "retries": 1, "partial": 0.5 },
+  "subScores": { "sing": 0.4, "play": 0.9 },
+  "inputSource": "mic",
+  "errors": [{ "code": "degree.confusion.6-5", "detail": { "sung": 9, "target": 7 } }],
+  "performanceRef": "perf-1"
+}

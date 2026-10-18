@@ -170,6 +170,8 @@ export class Builder {
       isNew?: boolean;
       generator?: "degreeId" | "cellEcho";
       presentation?: Record<string, string>;
+      /** The learner's own verdict before feedback (R28). */
+      selfAssessment?: "right" | "wrong";
     } = {},
   ): LearningEvent[] {
     const latencyMs = o.latencyMs ?? 1500;
@@ -189,7 +191,7 @@ export class Builder {
       {
         ...this.base(at + latencyMs),
         type: "attempt.completed",
-        v: 1,
+        v: 2,
         sessionId,
         itemId,
         nodeId,
@@ -200,6 +202,7 @@ export class Builder {
           ...(o.partial !== undefined ? { partial: o.partial } : {}),
         },
         inputSource: "midi",
+        ...(o.selfAssessment ? { selfAssessment: o.selfAssessment } : {}),
       },
     ];
   }
@@ -237,7 +240,7 @@ export class Builder {
       {
         ...this.base(at + latencyMs),
         type: "attempt.completed",
-        v: 1,
+        v: 2,
         sessionId,
         itemId,
         nodeId,

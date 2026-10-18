@@ -38,6 +38,7 @@ export const GENERATOR_IDS = [
   "sightLine",
   "lhPattern",
   "lhPatternVariants",
+  "lhPatternMinor",
   "coordTask",
   "coordTaskMoving",
   "byEarPhrase",

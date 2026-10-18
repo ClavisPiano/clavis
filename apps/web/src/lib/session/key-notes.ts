@@ -120,7 +120,8 @@ export function answerLine(item: ItemInstance): string | undefined {
     symbols.every((p) => typeof p === "string")
   ) {
     const chords = prog.map((roman, i) => `${roman} (${String(symbols[i])})`);
-    return `The chords were ${chords.join(", ")} in ${key.tonic} ${key.mode}.`;
+    const were = chords.length === 1 ? "chord was" : "chords were";
+    return `The ${were} ${chords.join(", ")} in ${key.tonic} ${key.mode}.`;
   }
   const cell = item.presentation.cell;
   if (Array.isArray(cell) && cell.every((d) => typeof d === "number")) {

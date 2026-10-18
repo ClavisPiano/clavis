@@ -98,6 +98,7 @@ describe("registry and universes", () => {
   it("registers the ear and reading generators", () => {
     expect(Object.keys(GENERATORS).sort()).toEqual(
       [
+        "bassChordRead",
         "bassMotion",
         "bassNoteRead",
         "byEarPhrase",
@@ -107,6 +108,7 @@ describe("registry and universes", () => {
         "degreeSing",
         "lhPattern",
         "coordTask",
+        "lhPatternVariants",
         "progressionId",
         "rhythmEcho",
         "rhythmRead",
