@@ -30,6 +30,11 @@ export interface FakeInputAdapterOptions {
   source?: InputSource;
   clock?: FakeClock;
   script?: readonly FakeScriptStep[];
+  /**
+   * Makes this a transcribing input (T8.19): `finishTake` returns these notes, as the mic does
+   * after a take. Called once per take.
+   */
+  takeNotes?: () => readonly NoteEvent[] | Promise<readonly NoteEvent[]>;
   /** Script times are relative to this clock reading instead of the `start()` time. */
   anchorMs?: number;
 }
@@ -46,6 +51,7 @@ export class FakeInputAdapter implements InputAdapter {
   readonly #clock: FakeClock;
   readonly #script: readonly FakeScriptStep[];
   readonly #anchorMs: number | undefined;
+  readonly #takeNotes: FakeInputAdapterOptions["takeNotes"];
   #cancels: (() => void)[] = [];
   #paused = false;
   /** The last range passed to `setExpectedRange` (null when cleared or never set). */
@@ -58,6 +64,15 @@ export class FakeInputAdapter implements InputAdapter {
     this.#clock = options.clock ?? realClock;
     this.#script = options.script ?? [];
     this.#anchorMs = options.anchorMs;
+    this.#takeNotes = options.takeNotes;
+  }
+
+  get transcribes(): boolean {
+    return this.#takeNotes !== undefined;
+  }
+
+  async finishTake(): Promise<NoteEvent[]> {
+    return [...((await this.#takeNotes?.()) ?? [])];
   }
 
   /** Current time on the adapter's clock, for building `onsetMs` values. */

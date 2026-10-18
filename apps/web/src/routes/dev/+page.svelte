@@ -1,8 +1,20 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import type { RouteId } from "$app/types";
+  // Only the dev routes: `resolve` cannot take a union of every route in the app (TypeScript
+  // gives up on more than 25 overloads).
+  type DevRoute =
+    | "/dev/events"
+    | "/dev/input"
+    | "/dev/pitch"
+    | "/dev/transcribe"
+    | "/dev/state"
+    | "/dev/reset"
+    | "/dev/stimulus"
+    | "/dev/audio"
+    | "/dev/record"
+    | "/dev/notation";
   interface DevPage {
-    readonly href: RouteId;
+    readonly href: DevRoute;
     readonly label: string;
   }
 
@@ -10,6 +22,7 @@
     { href: "/dev/events", label: "Event log" },
     { href: "/dev/input", label: "Input adapters" },
     { href: "/dev/pitch", label: "Mic pitch" },
+    { href: "/dev/transcribe", label: "Chords on the mic (review)" },
     { href: "/dev/state", label: "Learner state" },
     { href: "/dev/reset", label: "Reset progress or all data" },
     { href: "/dev/stimulus", label: "Stimulus player" },

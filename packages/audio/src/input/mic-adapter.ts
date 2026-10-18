@@ -1,5 +1,8 @@
 import type { NoteEvent, PitchFrame, VoiceRange } from "@clavis/core";
 import type { CaptureContext, MicStartOptions, NotePhase } from "../mic/mic-source.js";
+import type { MicTake } from "../mic/messages.js";
+import { toNoteEvents } from "../transcribe/notes.js";
+import type { Transcriber } from "../transcribe/types.js";
 import { Emitter, type InputAdapter } from "./types.js";
 
 /** The slice of `MicPitchSource` this adapter uses. */
@@ -9,6 +12,8 @@ export interface MicSourceLike {
   pause(): void;
   resume(): void;
   setExpectedRange?(range: VoiceRange | null): void;
+  /** Audio heard since the last `resume()`; needed only when a transcriber is set. */
+  takeAudio?(): Promise<MicTake>;
   onNote(cb: (note: NoteEvent, phase: NotePhase) => void): () => void;
   onFrame(cb: (frame: PitchFrame) => void): () => void;
 }
@@ -18,6 +23,8 @@ export interface MicInputAdapterOptions {
   /** Resolves the (unlocked) AudioContext used for capture. Called from `start()`. */
   getContext: () => CaptureContext | Promise<CaptureContext>;
   startOptions?: Omit<MicStartOptions, "context">;
+  /** Finds chords in a recorded take (T8.19). Without it the mic hears single notes only. */
+  transcriber?: Transcriber;
 }
 
 /**
@@ -41,6 +48,27 @@ export class MicInputAdapter implements InputAdapter {
   constructor(options: MicInputAdapterOptions) {
     this.#options = options;
     this.#mic = options.source;
+  }
+
+  get transcribes(): boolean {
+    return this.#options.transcriber !== undefined && this.#mic.takeAudio !== undefined;
+  }
+
+  /**
+   * Transcribe what was heard since the last `resume()`. A failing or empty transcription returns
+   * no notes, which the session grades as nothing played, never as an error.
+   */
+  async finishTake(): Promise<NoteEvent[]> {
+    const transcriber = this.#options.transcriber;
+    if (!transcriber) return [];
+    try {
+      const take = await this.#mic.takeAudio?.();
+      if (!take || take.samples.length === 0) return [];
+      const notes = await transcriber.transcribe(take.samples, take.sampleRate);
+      return toNoteEvents(notes, { startMs: take.startMs });
+    } catch {
+      return [];
+    }
   }
 
   async start(): Promise<void> {

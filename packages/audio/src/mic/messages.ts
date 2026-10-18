@@ -33,6 +33,21 @@ export interface PipelineConfig {
   segmenter?: NoteSegmenterOptions;
 }
 
+/**
+ * Audio recorded for one answer (T8.19): mono samples at `sampleRate`, the first at `startMs` on
+ * the AudioContext clock. `truncated` is set when the take hit the length cap and the end was
+ * dropped. Empty when nothing was captured.
+ */
+export interface MicTake {
+  samples: Float32Array;
+  sampleRate: number;
+  startMs: number;
+  truncated: boolean;
+}
+
+/** Longest take kept, in seconds. A two-hand phrase at 60 bpm is about 20 s. */
+export const MAX_TAKE_SEC = 30;
+
 /** Main thread -> worker. */
 export type WorkerInbound =
   | { type: "init"; port: MessagePort; config?: PipelineConfig }
@@ -40,6 +55,8 @@ export type WorkerInbound =
   | { type: "resume" }
   /** Live register hint for the octave check and fold; `null` clears it. */
   | { type: "range"; range: MidiRange | null }
+  /** Send back the audio recorded since the last `resume` (T8.19), then keep recording. */
+  | { type: "take" }
   | { type: "stop" };
 
 /** Worker -> main thread. */
@@ -47,4 +64,5 @@ export type WorkerOutbound =
   | { type: "frame"; frame: PitchFrame }
   /** `start`: pitch known, no `offsetMs`. `end`: complete note with `offsetMs`. */
   | { type: "note"; phase: "start" | "end"; note: NoteEvent }
+  | { type: "take"; take: MicTake }
   | { type: "stopped" };

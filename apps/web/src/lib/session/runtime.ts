@@ -30,6 +30,8 @@ import { getNotationClient } from "../notation/shared";
 import { appGenerators, appPieces, generatorFor, pieceInputs } from "../pieces";
 import { createNotationViewPort, type NotationViewPort } from "../notation/view-port";
 import { MIDI_INPUT_META_KEY, createInput, detachFakeInput, parseMidiInputId } from "../input";
+import { MIC_CHORDS_META_KEY, canPlayChords, parseMicChords } from "../transcribe/setting";
+import { createWebTranscriber } from "../transcribe/web";
 import { placementPlanFor } from "../placement";
 import { createPractisedReporter } from "../practice-cue-browser";
 import { SessionMachine, type SessionDeps } from "./machine";
@@ -116,7 +118,16 @@ export async function createSessionRuntime(
   // browser profile) falls back to the mic.
   const inputKind = params.inputKind === "midi" && !isMidiSupported() ? "mic" : params.inputKind;
   const midiInputId = parseMidiInputId(await store.getMeta(MIDI_INPUT_META_KEY));
+  // Chords on the mic (T8.19, R31): an opt-in, and never in placement, which stays MIDI only.
+  const micChords =
+    inputKind === "mic" &&
+    !placement &&
+    params.mode === "instrument" &&
+    parseMicChords(await store.getMeta(MIC_CHORDS_META_KEY));
+  const transcriber = micChords ? createWebTranscriber() : undefined;
+  const polyphonic = canPlayChords(inputKind, micChords);
   const handle = createInput(inputKind, {
+    ...(transcriber ? { transcriber } : {}),
     clock: { now: contextNowMs, schedule },
     ...(performanceClock ? { tapClockMs: contextNowMs } : {}),
     ...(midiInputId === undefined ? {} : { midiInputId }),
@@ -191,13 +202,13 @@ export async function createSessionRuntime(
             tzOffsetMin: input.tzOffsetMin,
             generators: appGenerators(input.state),
             // A hands-together piece (T5.6) can only be run on a MIDI keyboard.
-            polyphonic: inputKind === "midi",
+            polyphonic,
           })
         : // Chords (HANDS) need an input that can hear them: only MIDI does, today.
           composeSession({
             ...input,
             ...pieceInputs(input.state),
-            polyphonic: inputKind === "midi",
+            polyphonic,
           }),
     generate: (item, ctx) => {
       const node = graph.nodes.find((n) => n.id === item.nodeId);
@@ -247,6 +258,14 @@ export async function createSessionRuntime(
   };
   const machine = new SessionMachine(deps);
 
+  if (transcriber && params.silent) {
+    // Test hook: what the last transcription cost and found (R31). Only with `?audio=silent`.
+    Object.defineProperty(window, "__clavisTranscribe", {
+      configurable: true,
+      get: () => transcriber.last,
+    });
+  }
+
   if (fake || (params.silent && params.inputKind === "midi")) {
     // Test hook: lets Playwright see what the current item expects. Never exposed otherwise
     // (MIDI exposes it only with `?audio=silent`, which real use never sets).
@@ -274,7 +293,7 @@ export async function createSessionRuntime(
           mode: params.mode,
           budgetSec: machine.budgetSec,
           elapsedSec,
-          polyphonic: inputKind === "midi",
+          polyphonic,
         });
       },
       tone(midi) {
@@ -323,6 +342,8 @@ export async function createSessionRuntime(
         machine.finish();
         notation.hide();
         input.stop();
+        transcriber?.dispose();
+        Reflect.deleteProperty(window, "__clavisTranscribe");
         if (fake) detachFakeInput();
         if (fake || (params.silent && params.inputKind === "midi")) {
           Reflect.deleteProperty(window, "__clavisSession");

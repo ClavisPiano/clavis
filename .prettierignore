@@ -13,3 +13,4 @@ apps/web/static/samples
 fixtures/audio/baseline.json
 fixtures/audio/manifest.json
 fixtures/audio/REPORT.md
+apps/web/static/models/

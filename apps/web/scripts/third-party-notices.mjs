@@ -21,7 +21,10 @@ const textsDir = join(root, "scripts/licence-texts");
 const LICENCE_FILE = /^(licen[cs]e|notice)(\.md|\.txt)?$/i;
 
 function installedDir(name, version) {
-  const dir = join(store, `${name.replace("/", "+")}@${version}`, "node_modules", name);
+  // pnpm appends peer-dependency suffixes (`pkg@1.0.0_peer@2.0.0`) to the store directory name.
+  const prefix = `${name.replace("/", "+")}@${version}`;
+  const entry = readdirSync(store).find((d) => d === prefix || d.startsWith(`${prefix}_`));
+  const dir = join(store, entry ?? prefix, "node_modules", name);
   if (!existsSync(join(dir, "package.json"))) {
     throw new Error(
       `${name}@${version} is not installed (third-party.json may be out of date, or run pnpm install)`,
