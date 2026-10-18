@@ -67,6 +67,39 @@ export function keyNotes(item: ItemInstance, node: SkillNode | undefined): KeyNo
   };
 }
 
+/** A chord's numeral and symbol, shown as text beside the staff: "IV" and "F". */
+export interface ChordLabel {
+  roman: string;
+  symbol: string;
+}
+
+/**
+ * The chords an item is built on, for its labels: a chord line's own chords (T5.3), or the
+ * progression a two-hand performance is written over (T5.5), read from its presentation.
+ */
+export function chordLabels(item: ItemInstance): ChordLabel[] | undefined {
+  const play = item.expected.play;
+  if (play?.kind === "chordLine") {
+    return play.chords.map((c) => ({ roman: c.roman, symbol: c.symbol }));
+  }
+  if (play?.kind !== "performance") return undefined;
+  const { prog, symbols } = item.presentation;
+  if (
+    !Array.isArray(prog) ||
+    !Array.isArray(symbols) ||
+    prog.length !== symbols.length ||
+    prog.length === 0
+  ) {
+    return undefined;
+  }
+  const labels: ChordLabel[] = [];
+  prog.forEach((roman, i) => {
+    const symbol = symbols[i];
+    if (typeof roman === "string" && typeof symbol === "string") labels.push({ roman, symbol });
+  });
+  return labels.length === prog.length ? labels : undefined;
+}
+
 /** After a miss: what the answer was, e.g. "The note was 3, which is B in G major." */
 export function answerLine(item: ItemInstance): string | undefined {
   const key = keyOf(item.presentation);

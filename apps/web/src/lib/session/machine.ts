@@ -39,6 +39,7 @@ import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
 import type { NotationMark, NotationPort } from "../notation/port";
 import {
   answerLine,
+  chordLabels,
   keyboardGuide,
   keyNotes,
   targetPitchClasses,
@@ -186,8 +187,13 @@ export interface ItemView {
   revealed?: true;
   /** Buttons to answer with, for choice items (R21). They replace the keyboard. */
   choices?: ChoiceOption[];
-  /** Chord lines (T5.3): each chord's numeral and symbol, shown as text beside the staff. */
+  /**
+   * Chord lines (T5.3) and hands-together items (T5.5): each chord's numeral and symbol, one per
+   * bar for the latter, shown as text beside the staff.
+   */
   chords?: { roman: string; symbol: string }[];
+  /** Two-hand items (T5.5): the staff says which hand plays what (treble right, bass left). */
+  bothHands?: true;
 }
 
 export interface NodeChange {
@@ -1085,6 +1091,10 @@ export class SessionMachine {
     const early = isEarly(stage);
     const notes = early ? keyNotes(cur.instance, node) : undefined;
     const guide = early ? keyboardGuide(cur.instance) : undefined;
+    const chords = chordLabels(cur.instance);
+    const play = cur.instance.expected.play;
+    const bothHands =
+      play?.kind === "performance" && new Set(play.notes.map((n) => n.hand)).size > 1;
     return {
       position: cur.index + 1,
       // Placement stops early, so it has no fixed total.
@@ -1102,14 +1112,8 @@ export class SessionMachine {
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
-      ...(cur.instance.expected.play?.kind === "chordLine"
-        ? {
-            chords: cur.instance.expected.play.chords.map((c) => ({
-              roman: c.roman,
-              symbol: c.symbol,
-            })),
-          }
-        : {}),
+      ...(chords ? { chords } : {}),
+      ...(bothHands ? { bothHands: true as const } : {}),
     };
   }
 

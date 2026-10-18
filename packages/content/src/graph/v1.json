@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.13",
+  "contentVersion": "2026.10.15",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -586,7 +586,8 @@
       "itemGenerators": ["coordTask"],
       "params": {
         "rh": "melody",
-        "lh": "block"
+        "lh": "block",
+        "chords": ["I", "IV", "V", "vi"]
       },
       "mastery": {
         "minAccuracy": 0.8,
@@ -601,7 +602,7 @@
       "title": "Hands together, moving bass",
       "description": "Right-hand melody over a broken or pop left-hand pattern.",
       "prerequisites": ["hands.coord.basic", "hands.lh.broken"],
-      "itemGenerators": ["coordTask"],
+      "itemGenerators": ["coordTaskMoving"],
       "params": {
         "rh": "melody",
         "lh": ["broken", "pop"]
@@ -833,6 +834,13 @@
     },
     {
       "id": "coordTask",
+      "implemented": true,
+      "seedDurationSec": 45,
+      "awayEligible": false,
+      "requires": ["keys", "polyphonic", "notation"]
+    },
+    {
+      "id": "coordTaskMoving",
       "implemented": false,
       "seedDurationSec": 90,
       "awayEligible": false,

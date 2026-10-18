@@ -58,6 +58,10 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can play root position I, IV, V and vi chords with your left hand in any key.",
   },
   {
+    nodeId: "hands.coord.basic",
+    statement: "You can play a simple tune with your right hand over block chords in your left.",
+  },
+  {
     nodeId: "ear.degrees.minor",
     statement: "You can hear the degrees of a minor scale in any key and play them.",
   },
