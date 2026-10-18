@@ -66,6 +66,13 @@ export interface AuthRepo {
   replaceRecoveryCodes(userId: string, hashes: string[]): Promise<void>;
   /** Record a successful assertion. */
   touchCredential(id: string, counter: number, nowMs: number): Promise<void>;
+  /** When the account was created (unix ms), or null when it does not exist. */
+  userCreatedAt(userId: string): Promise<number | null>;
+  /**
+   * Delete the user and every D1 row that belongs to them (passkeys, recovery codes, challenges,
+   * push subscriptions), atomically. Children first, so foreign keys hold.
+   */
+  deleteUser(userId: string): Promise<void>;
   /** How many accounts were created at or after `sinceMs`. */
   countUsersSince(sinceMs: number): Promise<number>;
   userExists(userId: string): Promise<boolean>;
@@ -240,6 +247,28 @@ export function createAuthRepo(sql: AsyncSql): AuthRepo {
         nowMs,
         id,
       );
+    },
+
+    async userCreatedAt(userId) {
+      const rows = await sql.all<{ created_at: number }>(
+        "SELECT created_at FROM users WHERE id = ?",
+        userId,
+      );
+      return rows[0]?.created_at ?? null;
+    },
+
+    async deleteUser(userId) {
+      const own = (table: string): Statement => ({
+        query: `DELETE FROM ${table} WHERE user_id = ?`,
+        bindings: [userId],
+      });
+      await sql.batch([
+        own("push_subscriptions"),
+        own("recovery_codes"),
+        own("credentials"),
+        own("challenges"),
+        { query: "DELETE FROM users WHERE id = ?", bindings: [userId] },
+      ]);
     },
 
     async countUsersSince(sinceMs) {

@@ -22,7 +22,10 @@ const reply = (body: unknown, status = 200): Response =>
 export class UserEvents {
   private readonly log: EventLog;
 
+  private readonly storage: DurableObjectStorage;
+
   constructor(ctx: DurableObjectState) {
+    this.storage = ctx.storage;
     this.log = new EventLog(durableSql(ctx.storage));
   }
 
@@ -44,6 +47,12 @@ export class UserEvents {
       const parsed = PullRequest.safeParse(Object.fromEntries(url.searchParams));
       if (!parsed.success) return reply({ error: "invalid_request" }, 400);
       return reply(this.log.pull(parsed.data.after, parsed.data.limit ?? DEFAULT_PULL_LIMIT));
+    }
+    if (url.pathname === "/delete" && request.method === "POST") {
+      // Account deletion: remove every event and the quota counters. The Worker has already
+      // authenticated the owner; nothing else reaches this route.
+      await this.storage.deleteAll();
+      return reply({ ok: true });
     }
     return reply({ error: "not_found" }, 404);
   }

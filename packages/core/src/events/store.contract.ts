@@ -143,6 +143,25 @@ export function describeEventStoreContract(
         expect(await store.list()).toHaveLength(2);
       });
 
+      it("markAllUnsynced makes every event unsynced again and keeps them all", async () => {
+        const a = ev(1, 1);
+        const b = ev(2, 2);
+        await store.append([a, b]);
+        await store.markSynced([a.id, b.id]);
+        expect(await store.listUnsynced()).toEqual([]);
+        await store.markAllUnsynced();
+        expect((await store.listUnsynced()).map((e) => e.id)).toEqual([a.id, b.id]);
+        expect(await store.list()).toHaveLength(2);
+        // A later append of a synced-looking duplicate still does not duplicate it.
+        await store.append([a]);
+        expect(await store.list()).toHaveLength(2);
+      });
+
+      it("markAllUnsynced on an empty store does nothing", async () => {
+        await store.markAllUnsynced();
+        expect(await store.listUnsynced()).toEqual([]);
+      });
+
       it("markSynced ignores unknown ids", async () => {
         const a = ev(1, 1);
         await store.append([a]);

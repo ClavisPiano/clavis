@@ -25,7 +25,7 @@ async function violations(page: Page, path: string): Promise<string[]> {
   );
 }
 
-const PAGES = ["/", "/settings", "/progress", "/practice", "/install", "/keyboard"];
+const PAGES = ["/", "/settings", "/progress", "/practice", "/install", "/keyboard", "/privacy"];
 
 for (const scheme of ["light", "dark"] as const) {
   for (const path of PAGES) {

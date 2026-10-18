@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import { ReactiveSyncStatus } from "../sync/status.svelte";
   import { ReactiveAccount } from "./account.svelte";
@@ -16,6 +17,9 @@
   let renameValue = $state("");
   let removingId = $state<string | undefined>();
   let confirmRegenerate = $state(false);
+  let confirmDelete = $state(false);
+  /** Shown after a deletion, in the signed-out view that follows. */
+  let accountDeleted = $state(false);
   let listRequested = false;
 
   /** Recovery codes at or below this count get a warning. */
@@ -56,6 +60,11 @@
   async function removePasskey(id: string): Promise<void> {
     await account.store.removePasskey(id);
     removingId = undefined;
+  }
+
+  async function deleteAccount(): Promise<void> {
+    if (await account.store.deleteAccount()) accountDeleted = true;
+    confirmDelete = false;
   }
 
   async function regenerate(): Promise<void> {
@@ -354,7 +363,78 @@
           Make new recovery codes
         </button>
       {/if}
+
+      <h3>Your data</h3>
+      <p class="muted">
+        Download everything the server holds for your account as one file, or delete the account.
+        See the <a href={resolve("/privacy")}>privacy page</a> for what is kept.
+      </p>
+      <div class="row">
+        <!-- eslint-disable svelte/no-navigation-without-resolve -- a file download from the API, not an app route -->
+        <a
+          class="button"
+          href="/api/me/export"
+          download="clavis-export.json"
+          data-testid="export-data"
+        >
+          Download my data
+        </a>
+        <!-- eslint-enable svelte/no-navigation-without-resolve -->
+        {#if !confirmDelete}
+          <button
+            type="button"
+            class="button"
+            data-testid="delete-account"
+            disabled={busy}
+            onclick={() => {
+              confirmDelete = true;
+            }}
+          >
+            Delete my account
+          </button>
+        {/if}
+      </div>
+      {#if confirmDelete}
+        <div
+          class="card"
+          role="group"
+          aria-labelledby="delete-heading"
+          data-testid="delete-confirm"
+        >
+          <h4 id="delete-heading">Delete your account?</h4>
+          <p>
+            This removes your account, passkeys, recovery codes, synced practice history and
+            recordings from the server. It cannot be undone. Practice on this device is kept.
+          </p>
+          <div class="row">
+            <button
+              type="button"
+              class="button"
+              data-testid="delete-confirm-yes"
+              disabled={busy}
+              onclick={() => void deleteAccount()}
+            >
+              Yes, delete my account
+            </button>
+            <button
+              type="button"
+              class="button"
+              data-testid="delete-cancel"
+              onclick={() => {
+                confirmDelete = false;
+              }}
+            >
+              Keep my account
+            </button>
+          </div>
+        </div>
+      {/if}
     {:else if snap.account.kind === "anonymous"}
+      {#if accountDeleted}
+        <p role="status" data-testid="account-deleted">
+          Your account and its server data were deleted. Practice on this device is untouched.
+        </p>
+      {/if}
       <p>
         Your practice stays on this device. An account backs it up and syncs your devices. There is
         no email or password, only a passkey on this device.
@@ -438,6 +518,7 @@
     {#if busy}
       <p role="status" class="muted">Working...</p>
     {/if}
+    <p class="muted"><a href={resolve("/privacy")} data-testid="privacy-link">Privacy</a></p>
   {/if}
 </section>
 

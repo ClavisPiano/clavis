@@ -82,6 +82,12 @@ function fakeState(): DurableObjectState {
   const storage = {
     sql: { exec: (q: string, ...b: unknown[]) => ({ toArray: () => sql.exec(q, ...b) }) },
     transactionSync: <R>(fn: () => R): R => sql.transaction(fn),
+    // The real call also drops the SQLite tables, which is what the fake does.
+    deleteAll: () => {
+      sql.exec("DROP TABLE IF EXISTS events");
+      sql.exec("DROP TABLE IF EXISTS stats");
+      return Promise.resolve();
+    },
   };
   return { storage } as unknown as DurableObjectState;
 }
@@ -107,7 +113,7 @@ export function fakeNamespace(): DurableObjectNamespace {
 }
 
 /** In-memory R2 bucket implementing the subset the worker uses: `put`, `get`, `delete`. */
-export function fakeBucket(): R2Bucket & { keys: () => string[] } {
+export function fakeBucket(pageSize = 1000): R2Bucket & { keys: () => string[] } {
   const objects = new Map<string, { bytes: Uint8Array; contentType: string | undefined }>();
   const bucket = {
     put: (key: string, value: Uint8Array, opts?: { httpMetadata?: { contentType?: string } }) => {
@@ -123,17 +129,24 @@ export function fakeBucket(): R2Bucket & { keys: () => string[] } {
         httpMetadata: { contentType: o.contentType },
       });
     },
-    delete: (key: string) => {
-      objects.delete(key);
+    delete: (keys: string | string[]) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) objects.delete(key);
       return Promise.resolve();
     },
-    list: ({ prefix = "" }: { prefix?: string } = {}) =>
-      Promise.resolve({
-        objects: [...objects.entries()]
-          .filter(([key]) => key.startsWith(prefix))
-          .map(([key, o]) => ({ key, size: o.bytes.byteLength })),
-        truncated: false,
-      }),
+    // Pages of `pageSize` (1000 in R2), so callers must follow `truncated`.
+    list: ({ prefix = "", cursor }: { prefix?: string; cursor?: string } = {}) => {
+      const all = [...objects.entries()]
+        .filter(([key]) => key.startsWith(prefix))
+        .map(([key, o]) => ({ key, size: o.bytes.byteLength, uploaded: new Date(0) }));
+      const start = cursor === undefined ? 0 : Number(cursor);
+      const page = all.slice(start, start + pageSize);
+      const next = start + pageSize;
+      return Promise.resolve(
+        next < all.length
+          ? { objects: page, truncated: true, cursor: String(next) }
+          : { objects: page, truncated: false },
+      );
+    },
     keys: () => [...objects.keys()],
   };
   return bucket as unknown as R2Bucket & { keys: () => string[] };

@@ -85,6 +85,13 @@ Signed-in routes (all `POST` except the list; migration `0006_credential_label.s
 
 The Settings screen shows the passkey list, rename and remove (with a confirmation), a warning at three or fewer unused codes, and a "Make new recovery codes" button.
 
+### Account deletion and export
+
+- `DELETE /api/me` (exact Origin required, session cookie or bearer) deletes the account. The order is recordings (R2, paged), then the event log (`POST /delete` on the user's Durable Object, which calls `deleteAll()`), then one atomic D1 batch for the user, passkeys, recovery codes, challenges and push subscriptions. D1 goes last, so a failure part way leaves the account and session intact and the call can simply be repeated. The response clears both session cookies.
+- `GET /api/me/export` streams one JSON document (`format: "clavis-export-1"`): account details, passkey summaries (no keys), the full event log in pages of the pull size, the recording names and sizes, and the practice cue settings (no endpoints or keys). The Worker never holds the whole log in memory, and a failure part way errors the stream so the file is invalid rather than silently short. Recording audio is not included.
+- After a deletion the web app marks every local event unsynced and resets the pull cursor (`EventStore.markAllUnsynced`), so a new account receives the device's whole history. The service worker leaves `/api/` requests alone so a slow export is never answered with the offline shell.
+- The privacy policy is `docs/privacy.md`, rendered at `/privacy` and linked from Settings. Update it when what the server stores changes.
+
 ### Registration cap
 
 `register/options` and `register/verify` return 503 `registration_paused` (Retry-After 3600) when `MAX_REGISTRATIONS_PER_HOUR` (100, in `auth/handlers.ts`) accounts were created in the last hour, counted from `users.created_at` (index added by `0005_users_created_at.sql`). It is global, so it bounds a flood spread across many IPs; the per-IP limiters stay as the first line. The cap logs a warning when it trips, and a limiter that errors logs `auth rate limiter failed` and lets the request through. Sign in is never capped. Raising the cap is a code change and a deploy.

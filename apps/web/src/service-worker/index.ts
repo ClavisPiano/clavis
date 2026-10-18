@@ -112,6 +112,8 @@ sw.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== sw.location.origin) return;
+  // API responses (including a data export opened as a download) are never the app shell.
+  if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(navigate(request));
