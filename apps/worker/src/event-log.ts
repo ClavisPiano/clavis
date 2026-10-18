@@ -54,7 +54,8 @@ export class EventLog {
     // Logs written before the stats table existed are counted once.
     sql.exec(
       `INSERT OR IGNORE INTO stats (id, events, bytes)
-       SELECT 1, COUNT(*), COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM events`,
+       SELECT 1, COUNT(*), COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM events
+       WHERE NOT EXISTS (SELECT 1 FROM stats)`,
     );
   }
 

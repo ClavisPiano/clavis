@@ -100,7 +100,7 @@ pnpm --filter @clavis/worker exec wrangler r2 bucket create clavis-blobs
 
 - `PUT|GET|DELETE /api/blobs/:name`. Auth is the same as sync. `PUT` and `DELETE` also need an `Origin` header equal to `EXPECTED_ORIGIN`. The stored key is always `<userId>/<name>` with the user id from the token. `name` matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` and has no `..`.
 - `PUT` accepts `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/wav` and `audio/mpeg`, up to 20 MiB (413 above that, 415 for other types). `GET` returns the stored content type with `cache-control: private`.
-- Per-user ceilings: 200 objects and 500 MiB in total (`MAX_USER_BLOBS`, `MAX_USER_BLOB_BYTES`). A `PUT` past either answers 403 `quota_exceeded`; replacing an existing name is always allowed. The client keeps its own copies under a size cap (200 MB) and uploads oldest first. There is no listing endpoint.
+- Per-user ceilings: 200 objects and 500 MiB in total (`MAX_USER_BLOBS`, `MAX_USER_BLOB_BYTES`). A `PUT` past either answers 403 `quota_exceeded`; replacing an existing name does not count toward the object count (a larger replacement can still hit the byte ceiling). The checks are not atomic across concurrent uploads, so the ceilings are approximate. The client keeps its own copies under a size cap (200 MB) and uploads oldest first. There is no listing endpoint.
 
 ## Finding the workers.dev URL
 
