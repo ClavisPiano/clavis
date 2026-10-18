@@ -45,6 +45,8 @@ export interface AccountStoreDeps {
   onSignedIn: () => void;
   /** Called after sign-out, or when a signed-in session turns out to be expired. */
   onSignedOut: () => void;
+  /** Called just after `onSignedOut` when the cause was an expired session, not a sign out. */
+  onSessionExpired?: () => void;
   /**
    * False when this device has never signed in (no signed-in hint): `refresh` then reports
    * anonymous without calling `/api/me`, so anonymous learners make no failing requests.
@@ -114,7 +116,10 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
       if (e instanceof AccountError && e.kind === "unauthorized") {
         const wasSignedIn = snap.account.kind === "signedIn";
         set({ account: { kind: "anonymous" }, offline: false });
-        if (wasSignedIn) deps.onSignedOut();
+        if (wasSignedIn) {
+          deps.onSignedOut();
+          deps.onSessionExpired?.();
+        }
       } else {
         // Offline or a server problem: keep what we last knew.
         set({ offline: true });
@@ -166,6 +171,7 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
         // The session expired while signed in.
         set({ account: { kind: "anonymous" } });
         deps.onSignedOut();
+        deps.onSessionExpired?.();
       }
       return false;
     } finally {

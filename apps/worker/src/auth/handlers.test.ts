@@ -338,6 +338,58 @@ describe("session, me and logout", () => {
     expect((await get(env, "/api/me", cookie)).status).toBe(401);
   });
 
+  it("renews the cookie on /api/me and sync only when under half the lifetime remains", async () => {
+    const { env, clock, device } = setup();
+    const reg = await register(env, device);
+    const cookie = cookieOf(reg.res);
+    const day = 24 * 3600 * 1000;
+    clock.t += 10 * day;
+    expect((await get(env, "/api/me", cookie)).headers.get("set-cookie")).toBeNull();
+    expect((await get(env, "/api/sync/pull?after=0", cookie)).headers.get("set-cookie")).toBeNull();
+    clock.t += 6 * day; // 14 days left
+    const renewed = await get(env, "/api/me", cookie);
+    const header = renewed.headers.get("set-cookie") ?? "";
+    expect(header).toMatch(/^__Host-clavis_session=[^;]+; HttpOnly; Secure; SameSite=Lax; Path=/);
+    expect(header).toContain(`Max-Age=${String(SESSION_TTL_SECONDS)}`);
+    // The renewed token outlives the original one.
+    clock.t += 20 * day;
+    expect((await get(env, "/api/me", cookie)).status).toBe(401);
+    expect((await get(env, "/api/me", header.split(";")[0])).status).toBe(200);
+    // Sync renews too.
+    const pull = await get(env, "/api/sync/pull?after=0", header.split(";")[0]);
+    expect(pull.status).toBe(200);
+    const again = pull.headers.get("set-cookie") ?? "";
+    expect(again).toMatch(/^__Host-clavis_session=/);
+    clock.t += 20 * day;
+    expect((await get(env, "/api/sync/pull?after=0", again.split(";")[0])).status).toBe(200);
+  });
+
+  it("a renewed token is revoked by sign out everywhere", async () => {
+    const { env, clock, device } = setup();
+    const reg = await register(env, device);
+    clock.t += 20 * 24 * 3600 * 1000;
+    const renewed = cookieOf(await get(env, "/api/me", cookieOf(reg.res)));
+    expect((await get(env, "/api/me", renewed)).status).toBe(200);
+    await post(env, "/api/auth/logout/all", {}, { cookie: renewed });
+    expect((await get(env, "/api/me", renewed)).status).toBe(401);
+  });
+
+  it("does not renew bearer callers or failed requests", async () => {
+    const { env, clock, device } = setup();
+    const reg = await register(env, device);
+    const token = cookieOf(reg.res).split("=")[1] ?? "";
+    clock.t += 20 * 24 * 3600 * 1000;
+    const res = await worker.fetch(
+      new Request(`${ORIGIN}/api/me`, { headers: { authorization: `Bearer ${token}` } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toBeNull();
+    const bad = await get(env, "/api/sync/pull?after=nope", cookieOf(reg.res));
+    expect(bad.status).toBe(400);
+    expect(bad.headers.get("set-cookie")).toBeNull();
+  });
+
   it("sign out everywhere ends all sessions, including a later passkey login's older ones", async () => {
     const { env, device } = setup();
     const reg = await register(env, device);
