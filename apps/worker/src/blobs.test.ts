@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { signSession } from "./auth/session";
 import { MAX_BLOB_BYTES } from "@clavis/core";
+import { MAX_USER_BLOBS } from "./blobs";
 import worker, { type Env } from "./index";
 import { ORIGIN, fakeBucket, makeEnv } from "./test-support";
 
@@ -217,5 +218,20 @@ describe("blob routes", () => {
       BLOBS: { get: () => Promise.reject(new Error("r2 down")) } as unknown as R2Bucket,
     };
     expect((await get(broken, "u1", "x.webm")).status).toBe(500);
+  });
+});
+
+describe("blob quotas", () => {
+  it("refuses a new blob past the per-user count, but still allows replacing one", async () => {
+    const { env } = setup();
+    for (let i = 0; i < MAX_USER_BLOBS; i++) {
+      expect((await put(env, "u1", `take-${String(i)}.webm`)).status).toBe(200);
+    }
+    const over = await put(env, "u1", "one-too-many.webm");
+    expect(over.status).toBe(403);
+    expect(await over.json()).toEqual({ error: "quota_exceeded" });
+    expect((await put(env, "u1", "take-0.webm")).status).toBe(200);
+    // Another user is unaffected.
+    expect((await put(env, "u2", "mine.webm")).status).toBe(200);
   });
 });
