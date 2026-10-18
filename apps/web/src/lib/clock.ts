@@ -66,7 +66,13 @@ export function observeServerDate(
     store?.setItem(SKEW_KEY, String(serverMs - deviceNowMs));
     store?.setItem(SKEW_AT_KEY, String(deviceNowMs));
   } catch {
-    // Storage blocked: stamping simply stays on the device clock.
+    // Storage blocked: stamping simply stays on the device clock. A skew with no observation time
+    // could never be told stale, so do not leave one behind if only the first write succeeded.
+    try {
+      store?.removeItem(SKEW_KEY);
+    } catch {
+      // Nothing more to do.
+    }
   }
 }
 
