@@ -13,15 +13,37 @@ export function isNotationAsset(path: string): boolean {
   return NOTATION_ASSET.test(path);
 }
 
-/** Splits manifest paths into the versioned precache list and the notation assets. */
+/**
+ * Transcription build outputs and model files (T8.19): the Basic Pitch worker (TensorFlow.js) and
+ * the model in `static/models/basic-pitch/`. Needed only for chords on the microphone, which is
+ * opt-in, so they are neither precached nor warmed: the first take fetches them and the asset
+ * cache keeps them for offline use after that.
+ */
+const TRANSCRIPTION_ASSET = /basic-pitch/i;
+
+/** Is this manifest path (or URL) a transcription asset? */
+export function isTranscriptionAsset(path: string): boolean {
+  return TRANSCRIPTION_ASSET.test(path);
+}
+
+/**
+ * Splits manifest paths into the versioned precache list, the notation assets (cached at runtime
+ * and warmed after the first online load) and the transcription assets (cached at runtime only).
+ */
 export function splitPrecache(paths: readonly string[]): {
   precache: string[];
   notation: string[];
+  transcription: string[];
 } {
   const precache: string[] = [];
   const notation: string[] = [];
-  for (const path of paths) (isNotationAsset(path) ? notation : precache).push(path);
-  return { precache, notation };
+  const transcription: string[] = [];
+  for (const path of paths) {
+    if (isNotationAsset(path)) notation.push(path);
+    else if (isTranscriptionAsset(path)) transcription.push(path);
+    else precache.push(path);
+  }
+  return { precache, notation, transcription };
 }
 
 /** Message the app posts to the worker after the first online load to fill the asset cache. */

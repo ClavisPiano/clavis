@@ -3,6 +3,7 @@ import {
   CAPTURE_PROCESSOR_NAME,
   DEFAULT_CAPTURE_CHUNK,
   type PipelineConfig,
+  type MicTake,
   type WorkerInbound,
   type WorkerOutbound,
   type WorkletInbound,
@@ -104,6 +105,7 @@ export class MicPitchSource {
   #nodes: AudioNode[] = [];
   #stopped: (() => void) | undefined;
   #range: VoiceRange | null = null;
+  #takeWaiters: ((take: MicTake) => void)[] = [];
 
   constructor(options: MicPitchSourceOptions) {
     this.#assets = options.assets;
@@ -208,6 +210,33 @@ export class MicPitchSource {
     this.#worker?.postMessage(rangeMessage(range), []);
   }
 
+  /**
+   * The audio heard since the last `resume()`, for transcription after the answer (T8.19). Ask
+   * before `pause()`, which discards it. Resolves with an empty take if the worker does not answer.
+   */
+  async takeAudio(timeoutMs = 1000): Promise<MicTake> {
+    const worker = this.#worker;
+    const empty: MicTake = {
+      samples: new Float32Array(0),
+      sampleRate: 0,
+      startMs: 0,
+      truncated: false,
+    };
+    if (!worker || this.#state === "idle" || this.#state === "starting") return empty;
+    return new Promise<MicTake>((resolve) => {
+      const done = (take: MicTake): void => {
+        clearTimeout(timer);
+        resolve(take);
+      };
+      const timer = setTimeout(() => {
+        this.#takeWaiters = this.#takeWaiters.filter((w) => w !== done);
+        resolve(empty);
+      }, timeoutMs);
+      this.#takeWaiters.push(done);
+      worker.postMessage({ type: "take" }, []);
+    });
+  }
+
   /** Release the microphone and the worker. A note in progress is ended and delivered first. */
   async stop(): Promise<void> {
     if (this.#state === "idle" || this.#state === "starting") return;
@@ -242,6 +271,10 @@ export class MicPitchSource {
   #onWorkerMessage(message: WorkerOutbound): void {
     if (message.type === "stopped") {
       this.#stopped?.();
+      return;
+    }
+    if (message.type === "take") {
+      this.#takeWaiters.shift()?.(message.take);
       return;
     }
     // The pause flag is checked here too, because messages posted before the worker saw the pause

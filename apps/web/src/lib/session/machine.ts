@@ -265,6 +265,11 @@ export type SessionState =
       canHear: boolean;
       /** The target note alone can be heard again (the stimulus also has a cadence). */
       canHearNote: boolean;
+      /**
+       * Chords on the mic (T8.19, R31): the answer is recorded and transcribed after Done, not
+       * heard live. "transcribing" while the recording is being worked out.
+       */
+      take?: "recording" | "transcribing";
     }
   | {
       kind: "feedback";
@@ -316,6 +321,10 @@ interface Current {
   /** Quiet time after the stimulus before answers count. Zero when nothing was played. */
   tailMs: number;
   playNotes: NoteEvent[];
+  /** The answer is recorded and transcribed after the take (T8.19), so live mic notes are ignored. */
+  takeMode?: boolean;
+  /** The recording is being transcribed; the phase is already over. */
+  transcribing?: boolean;
   /** The option picked, for choice items. */
   choice?: { id: string; atMs: number };
 }
@@ -1356,7 +1365,20 @@ export class SessionMachine {
       cue: hold === "cue",
       canHear,
       canHearNote,
+      ...(cur.takeMode && hold === undefined
+        ? { take: cur.transcribing ? ("transcribing" as const) : ("recording" as const) }
+        : {}),
     };
+  }
+
+  /** Chords and two-hand parts on an input that transcribes a take (T8.19). */
+  #wantsTake(cur: Current): boolean {
+    const kind = cur.instance.expected.play?.kind;
+    return (
+      this.#d.input.transcribes === true &&
+      this.#d.input.finishTake !== undefined &&
+      (kind === "chordLine" || kind === "performance")
+    );
   }
 
   /** Open a phase for answers. After practice or the cue the reference time is now, not the stimulus end. */
@@ -1367,6 +1389,8 @@ export class SessionMachine {
     const phase = cur.phases[index];
     if (!phase) return;
     cur.phaseIdx = index;
+    cur.takeMode = this.#wantsTake(cur);
+    delete cur.transcribing;
     const now = d.clock.contextNowMs();
     const ref = index === 0 && !afterPractice ? cur.stimulusEndMs : now;
     cur.refMs[phase] = ref;
@@ -1403,6 +1427,8 @@ export class SessionMachine {
     const note: NoteEvent = { ...raw, onsetMs: raw.onsetMs - this.#offset(raw.source) };
     if (note.offsetMs !== undefined) note.offsetMs -= this.#offset(raw.source);
     if (note.onsetMs < cur.gateMs) return;
+    // Heard live, a mic note says little about a chord; the transcribed take replaces them.
+    if (cur.takeMode && note.source === "mic") return;
     // Choice items are answered with buttons; stray notes from the mic mean nothing.
     if (cur.instance.expected.play?.kind === "choice") return;
     cur.playNotes.push(note);
@@ -1431,9 +1457,32 @@ export class SessionMachine {
 
   #endPhase(): void {
     const cur = this.#cur;
-    if (!cur || this.#state.kind !== "listening") return;
+    if (!cur || this.#state.kind !== "listening" || cur.transcribing) return;
     this.#cancelTimers();
     this.#unsubscribeInput();
+    if (cur.takeMode) {
+      cur.transcribing = true;
+      this.#setState(this.#listeningState(cur, cur.phaseIdx));
+      const token = this.#token;
+      void this.#enqueue(async () => {
+        const notes = (await this.#d.input.finishTake?.()) ?? [];
+        // The learner left (skip, pause, end) while the recording was being worked out.
+        if (token !== this.#token || this.#cur !== cur) return;
+        // Overtone ghosts sit far above the playing register: keep what is near the item's keys.
+        const range = cur.instance.inputRange;
+        for (const raw of notes) {
+          if (range && (raw.pitch < range.low || raw.pitch > range.high)) continue;
+          const offset = this.#offset(raw.source);
+          const note: NoteEvent = { ...raw, onsetMs: raw.onsetMs - offset };
+          if (note.offsetMs !== undefined) note.offsetMs -= offset;
+          if (note.onsetMs >= cur.gateMs) cur.playNotes.push(note);
+        }
+        this.#d.input.pause();
+        this.#d.input.setExpectedRange?.(null);
+        await this.#completeItem(false);
+      });
+      return;
+    }
     this.#d.input.pause();
     this.#d.input.setExpectedRange?.(null);
     void this.#enqueue(() => this.#completeItem(false));

@@ -35,6 +35,8 @@ const split = splitPrecache([...immutable, ...assets, ...prerendered].map((entry
 const toUrl = (path: string): string => new URL(path, sw.location.href).href;
 const PRECACHE_URLS: string[] = [...split.precache, SHELL].map(toUrl);
 const NOTATION_URLS: string[] = split.notation.map(toUrl);
+// Chords on the mic (T8.19): fetched on the first take, then served from the asset cache.
+const TRANSCRIPTION = new Set(split.transcription.map(toUrl));
 const PRECACHED = new Set(PRECACHE_URLS);
 const NOTATION = new Set(NOTATION_URLS);
 
@@ -122,7 +124,7 @@ sw.addEventListener("fetch", (event) => {
   const href = url.href;
   if (PRECACHED.has(href)) {
     event.respondWith(cacheFirst(href, request));
-  } else if (NOTATION.has(href) || isWorkerChunk(href)) {
+  } else if (NOTATION.has(href) || TRANSCRIPTION.has(href) || isWorkerChunk(href)) {
     event.respondWith(assetCacheFirst(href));
   }
 });

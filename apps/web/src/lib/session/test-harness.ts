@@ -147,6 +147,8 @@ export interface HarnessOptions {
   /** Welcome back (R30): the shorter, review-only session. */
   recovery?: boolean;
   inputSource?: "mic" | "tap" | "midi";
+  /** The mic transcribes a take (T8.19): `finishTake` returns what this gives. */
+  takeNotes?: () => readonly NoteEvent[];
   /** Offer HANDS items (chords): the input can capture them, as MIDI does. */
   polyphonic?: boolean;
   headphones?: boolean | undefined;
@@ -189,7 +191,11 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
   const player = new FakePlayer(clock);
   const mode = opts.mode ?? "instrument";
   const source = opts.inputSource ?? (mode === "away" ? "tap" : "mic");
-  const input = new FakeInputAdapter({ source, clock });
+  const input = new FakeInputAdapter({
+    source,
+    clock,
+    ...(opts.takeNotes ? { takeNotes: opts.takeNotes } : {}),
+  });
   let counter = opts.idSalt ?? 0;
   const newId = createUlidGenerator({
     now: () => T0 + clock.ctxMs,

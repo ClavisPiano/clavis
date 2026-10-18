@@ -18,6 +18,7 @@
     type EffectiveSettings,
   } from "../../lib/home";
   import { INPUT_STORAGE_KEY, MIDI_INPUT_META_KEY, parseMidiInputId } from "../../lib/input";
+  import { MIC_CHORDS_META_KEY, parseMicChords } from "../../lib/transcribe/setting";
   import { createTapCounter, devToolsEnabled, setDevToolsEnabled } from "../../lib/dev-tools";
   import pkg from "../../../package.json";
   import {
@@ -60,6 +61,9 @@
   let midiDevice = $state("");
   let savedMidiDevice = "";
   let midiDevices = $state<MidiDeviceInfo[]>([]);
+  /** Chords with the microphone (T8.19, R31): a device setting, off by default. */
+  let micChords = $state(false);
+  let savedMicChords = false;
   let midiProbe: MidiAdapter | undefined;
   let midiProbed = $state(false);
   let saved = $state(false);
@@ -120,6 +124,8 @@
       savedMidiDevice =
         parseMidiInputId(await learner.ctx.store.getMeta(MIDI_INPUT_META_KEY)) ?? "";
       midiDevice = savedMidiDevice;
+      savedMicChords = parseMicChords(await learner.ctx.store.getMeta(MIC_CHORDS_META_KEY));
+      micChords = savedMicChords;
     }
     if (inputChoice === "midi") void probeMidi();
   });
@@ -267,6 +273,10 @@
       if (midiDevice !== savedMidiDevice) {
         await learner.ctx.store.setMeta(MIDI_INPUT_META_KEY, midiDevice === "" ? null : midiDevice);
         savedMidiDevice = midiDevice;
+      }
+      if (micChords !== savedMicChords) {
+        await learner.ctx.store.setMeta(MIC_CHORDS_META_KEY, micChords);
+        savedMicChords = micChords;
       }
       try {
         if (inputChoice === "auto") localStorage.removeItem(INPUT_STORAGE_KEY);
@@ -449,6 +459,23 @@
           {/if}
         </select>
       </label>
+      {#if inputChoice === "auto" || inputChoice === "mic"}
+        <label class="inline">
+          <input
+            type="checkbox"
+            data-testid="mic-chords"
+            bind:checked={micChords}
+            onchange={touch}
+          />
+          Chords with the microphone (experimental)
+        </label>
+        <p class="muted" data-testid="mic-chords-help">
+          Lets left-hand chord and two-hand exercises run on the microphone. You play, tap Done, and
+          the app works out the notes from the recording, which takes a few seconds. The first time
+          it downloads about 3 MB. Expect more mistakes than with a MIDI keyboard, and use
+          headphones or a quiet room. Recordings are analysed on this device and not stored.
+        </p>
+      {/if}
       {#if midiSupported && inputChoice === "midi"}
         <label>
           MIDI keyboard

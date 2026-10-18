@@ -39,6 +39,11 @@ scope.addEventListener("message", (event) => {
     case "range":
       core.setExpectedRange(message.range);
       break;
+    case "take": {
+      const take = core.takeSnapshot();
+      scope.postMessage({ type: "take", take });
+      break;
+    }
     case "stop":
       core.stop();
       audioPort?.close();

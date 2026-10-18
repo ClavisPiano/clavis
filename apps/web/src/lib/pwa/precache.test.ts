@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isNotationAsset, isWorkerChunk, relativeImports, splitPrecache } from "./precache";
+import {
+  isNotationAsset,
+  isTranscriptionAsset,
+  isWorkerChunk,
+  relativeImports,
+  splitPrecache,
+} from "./precache";
 
 describe("worker dependencies", () => {
   it("finds relative imports and resolves them against the module URL", () => {
@@ -49,6 +55,29 @@ describe("precache split", () => {
       "settings/index.html",
     ]);
     expect(precache.length + notation.length).toBe(MANIFEST.length);
+  });
+
+  it("keeps the Basic Pitch worker and model out of the precache and out of notation warming", () => {
+    const paths = [
+      ...MANIFEST,
+      "_app/immutable/workers/basic-pitch.worker-Zx90.js",
+      "models/basic-pitch/model.json",
+      "models/basic-pitch/group1-shard1of1.bin",
+    ];
+    const { precache, notation, transcription } = splitPrecache(paths);
+    expect(transcription).toEqual([
+      "_app/immutable/workers/basic-pitch.worker-Zx90.js",
+      "models/basic-pitch/model.json",
+      "models/basic-pitch/group1-shard1of1.bin",
+    ]);
+    expect(precache.some((p) => p.includes("basic-pitch"))).toBe(false);
+    expect(notation.some((p) => p.includes("basic-pitch"))).toBe(false);
+    expect(precache.length + notation.length + transcription.length).toBe(paths.length);
+  });
+
+  it("recognises transcription assets by URL", () => {
+    expect(isTranscriptionAsset("https://x.test/models/basic-pitch/model.json")).toBe(true);
+    expect(isTranscriptionAsset("https://x.test/_app/immutable/chunks/app.js")).toBe(false);
   });
 
   it("recognises notation assets by URL too", () => {

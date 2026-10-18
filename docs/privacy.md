@@ -18,7 +18,7 @@ Clavis stores these in your browser (IndexedDB and local storage) and nowhere el
 - Benchmark recordings, if you make them. These are the only audio Clavis ever keeps.
 - Small flags such as the last time you made a backup.
 
-The microphone is used to hear what you sing or play. That audio is analysed on your device and thrown away. Only a benchmark recording that you choose to make is saved.
+The microphone is used to hear what you sing or play. That audio is analysed on your device and thrown away. Only a benchmark recording that you choose to make is saved. If you turn on "Chords with the microphone" in Settings, the app also records each chord answer for a few seconds and works out the notes on your device with a model that it downloads from this site the first time. That recording is not stored or sent anywhere.
 
 ## If you create an account
 

@@ -188,6 +188,97 @@
     ]
   },
   {
+    "id": "basic-pitch",
+    "name": "Basic Pitch",
+    "kind": "library",
+    "license": "Apache-2.0",
+    "use": "Finds the notes in a recorded chord on the microphone (an opt-in setting), with its model, in a worker on the device",
+    "homepage": "https://basicpitch.spotify.com",
+    "source": "https://github.com/spotify/basic-pitch-ts",
+    "packages": [
+      {
+        "name": "@spotify/basic-pitch",
+        "version": "1.0.1"
+      },
+      {
+        "name": "@tonejs/midi",
+        "version": "2.0.28"
+      },
+      {
+        "name": "midi-file",
+        "version": "1.2.4"
+      },
+      {
+        "name": "array-flatten",
+        "version": "3.0.0"
+      }
+    ]
+  },
+  {
+    "id": "tensorflow-js",
+    "name": "TensorFlow.js",
+    "kind": "library",
+    "license": "Apache-2.0",
+    "use": "Runs the Basic Pitch model in the browser (only loaded for chords on the microphone)",
+    "homepage": "https://www.tensorflow.org/js",
+    "source": "https://github.com/tensorflow/tfjs/tree/tfjs-v3.21.0",
+    "packages": [
+      {
+        "name": "@tensorflow/tfjs",
+        "version": "3.21.0"
+      },
+      {
+        "name": "@tensorflow/tfjs-core",
+        "version": "3.21.0"
+      },
+      {
+        "name": "@tensorflow/tfjs-converter",
+        "version": "3.21.0"
+      },
+      {
+        "name": "@tensorflow/tfjs-layers",
+        "version": "3.21.0"
+      },
+      {
+        "name": "@tensorflow/tfjs-data",
+        "version": "3.21.0"
+      },
+      {
+        "name": "@tensorflow/tfjs-backend-cpu",
+        "version": "3.21.0"
+      },
+      {
+        "name": "@tensorflow/tfjs-backend-webgl",
+        "version": "3.21.0"
+      },
+      {
+        "name": "long",
+        "version": "4.0.0"
+      }
+    ],
+    "fallback": {
+      "file": "apache-2.0.txt"
+    }
+  },
+  {
+    "id": "seedrandom",
+    "name": "seedrandom",
+    "kind": "library",
+    "license": "MIT",
+    "use": "Seeded random numbers inside TensorFlow.js",
+    "homepage": "https://github.com/davidbau/seedrandom",
+    "source": "https://github.com/davidbau/seedrandom",
+    "packages": [
+      {
+        "name": "seedrandom",
+        "version": "3.0.5"
+      }
+    ],
+    "fallback": {
+      "mit": "David Bau (the package declares MIT but ships no licence file)"
+    }
+  },
+  {
     "id": "splendid-grand-piano",
     "name": "Splendid Grand Piano samples",
     "kind": "asset",

@@ -7,6 +7,7 @@ import {
   type CaptureContext,
   type FakeClock,
   type InputAdapter,
+  type Transcriber,
 } from "@clavis/audio";
 import type { ExpectedResponse, NoteEvent, PitchFrame } from "@clavis/core";
 import { createMicPitchSource } from "@clavis/audio/web";
@@ -96,6 +97,8 @@ export interface CreateInputDeps {
   tapClockMs?: () => number;
   /** For "midi": listen to this input only. Default: every input. */
   midiInputId?: string | undefined;
+  /** For "mic": finds chords in a recorded take (T8.19). Without it the mic hears single notes. */
+  transcriber?: Transcriber | undefined;
 }
 
 /** Build the adapter for `kind` on the shared AudioContext. */
@@ -144,6 +147,7 @@ export function createInput(kind: InputKind, deps: CreateInputDeps = {}): InputH
         await audio.unlock({ capture: true });
         return audio.getContext() as unknown as CaptureContext;
       },
+      ...(deps.transcriber ? { transcriber: deps.transcriber } : {}),
     }),
   };
 }

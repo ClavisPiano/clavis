@@ -27,6 +27,16 @@ export interface InputAdapter {
    * keys (tap, MIDI) ignore it.
    */
   setExpectedRange?(range: VoiceRange | null): void;
+  /**
+   * True for an input that can find several notes in what it heard once the answer is over
+   * (T8.19, R31): the mic with a transcriber. The session uses `finishTake` for chords on it.
+   */
+  readonly transcribes?: boolean;
+  /**
+   * Ask before `pause()`. The notes heard since the last `resume()`, found after the take rather
+   * than as they were played, on the AudioContext clock. Empty if nothing could be transcribed.
+   */
+  finishTake?(): Promise<NoteEvent[]>;
   /** Continuous pitch frames. Never called for tap input. */
   onFrame(cb: (f: PitchFrame) => void): () => void;
 }

@@ -518,6 +518,16 @@
           {@render keyNotesLine(view.item.keyNotes)}
         {/if}
         {#if hint}<p class="hint" data-testid="hint">{hint}</p>{/if}
+        {#if view.take === "recording"}
+          <p class="hint" data-testid="take-help">
+            Play it, then tap Done. The microphone listens to the whole take and works out the notes
+            afterwards.
+          </p>
+        {:else if view.take === "transcribing"}
+          <p class="hint" data-testid="take-working" aria-live="polite">
+            Working out what you played...
+          </p>
+        {/if}
         {#if practiceHelp}<p class="hint" data-testid="practice-help">{practiceHelp}</p>{/if}
         {#if cueHelp}<p class="hint" data-testid="cue-help">{cueHelp}</p>{/if}
         {#if view.canHear}
@@ -571,6 +581,7 @@
               type="button"
               class="primary"
               data-testid="done"
+              disabled={view.take === "transcribing"}
               onclick={() => machine?.answerDone()}
             >
               Done

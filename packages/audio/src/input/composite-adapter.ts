@@ -20,6 +20,14 @@ export class CompositeInputAdapter implements InputAdapter {
     return this.#main.source;
   }
 
+  get transcribes(): boolean {
+    return this.#main.transcribes === true;
+  }
+
+  async finishTake(): Promise<NoteEvent[]> {
+    return (await this.#main.finishTake?.()) ?? [];
+  }
+
   async start(): Promise<void> {
     await Promise.all([this.#main.start(), this.#extra.start()]);
   }
