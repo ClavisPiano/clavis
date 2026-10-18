@@ -58,6 +58,24 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can play root position I, IV, V and vi chords with your left hand in any key.",
   },
   {
+    nodeId: "hands.lh.inversions",
+    statement:
+      "You can move between I, IV, V and vi chords with your left hand using inversions, keeping shared notes still.",
+  },
+  {
+    nodeId: "hands.lh.broken",
+    statement: "You can play broken chords and an Alberti bass with your left hand in any key.",
+  },
+  {
+    nodeId: "hands.lh.pop",
+    statement:
+      "You can play root, fifth and octave patterns, straight and syncopated, with your left hand.",
+  },
+  {
+    nodeId: "hands.coord.basic",
+    statement: "You can play a simple tune with your right hand over block chords in your left.",
+  },
+  {
     nodeId: "ear.degrees.minor",
     statement: "You can hear the degrees of a minor scale in any key and play them.",
   },
@@ -83,6 +101,11 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can read bass clef notes by the distance from the note before.",
   },
   {
+    nodeId: "read.bass.chords",
+    statement:
+      "You can read a major or minor triad on the bass clef, in any inversion, and play it at once.",
+  },
+  {
     nodeId: "read.minor.accidentals",
     statement: "You can read the raised sixth and seventh in minor keys on the bass clef.",
   },
@@ -99,12 +122,25 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can read the treble clef from middle C up to the A above high C.",
   },
   {
+    nodeId: "read.grand.2line",
+    statement:
+      "You can read a short line on both staves in the key of the day and play it hands together.",
+  },
+  {
+    nodeId: "read.grand.sight",
+    statement: "You can sight-read a short passage for both hands at a steady pulse.",
+  },
+  {
     nodeId: "apply.pieces",
     statement: "You can read a short piece from the staff and play its phrases.",
   },
   {
     nodeId: "apply.piece-ear",
     statement: "You can learn a short tune by ear, then play it from memory.",
+  },
+  {
+    nodeId: "apply.pieces-hands",
+    statement: "You can play a short piece with both hands: the tune over left-hand chords.",
   },
 ];
 

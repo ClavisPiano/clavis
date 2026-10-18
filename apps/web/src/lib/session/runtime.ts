@@ -16,7 +16,6 @@ import {
   composeSession,
   createRng,
   createUlidGenerator,
-  placementPlan,
   type LearningEvent,
   type StimulusSpec,
 } from "@clavis/core";
@@ -30,6 +29,7 @@ import { getNotationClient } from "../notation/shared";
 import { appGenerators, appPieces, generatorFor, pieceInputs } from "../pieces";
 import { createNotationViewPort, type NotationViewPort } from "../notation/view-port";
 import { MIDI_INPUT_META_KEY, createInput, detachFakeInput, parseMidiInputId } from "../input";
+import { placementPlanFor } from "../placement";
 import { createPractisedReporter } from "../practice-cue-browser";
 import { SessionMachine, type SessionDeps } from "./machine";
 import { findOpenSessions } from "./open";
@@ -173,8 +173,11 @@ export async function createSessionRuntime(
       : {}),
     graph,
     milestones: loadMilestones(),
-    // Placement (R19): the plan replaces the composer and nothing but its result is stored.
-    ...(placement ? { placement: { plan: placementPlan(graph, createRng(seed)) } } : {}),
+    // Placement (R19): the plan replaces the composer and nothing but its result is stored. Its
+    // HANDS section runs only with MIDI (R27), as HANDS items do in sessions.
+    ...(placement
+      ? { placement: { plan: placementPlanFor(graph, createRng(seed), inputKind) } }
+      : {}),
     compose: (input) =>
       params.run !== undefined && !placement
         ? composePieceRun({
@@ -185,6 +188,8 @@ export async function createSessionRuntime(
             now: input.now,
             tzOffsetMin: input.tzOffsetMin,
             generators: appGenerators(input.state),
+            // A hands-together piece (T5.6) can only be run on a MIDI keyboard.
+            polyphonic: inputKind === "midi",
           })
         : // Chords (HANDS) need an input that can hear them: only MIDI does, today.
           composeSession({

@@ -457,6 +457,11 @@
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
           {@render chordLabels(view.item.chords)}
         {/if}
+        {#if view.item.bothHands}
+          <p class="hint" data-testid="hands-hint">
+            Right hand: top staff. Left hand: bottom staff.
+          </p>
+        {/if}
         {#if view.item.keyNotes}
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
           {@render keyNotesLine(view.item.keyNotes)}
@@ -484,6 +489,11 @@
         {#if view.item.chords}
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
           {@render chordLabels(view.item.chords)}
+        {/if}
+        {#if view.item.bothHands}
+          <p class="hint" data-testid="hands-hint">
+            Right hand: top staff. Left hand: bottom staff.
+          </p>
         {/if}
         {#if showPad}
           <button
@@ -583,6 +593,49 @@
             About this skill
           </button>
         {/if}
+      </section>
+    {:else if view.kind === "selfAssess"}
+      <section class="card" data-testid="self-assess" aria-labelledby="self-assess-h">
+        <h2 id="self-assess-h" class="result">Was that right?</h2>
+        <p class="lead">Say what you think before you see the result.</p>
+        <div class="row">
+          <button
+            type="button"
+            class="primary"
+            data-testid="self-assess-right"
+            onclick={() => machine?.selfAssess("right")}
+          >
+            I got it right
+          </button>
+          <button
+            type="button"
+            class="primary"
+            data-testid="self-assess-wrong"
+            onclick={() => machine?.selfAssess("wrong")}
+          >
+            I got it wrong
+          </button>
+        </div>
+        <div class="row">
+          {#if view.canRetry}
+            <button
+              type="button"
+              class="secondary"
+              data-testid="retry"
+              onclick={() => machine?.retry()}
+            >
+              Try again
+            </button>
+          {/if}
+          <button
+            type="button"
+            class="secondary"
+            data-testid="self-assess-skip"
+            onclick={() => machine?.skip()}
+          >
+            Just show me
+          </button>
+        </div>
       </section>
     {:else if view.kind === "feedback"}
       <section class="card" data-testid="feedback" data-correct={view.feedback.correct}>

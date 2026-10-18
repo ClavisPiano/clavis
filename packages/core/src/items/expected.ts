@@ -95,6 +95,16 @@ export const ChordLineTargetSchema = z.strictObject({
     .min(1),
   tempoBpm: z.number().positive(),
   beatsPerBar: z.int().positive(),
+  /**
+   * False grades the tones only (T5.10): no chord is early or late, a slightly rolled chord is one
+   * chord, and `partial` leaves timing out. Absent means timing is graded as well.
+   */
+  gradeTiming: z.boolean().optional(),
+  /**
+   * False hides the numerals and symbols while the learner plays, because reading the chord is the
+   * task (T5.10). They still name the chord in feedback. Absent means they are shown.
+   */
+  showLabels: z.boolean().optional(),
 });
 export type ChordLineTarget = z.infer<typeof ChordLineTargetSchema>;
 

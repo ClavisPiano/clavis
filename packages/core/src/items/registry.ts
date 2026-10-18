@@ -1,13 +1,17 @@
 import type { GeneratorId } from "../graph/schema.js";
+import { bassChordRead } from "./bass-chord-read.js";
 import { bassMotion } from "./bass-motion.js";
 import { bassNoteRead } from "./bass-note-read.js";
 import { byEarPhrase } from "./by-ear-phrase.js";
 import { cellEcho } from "./cell.js";
 import { chordQuality } from "./chord-quality.js";
+import { coordTask } from "./coord-task.js";
 import { degreeId, degreeSing } from "./degree.js";
 import { lhPattern } from "./lh-pattern.js";
+import { lhPatternVariants } from "./lh-pattern-variants.js";
 import { progressionId } from "./progression-id.js";
 import { rhythmRead } from "./rhythm-read.js";
+import { sightLine } from "./sight-line.js";
 import { trebleNoteRead } from "./treble-note-read.js";
 import { rhythmEcho } from "./rhythm.js";
 import type { Generator } from "./types.js";
@@ -20,10 +24,14 @@ export const GENERATORS: Partial<Record<GeneratorId, Generator>> = {
   rhythmEcho,
   rhythmRead,
   bassNoteRead,
+  bassChordRead,
   bassMotion,
   chordQuality,
   trebleNoteRead,
   lhPattern,
+  coordTask,
+  lhPatternVariants,
+  sightLine,
   progressionId,
   byEarPhrase,
 };

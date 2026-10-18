@@ -170,6 +170,8 @@ export class Builder {
       isNew?: boolean;
       generator?: "degreeId" | "cellEcho";
       presentation?: Record<string, string>;
+      /** The learner's own verdict before feedback (R28). */
+      selfAssessment?: "right" | "wrong";
     } = {},
   ): LearningEvent[] {
     const latencyMs = o.latencyMs ?? 1500;
@@ -189,7 +191,7 @@ export class Builder {
       {
         ...this.base(at + latencyMs),
         type: "attempt.completed",
-        v: 1,
+        v: 2,
         sessionId,
         itemId,
         nodeId,
@@ -200,6 +202,7 @@ export class Builder {
           ...(o.partial !== undefined ? { partial: o.partial } : {}),
         },
         inputSource: "midi",
+        ...(o.selfAssessment ? { selfAssessment: o.selfAssessment } : {}),
       },
     ];
   }
@@ -216,10 +219,15 @@ export class Builder {
       presentation?: Record<string, string | number>;
       /** A phrase played by ear (TP.6): its own node and generator. */
       ear?: boolean;
+      /** A hands-together phrase (T5.6): its own node and generator. */
+      hands?: boolean;
     } = {},
   ): LearningEvent[] {
     const latencyMs = o.latencyMs ?? 8000;
-    const nodeId = o.ear === true ? "apply.piece-ear" : "apply.pieces";
+    const nodeId =
+      o.ear === true ? "apply.piece-ear" : o.hands === true ? "apply.pieces-hands" : "apply.pieces";
+    const generator =
+      o.ear === true ? "pieceEar" : o.hands === true ? "pieceHands" : ("pieceLine" as const);
     const itemId = `${nodeId}|phrase=${String(phrase)}|piece=${pieceId}`;
     return [
       {
@@ -229,7 +237,7 @@ export class Builder {
         sessionId,
         itemId,
         nodeId,
-        generator: o.ear === true ? "pieceEar" : "pieceLine",
+        generator,
         block: "apply",
         isNew: false,
         presentation: o.presentation ?? { piece: pieceId, phrase, tempoBpm: 60 },
@@ -237,7 +245,7 @@ export class Builder {
       {
         ...this.base(at + latencyMs),
         type: "attempt.completed",
-        v: 1,
+        v: 2,
         sessionId,
         itemId,
         nodeId,

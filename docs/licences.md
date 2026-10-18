@@ -82,7 +82,8 @@ The tunes in `packages/content/src/pieces/library.ts`. Each is typed in by hand 
 (pitches and note values, one staff). No engraving, edition, arrangement or fingering is copied from
 any publication. The tunes themselves are in the public domain: the traditional ones have no known
 author and a long history in print, and Beethoven died in 1827. The left-hand versions are the same
-melodies an octave lower.
+melodies an octave lower. The hands-together versions (T5.6) add left-hand block chords (I, IV and V)
+written for Clavis, not taken from any arrangement.
 
 | Piece | Source | Status |
 |---|---|---|
@@ -95,6 +96,11 @@ melodies an octave lower.
 | Ode to Joy (left hand) | As above, an octave lower | Public domain |
 | Twinkle, Twinkle, Little Star (left hand) | As above, an octave lower | Public domain |
 | Frère Jacques (left hand) | Traditional French round | Public domain |
+| Hot Cross Buns (hands together) | The melody above, with left-hand chords written for Clavis | Melody public domain; chords are part of Clavis |
+| Ode to Joy (hands together) | The melody above, with left-hand chords written for Clavis | Melody public domain; chords are part of Clavis |
+| Mary Had a Little Lamb (hands together) | The melody above, with left-hand chords written for Clavis | Melody public domain; chords are part of Clavis |
+| Au clair de la lune (hands together) | The melody above, with left-hand chords written for Clavis | Melody public domain; chords are part of Clavis |
+| Twinkle, Twinkle, Little Star (hands together) | The melody above, with left-hand chords written for Clavis | Melody public domain; chords are part of Clavis |
 
 New pieces need a row here before they are added to the library (a test checks every title).
 

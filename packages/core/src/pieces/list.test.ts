@@ -41,6 +41,7 @@ function piece(id: string, requiredNodeIds: string[], difficulty = 1): Piece {
 }
 
 const learner = (states: Record<string, NodeState>) => ({
+  pieces: {},
   nodes: Object.fromEntries(Object.entries(states).map(([id, state]) => [id, { state }])),
 });
 

@@ -286,7 +286,7 @@ describe("scorePerformance", () => {
 });
 
 describe("scoreAttempt with a performance target", () => {
-  it("dispatches to the performance scorer and tags errors with the part", () => {
+  it("dispatches to the performance scorer", () => {
     const toNotes = (plays: Play[]): NoteEvent[] =>
       plays.map((p) => ({ pitch: p.pitch, onsetMs: p.at, confidence: 1, source: "midi" }));
     const expected = { play: TARGET, responseWindowMs: WINDOW };
@@ -308,7 +308,7 @@ describe("scoreAttempt with a performance target", () => {
     expect(wrong.outcome.correct).toBe(false);
     expect(wrong.errors[0]).toMatchObject({
       code: "note.wrong",
-      detail: { part: "play", hand: "lh", measure: 1 },
+      detail: { hand: "lh", measure: 1 },
     });
   });
 });

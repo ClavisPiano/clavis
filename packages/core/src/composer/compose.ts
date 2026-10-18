@@ -2,23 +2,25 @@ import { at } from "../theory/util.js";
 import type { GeneratorId, SkillGraph, SkillNode, Strand } from "../graph/schema.js";
 import { isNodeEnabled } from "../graph/validate.js";
 import { itemId as makeItemId } from "../items/ids.js";
+import { drillParamsOf } from "../items/drill.js";
 import { familyOfParams, keyForFamily, openFamilies } from "../items/family.js";
 import { GENERATORS } from "../items/registry.js";
 import type { Generator, ItemParams } from "../items/types.js";
 import { learnerDay } from "../learning/day.js";
 import { listPieces } from "../pieces/list.js";
-import type { Piece } from "../pieces/schema.js";
+import { isHandsPiece, type Piece } from "../pieces/schema.js";
 import { createRng, type Rng } from "../random.js";
 import { newItemAllowance } from "../scheduler/new-items.js";
 import { rankDue } from "../scheduler/rank.js";
 import type { CardState } from "../scheduler/card.js";
-import { medianDurationSec } from "../state/reduce.js";
+import { medianDurationSec, TASK_STRANDS } from "../state/reduce.js";
 import type { LearnerState } from "../state/types.js";
 import { allocate, DEFAULT_BUDGET_SEC, SCALE_ORIENT_SEC } from "./budget.js";
 import { interleave } from "./interleave.js";
 import { rankWeakest } from "./practice.js";
 import { keyFamily, type KeyFamily } from "../theory/keys.js";
 import { keyOfDay, NODE_RANK } from "./key.js";
+import { pickTask, taskRecords } from "./task.js";
 import type { ComposeInput, PlannedItem, SessionPlan } from "./types.js";
 
 interface NodeInfo {
@@ -58,6 +60,12 @@ export const APPLY_NEW_EAR_PHRASES_PER_SESSION = 1;
 
 /** New left-hand chord items (HANDS, T5.3) offered in one session. Each takes a while to play. */
 export const HANDS_NEW_ITEMS_PER_SESSION = 2;
+
+/**
+ * Generators whose items close the Read block (spec 6.2, R18): a short grand-staff line, last in
+ * the block, at most one a session, in the key of the day when the learner has it open.
+ */
+const CLOSING_GENERATORS: readonly GeneratorId[] = ["sightLine"];
 
 /** The READ node whose fluency ends the C-major-first rule (R15). */
 const LANDMARKS_NODE = "read.bass.landmarks";
@@ -280,41 +288,22 @@ function applyCandidates(
   pieces: readonly Piece[],
   state: LearnerState,
   now: number,
-  introducing?: string,
 ): { due: Candidate[]; fresh: Candidate[] } {
   const statuses = listPieces(pieces, state);
-  const current = statuses.find(
-    (s) => s.unlocked && state.pieces[s.piece.id]?.completedAt === undefined,
-  );
   const due: Candidate[] = [];
   const fresh: Candidate[] = [];
+  const freshHands: Candidate[] = [];
   const freshByEar: Candidate[] = [];
-  const freshMelody: Candidate[] = [];
   for (const info of infos) {
     const nodeId = info.node.id;
-    const dueAll: (Candidate & { card: CardState })[] = [];
-    for (const u of info.universe) {
-      const card = state.cards[u.itemId];
-      if (card?.nodeId === nodeId) {
-        dueAll.push({ ...u, nodeId, isNew: false, card: card.card });
-      }
-    }
-    due.push(...rankDue(dueAll, now));
+    due.push(...carded(info, state, now));
 
-    // By-ear melodies (BYEAR, T7.2): one new melody per session, in universe order (shortest
-    // first), from a node being introduced or still learning or fluent.
-    if (info.node.strand === "BYEAR") {
-      const rank = NODE_RANK[state.nodes[nodeId]?.state ?? "locked"];
-      if (introducing === nodeId || (rank >= NODE_RANK.learning && rank < NODE_RANK.mastered)) {
-        const next = info.universe.find((u) => state.cards[u.itemId] === undefined);
-        if (next !== undefined) freshMelody.push({ ...next, nodeId, isNew: true });
-      }
-      continue;
-    }
-
-    // New phrases come from one piece at a time, in phrase order: to read, the current piece; to
-    // play by ear, the first piece whose phrases have all been read and not yet heard.
+    // New phrases come from one piece at a time, in phrase order: to read (one hand, or hands
+    // together, T5.6), the node's current piece, the first unlocked piece of its own that has not
+    // been played through; to play by ear, the first piece whose phrases have all been read and
+    // not yet heard.
     const byEar = info.gens[0] === "pieceEar";
+    const ownPiece = (id: string): boolean => info.universe.some((u) => u.params.piece === id);
     const source = byEar
       ? statuses.find(
           (s) =>
@@ -322,18 +311,86 @@ function applyCandidates(
             phrasesRead(s.piece, state) &&
             info.universe.some((u) => u.params.piece === s.piece.id && !(u.itemId in state.cards)),
         )
-      : current;
+      : statuses.find(
+          (s) =>
+            s.unlocked &&
+            state.pieces[s.piece.id]?.completedAt === undefined &&
+            ownPiece(s.piece.id),
+        );
     if (source === undefined) continue;
     const unseen = info.universe
       .filter((u) => u.params.piece === source.piece.id && state.cards[u.itemId] === undefined)
       .sort((a, b) => Number(a.params.phrase) - Number(b.params.phrase));
     const limit = byEar ? APPLY_NEW_EAR_PHRASES_PER_SESSION : APPLY_NEW_PHRASES_PER_SESSION;
-    for (const u of unseen.slice(0, limit)) {
-      (byEar ? freshByEar : fresh).push({ ...u, nodeId, isNew: true });
-    }
+    const into = byEar ? freshByEar : info.gens[0] === "pieceHands" ? freshHands : fresh;
+    for (const u of unseen.slice(0, limit)) into.push({ ...u, nodeId, isNew: true });
   }
-  // A tune already read comes before the next one: hearing it settles what was just learned.
-  return { due, fresh: [...freshMelody, ...freshByEar, ...fresh] };
+  // A tune already read comes before the next one: hearing it settles what was just learned. New
+  // one-hand and hands-together phrases (T5.6) take turns, one-hand first, so neither piece waits
+  // for the other under the small new-phrase share.
+  const reading: Candidate[] = [];
+  for (let i = 0; i < Math.max(fresh.length, freshHands.length); i++) {
+    const one = fresh[i];
+    const both = freshHands[i];
+    if (one !== undefined) reading.push(one);
+    if (both !== undefined) reading.push(both);
+  }
+  return { due, fresh: [...freshByEar, ...reading] };
+}
+
+/** A node's listed items that have a card and are due, most overdue first. */
+function carded(info: NodeInfo, state: LearnerState, now: number): Candidate[] {
+  const nodeId = info.node.id;
+  const dueAll: (Candidate & { card: CardState })[] = [];
+  for (const u of info.universe) {
+    const card = state.cards[u.itemId];
+    if (card?.nodeId === nodeId) dueAll.push({ ...u, nodeId, isNew: false, card: card.card });
+  }
+  return rankDue(dueAll, now);
+}
+
+/**
+ * A by-ear task node (BYEAR, T7.2): its due melodies, and one new melody per session, in universe
+ * order (shortest first), from a node being introduced or still learning or fluent.
+ */
+function byearCandidates(
+  info: NodeInfo,
+  state: LearnerState,
+  now: number,
+  introducing?: string,
+): { due: Candidate[]; fresh: Candidate[] } {
+  const nodeId = info.node.id;
+  const fresh: Candidate[] = [];
+  const rank = NODE_RANK[state.nodes[nodeId]?.state ?? "locked"];
+  if (introducing === nodeId || (rank >= NODE_RANK.learning && rank < NODE_RANK.mastered)) {
+    const next = info.universe.find((u) => state.cards[u.itemId] === undefined);
+    if (next !== undefined) fresh.push({ ...next, nodeId, isNew: true });
+  }
+  return { due: carded(info, state, now), fresh };
+}
+
+/**
+ * A task node's live micro-drills (T5.8) with their cards, unranked. Drills are not in the node's
+ * item universe, so they come from `state.drills`; their params read back from the id.
+ */
+function drillCandidates(info: NodeInfo, state: LearnerState): (Candidate & { card: CardState })[] {
+  const nodeId = info.node.id;
+  return (state.drills[nodeId] ?? []).flatMap((id) => {
+    const card = state.cards[id];
+    const params = drillParamsOf(nodeId, id);
+    if (card?.nodeId !== nodeId || params === undefined) return [];
+    const fam = info.node.keyDependent ? (familyOfParams(params) ?? "A") : undefined;
+    return [
+      {
+        itemId: id,
+        nodeId,
+        params,
+        isNew: false,
+        card: card.card,
+        ...(fam !== undefined ? { fam } : {}),
+      },
+    ];
+  });
 }
 
 /** True when every phrase of the piece has been played correctly at least once. */
@@ -345,8 +402,10 @@ function phrasesRead(piece: Piece, state: LearnerState): boolean {
 /**
  * A whole-piece run (MP): every phrase of `pieceId`, in order, as the Apply block of a session
  * that has nothing else in it. The runner writes `piece.completed` when the last phrase is done.
- * Throws when the piece is unknown or still locked, or the graph and registry cannot play pieces.
- * The budget is generous because a run is not a timed session.
+ * A hands-together piece (T5.6) is run with `pieceHands`, which needs polyphonic input (MIDI).
+ * Throws when the piece is unknown or still locked, the graph and registry cannot play pieces, or
+ * a hands-together run has no polyphonic input. The budget is generous because a run is not a
+ * timed session.
  */
 export function composePieceRun(input: {
   state: LearnerState;
@@ -356,26 +415,33 @@ export function composePieceRun(input: {
   now: number;
   tzOffsetMin: number;
   generators?: Partial<Record<GeneratorId, Generator>>;
+  /** True with MIDI input (R26). A hands-together piece needs it. */
+  polyphonic?: boolean;
 }): SessionPlan {
   const { state, graph } = input;
   const registry: Registry = input.generators ?? GENERATORS;
+  const status = listPieces(input.pieces, state).find((s) => s.piece.id === input.pieceId);
+  if (status === undefined) throw new RangeError(`unknown piece ${input.pieceId}`);
+  const generator: GeneratorId = isHandsPiece(status.piece) ? "pieceHands" : "pieceLine";
   const node = graph.nodes.find(
     (n) =>
       n.strand === "APPLY" &&
-      n.itemGenerators.includes("pieceLine") &&
+      n.itemGenerators.includes(generator) &&
       nodeEnabled(n, graph, registry),
   );
-  const gen = registry.pieceLine;
+  const gen = registry[generator];
   if (node === undefined || gen === undefined) {
-    throw new RangeError("pieces are not enabled: no APPLY node with a pieceLine generator");
+    throw new RangeError(`pieces are not enabled: no APPLY node with a ${generator} generator`);
   }
-  const status = listPieces(input.pieces, state).find((s) => s.piece.id === input.pieceId);
-  if (status === undefined) throw new RangeError(`unknown piece ${input.pieceId}`);
+  if (generator === "pieceHands" && input.polyphonic !== true) {
+    throw new RangeError(`piece ${input.pieceId} is for both hands: it needs a MIDI keyboard`);
+  }
   if (!status.unlocked) {
-    throw new RangeError(`piece ${input.pieceId} is locked: ${status.missingNodeIds.join(", ")}`);
+    const missing = [...status.missingNodeIds, ...status.missingPieceIds];
+    throw new RangeError(`piece ${input.pieceId} is locked: ${missing.join(", ")}`);
   }
-  const seed = graph.generators.find((g) => g.id === "pieceLine")?.seedDurationSec ?? 25;
-  const estimatedSec = medianDurationSec(state, "pieceLine", seed);
+  const seed = graph.generators.find((g) => g.id === generator)?.seedDurationSec ?? 25;
+  const estimatedSec = medianDurationSec(state, generator, seed);
   const items: PlannedItem[] = gen
     .listItems(node)
     .filter((params) => params.piece === input.pieceId)
@@ -385,7 +451,7 @@ export function composePieceRun(input: {
       return {
         itemId: id,
         nodeId: node.id,
-        generator: "pieceLine" as const,
+        generator,
         params,
         isNew: state.cards[id] === undefined,
         estimatedSec,
@@ -437,10 +503,17 @@ export function composePieceRun(input: {
  * - Away has no Orient, uses only Away-eligible generators, and splits the budget 60/40 between
  *   Ear and Read when Read has content, else all Ear.
  * - Generators come from `input.generators` (default `GENERATORS`).
+ * - The Read block ends with one closing line (spec 6.2, R18): a `sightLine` item of a grand-staff
+ *   reading node at `learning` or beyond (or being introduced), due ones first (in the key of the
+ *   day's family first), else a new one. It needs polyphonic input (MIDI) and is never in Away.
+ *   It takes its time from the Read block and is planned only when it fits there; line items
+ *   never appear elsewhere in the block.
  * - Apply (MP) holds piece phrases: due ones, then up to `APPLY_NEW_PHRASES_PER_SESSION` new
  *   phrases of the current piece (the first unlocked piece not yet played through, see
  *   `listPieces`), when `input.pieces` and an enabled `pieceLine` generator are present. It is null
- *   in Away mode, in practice, and when it has nothing.
+ *   in Away mode, in practice, and when it has nothing. Ahead of the phrases it holds one task
+ *   (T5.8, spec 5.4): due micro-drills of any HANDS or BYEAR node first, then the HANDS or BYEAR
+ *   node chosen by task priority (`pickTask`), its due items and then its new ones.
  * - `extraNewItems` raises the new-item allowance for this plan only (Learn something new). The
  *   introduction and strand rules are unchanged.
  * - A practice plan cycles the started items, weakest first, until the block budget is spent.
@@ -616,33 +689,76 @@ export function composeSession(input: ComposeInput): SessionPlan {
   };
 
   const ear = candidates("EAR");
-  const read = candidates("READ");
-  const readHasContent = read.due.length > 0 || (read.fresh.length > 0 && newAllowance > 0);
+  const readAll = candidates("READ");
+  // The Read block's closing line (spec 6.2, R18) is planned on its own, so line items never fill
+  // the rest of the block. Due lines come first, those in the key of the day's family ahead of the
+  // rest (spec 6.3), then new ones, already in that order.
+  const isClosing = (c: Candidate): boolean => {
+    const g = infos.get(c.nodeId)?.gens[0];
+    return g !== undefined && CLOSING_GENERATORS.includes(g);
+  };
+  const read = {
+    due: readAll.due.filter((c) => !isClosing(c)),
+    fresh: readAll.fresh.filter((c) => !isClosing(c)),
+  };
+  const closingOrder = [
+    ...readAll.due
+      .filter(isClosing)
+      .sort((a, b) => Number(a.fam !== dayFamily) - Number(b.fam !== dayFamily)),
+    ...readAll.fresh.filter(isClosing),
+  ];
+  const readHasContent = readAll.due.length > 0 || (readAll.fresh.length > 0 && newAllowance > 0);
 
   // Apply: piece phrases (MP), read and played by ear. Due phrases first, then the next new ones.
   const applyOpen = mode === "instrument" && !input.practice;
   const hasPieces = input.pieces !== undefined && input.pieces.length > 0;
   const applyInfos = applyOpen
-    ? [...infos.values()].filter(
-        (i) => (i.node.strand === "APPLY" && hasPieces) || i.node.strand === "BYEAR",
-      )
+    ? [...infos.values()].filter((i) => i.node.strand === "APPLY" && hasPieces)
     : [];
-  const pieceApply = applyCandidates(
-    applyInfos,
-    input.pieces ?? [],
-    state,
-    input.now,
-    intro?.strand === "BYEAR" ? intro.id : undefined,
-  );
-  // Left-hand chord items (HANDS, T5.3) share the Apply block. They exist only with polyphonic
-  // input and at the instrument, and are not part of practice rounds. Due ones first, then up to
-  // `HANDS_NEW_ITEMS_PER_SESSION` new ones, ahead of new piece phrases.
+  const pieceApply = applyCandidates(applyInfos, input.pieces ?? [], state, input.now);
+  // One task (spec 5.4, 6.2, R27, T5.8): a HANDS or BYEAR node, chosen by task priority among those
+  // with something to offer. HANDS items exist only with polyphonic input, BYEAR melodies only at
+  // the instrument, and neither is part of practice rounds. The task gives its due items, then up
+  // to `HANDS_NEW_ITEMS_PER_SESSION` new chord items or one new melody, ahead of new piece phrases.
+  // A node being introduced is the task, so its first item is planned.
+  const taskInfos = applyOpen
+    ? [...infos.values()].filter((i) => TASK_STRANDS.includes(i.node.strand))
+    : [];
   const hands = applyOpen
     ? candidates("HANDS")
     : { due: [] as Candidate[], fresh: [] as Candidate[] };
+  const taskOffers = new Map<string, { due: Candidate[]; fresh: Candidate[] }>();
+  for (const info of taskInfos) {
+    const id = info.node.id;
+    const offer =
+      info.node.strand === "HANDS"
+        ? {
+            due: hands.due.filter((c) => c.nodeId === id),
+            fresh: hands.fresh.filter((c) => c.nodeId === id).slice(0, HANDS_NEW_ITEMS_PER_SESSION),
+          }
+        : byearCandidates(info, state, input.now, intro?.id);
+    if (offer.due.length > 0 || (offer.fresh.length > 0 && newAllowance > 0)) {
+      taskOffers.set(id, offer);
+    }
+  }
+  const taskId =
+    intro !== undefined && taskOffers.has(intro.id)
+      ? intro.id
+      : pickTask(
+          [...taskOffers.keys()],
+          taskRecords([...taskOffers.keys()], state, input.now),
+          input.now,
+        );
+  const task = taskId === undefined ? undefined : taskOffers.get(taskId);
+  if (taskId !== undefined) notes.push(`apply task: ${taskId}`);
+  // Micro-drills of every task node that are due come first, whichever task is chosen (spec 6.2).
+  const drills = rankDue(
+    taskInfos.flatMap((info) => drillCandidates(info, state)),
+    input.now,
+  ) as Candidate[];
   const apply = {
-    due: [...hands.due, ...pieceApply.due],
-    fresh: [...hands.fresh.slice(0, HANDS_NEW_ITEMS_PER_SESSION), ...pieceApply.fresh],
+    due: [...drills, ...(task?.due ?? []), ...pieceApply.due],
+    fresh: [...(task?.fresh ?? []), ...pieceApply.fresh],
   };
   // An introduction needs its item, so a by-ear node being introduced always gets a share.
   const byearIntroducing = intro?.strand === "BYEAR" && newAllowance > 0;
@@ -668,7 +784,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
   });
   notes.push(...alloc.notes);
 
-  const readReserve = read.fresh.length > 0 ? Math.floor(newAllowance / 2) : 0;
+  const readReserve = readAll.fresh.length > 0 ? Math.floor(newAllowance / 2) : 0;
   // New piece phrases get a small share of the daily allowance too, or the many new reading items
   // would always use it up first: about a third, and never more than the phrases on offer.
   const applyReserve = Math.min(
@@ -688,11 +804,32 @@ export function composeSession(input: ComposeInput): SessionPlan {
     state,
     graph,
   });
+  // The closing line takes its time from the end of the Read block, when it fits there.
+  let closing: Fill | undefined;
+  for (const c of closingOrder) {
+    const f = fillBlock({
+      blockSec: alloc.readSec,
+      due: c.isNew ? [] : [c],
+      fresh: c.isNew ? [c] : [],
+      allowance: newAllowance - applyReserve - earFill.newCount,
+      forceFirst: false,
+      infos,
+      taken,
+      state,
+      graph,
+    });
+    if (f.items.length > 0) {
+      closing = f;
+      notes.push(`closing line: ${at(f.items, 0).itemId}`);
+      break;
+    }
+  }
+  const closingNew = closing?.newCount ?? 0;
   const readFill = fillBlock({
-    blockSec: alloc.readSec,
+    blockSec: alloc.readSec - (closing?.usedSec ?? 0),
     due: read.due,
     fresh: read.fresh,
-    allowance: newAllowance - applyReserve - earFill.newCount,
+    allowance: newAllowance - applyReserve - earFill.newCount - closingNew,
     forceFirst: false,
     cycle: input.practice === true,
     infos,
@@ -705,7 +842,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     blockSec: alloc.applySec,
     due: apply.due,
     fresh: apply.fresh,
-    allowance: newAllowance - earFill.newCount - readFill.newCount,
+    allowance: newAllowance - earFill.newCount - readFill.newCount - closingNew,
     forceFirst: false,
     infos,
     taken,
@@ -715,7 +852,9 @@ export function composeSession(input: ComposeInput): SessionPlan {
 
   const introduced =
     intro !== undefined &&
-    [...earFill.items, ...readFill.items, ...applyFill.items].some((i) => i.nodeId === intro.id);
+    [...earFill.items, ...readFill.items, ...(closing?.items ?? []), ...applyFill.items].some(
+      (i) => i.nodeId === intro.id,
+    );
   const introductions = intro && introduced ? [intro.id] : [];
   const introductionKeyFamilies: Record<string, KeyFamily> =
     intro && introduced && intro.keyDependent ? { [intro.id]: "A" } : {};
@@ -734,9 +873,10 @@ export function composeSession(input: ComposeInput): SessionPlan {
 
   const practice = input.practice === true;
   const earItems = withKey(arrange(earFill, createRng(input.seed), practice));
-  const readItems = withKey(
-    arrange(readFill, createRng((input.seed ^ 0x5bd1e995) >>> 0), practice),
-  );
+  const readItems = [
+    ...withKey(arrange(readFill, createRng((input.seed ^ 0x5bd1e995) >>> 0), practice)),
+    ...withKey(closing?.items ?? []),
+  ];
   // Chord items carry a family like reading items; piece phrases have none and pass through.
   const applyItems = withKey(applyFill.items);
 
@@ -748,7 +888,11 @@ export function composeSession(input: ComposeInput): SessionPlan {
           includeScale: alloc.orientSec >= SCALE_ORIENT_SEC,
         };
   const estimatedSec =
-    (orient?.estimatedSec ?? 0) + earFill.usedSec + readFill.usedSec + applyFill.usedSec;
+    (orient?.estimatedSec ?? 0) +
+    earFill.usedSec +
+    readFill.usedSec +
+    (closing?.usedSec ?? 0) +
+    applyFill.usedSec;
 
   return {
     key,
@@ -766,7 +910,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     introductionKeyFamilies,
     ...(input.practice ? { practice: true as const } : {}),
     diagnostics: {
-      dueCount: ear.due.length + read.due.length + apply.due.length,
+      dueCount: ear.due.length + readAll.due.length + apply.due.length,
       newAllowance,
       reallocatedSec: alloc.reallocatedSec,
       notes,

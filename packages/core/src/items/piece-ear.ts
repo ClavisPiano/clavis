@@ -1,6 +1,6 @@
 import type { SkillNode } from "../graph/schema.js";
 import type { Piece } from "../pieces/schema.js";
-import { phraseScore } from "../pieces/schema.js";
+import { isHandsPiece, phraseScore } from "../pieces/schema.js";
 import type { StimulusEvent } from "../stimulus/types.js";
 import type { VoiceRange } from "../theory/keys.js";
 import { latencyField } from "./build.js";
@@ -28,7 +28,9 @@ const NOTE_GAP = 0.9;
  * the phrase at the piece's slow tempo. Which phrases are offered, and when, is the composer's
  * call: it only offers the phrases of pieces the learner has already read.
  */
-export function createPieceEar(pieces: readonly Piece[]): Generator {
+export function createPieceEar(library: readonly Piece[]): Generator {
+  // One hand only: hands-together pieces (T5.6) are `pieceHands` phrases.
+  const pieces = library.filter((p) => !isHandsPiece(p));
   const find = (params: ItemParams) => {
     const { piece: pieceId, phrase } = PieceLineItemParams.parse(params);
     const piece = pieces.find((p) => p.id === pieceId);

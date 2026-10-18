@@ -13,11 +13,14 @@ export const READ_CARD_NODE_IDS = [
   "read.bass.steps",
   "read.bass.skips",
   "read.bass.intervals",
+  "read.bass.chords",
   "read.minor.accidentals",
   "read.rhythm.basic",
   "read.treble.landmarks",
   "read.treble.steps",
   "read.treble.skips",
+  "read.grand.2line",
+  "read.grand.sight",
 ] as const;
 
 export const READ_CARDS_V1: unknown[] = [
@@ -167,6 +170,43 @@ export const READ_CARDS_V1: unknown[] = [
       { label: "Generic intervals (musictheory.net)", url: `${MT}/30` },
       { label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` },
     ],
+  },
+  {
+    id: "concept.read.bass.chords",
+    nodeIds: ["read.bass.chords"],
+    title: "Reading bass chords",
+    body: [
+      "A triad is three notes stacked in thirds. On the staff a root-position triad is a snowman: three lines or three spaces in a row, with the root at the bottom.",
+      "An inversion puts a different note at the bottom. In first inversion the third is lowest, and the root moves to the top, so there is a gap of a 4th at the top of the stack. In second inversion the fifth is lowest, and the gap is at the bottom.",
+      "Read the shape first, then the bottom note, and the key signature gives the rest. Your hand learns each shape as one grip.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "One chord appears on the bass staff. There is no sound first.",
+      "Play all three notes together with your left hand, in exactly the right octave.",
+      "Only the notes count, not the timing, but the quicker you find the chord the better. A wrong note is named, for example E instead of F.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "C major in root position: C E G",
+        clef: "bass",
+        positions: ["C3", "E3", "G3"],
+      },
+      {
+        kind: "staff",
+        label: "First inversion: E G C",
+        clef: "bass",
+        positions: ["E3", "G3", "C4"],
+      },
+      {
+        kind: "staff",
+        label: "Second inversion: G C E",
+        clef: "bass",
+        positions: ["G2", "C3", "E3"],
+      },
+    ],
+    links: [{ label: "Triads (musictheory.net)", url: `${MT}/40` }],
   },
   {
     id: "concept.read.minor.accidentals",
@@ -344,6 +384,69 @@ export const READ_CARDS_V1: unknown[] = [
         label: "Skips around the high C: A, C, E",
         clef: "treble",
         positions: ["A4", "C5", "E5"],
+      },
+    ],
+    links: [{ label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` }],
+  },
+  {
+    id: "concept.read.grand.2line",
+    nodeIds: ["read.grand.2line"],
+    title: "Reading two staves at once",
+    body: [
+      "Piano music is written on two staves joined by a brace: the treble staff on top for the right hand, the bass staff below for the left. Notes that line up one above the other are played together.",
+      "These lines are in the key of the day. The key signature at the start of each staff tells you which notes are sharp or flat all the way through, so no other accidentals appear.",
+      "The right hand plays single notes, mostly moving by step. The left hand holds one note, or a bare fifth, for each bar: the home note of the chord, sometimes with the note a fifth above it.",
+      "Look ahead. Read the left hand note for the bar first, since it changes least, then follow the right hand.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "A line of two or four bars appears on a grand staff, then four clicks count you in at a slow, steady pulse.",
+      "Play both hands together in time, every note in the octave it is written.",
+      "Each mistake is named by bar and hand, for example Bar 2: LH late.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "A right hand line in C: C, D, E, D, C",
+        clef: "treble",
+        positions: ["C5", "D5", "E5", "D5", "C5"],
+      },
+      {
+        kind: "staff",
+        label: "Left hand roots under it: C, G, C",
+        clef: "bass",
+        positions: ["C3", "G2", "C3"],
+      },
+    ],
+    links: [{ label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` }],
+  },
+  {
+    id: "concept.read.grand.sight",
+    nodeIds: ["read.grand.sight"],
+    title: "Sight-reading",
+    body: [
+      "Sight-reading is playing music you have not seen before, at a steady pulse, without stopping to fix mistakes. The aim is to keep going: a missed note costs less than a broken rhythm.",
+      "These passages are four to eight bars long. The right hand adds eighth notes and a wider span. The left hand may move within the bar, from the root to the fifth, or repeat a fifth.",
+      "Before the count-in, take a moment to scan the line: the key signature, the highest and lowest notes, and where the left hand moves.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "A passage appears on a grand staff, then four clicks count you in.",
+      "Play it through with both hands in time. Keep going if you slip.",
+      "Feedback names the bar and hand of each mistake, and the passage can be played back to you.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "A right hand line in C with a skip: E, F, G, E, D, C",
+        clef: "treble",
+        positions: ["E5", "F5", "G5", "E5", "D5", "C5"],
+      },
+      {
+        kind: "staff",
+        label: "A left hand moving from root to fifth: F, C, G, D, C",
+        clef: "bass",
+        positions: ["F2", "C3", "G2", "D3", "C3"],
       },
     ],
     links: [{ label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` }],

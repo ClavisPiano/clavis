@@ -40,7 +40,8 @@ const LIBRARY: Piece[] = [
   piece("g", 6, "ng"),
 ];
 
-const learner = (unlocked: string[]): Pick<LearnerState, "nodes"> => ({
+const learner = (unlocked: string[]): Pick<LearnerState, "nodes" | "pieces"> => ({
+  pieces: {},
   nodes: Object.fromEntries(
     LIBRARY.map((p) => {
       const id = p.id.slice("piece.".length);

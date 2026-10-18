@@ -71,7 +71,7 @@ export interface PresentationRecord {
   /** Key hints from the presentation params, when present. */
   tonic?: string;
   mode?: "major" | "minor";
-  /** The piece phrase a `pieceLine` item shows (MP). */
+  /** The piece phrase a `pieceLine` or `pieceHands` item shows (MP, T5.6). */
   piece?: { id: string; phrase: number };
 }
 
@@ -120,6 +120,20 @@ export interface BenchmarkRecord {
   eventId: string;
 }
 
+/**
+ * Task-level progress on one HANDS or BYEAR node (spec 5.4, R27), from its attempts. Drill
+ * attempts are left out: a drill is not the task.
+ */
+export interface TaskRecord {
+  /** The latest attempt at one of the node's items. */
+  lastPracticedAt: number;
+  /**
+   * Exponentially weighted mean (alpha `TASK_ROLLING_ALPHA`) of each attempt's `partial`, or 1
+   * and 0 for a correct and a wrong attempt without one. The first attempt sets it outright.
+   */
+  rolling: number;
+}
+
 export interface LearnerState {
   cards: Record<string, CardRecord>;
   nodes: Record<string, NodeRecord>;
@@ -130,6 +144,13 @@ export interface LearnerState {
   imported: Record<string, ImportedPieceRecord>;
   /** Monthly benchmarks by month ("YYYY-MM"), one per month (T6.5). */
   benchmarks: Record<string, BenchmarkRecord>;
+  /** Task priority inputs for HANDS and BYEAR nodes, by node id (T5.8). */
+  tasks: Record<string, TaskRecord>;
+  /**
+   * Live micro-drill item ids by node id, oldest first (T5.8), at most `MAX_DRILLS_PER_NODE`.
+   * Each has a card in `cards`; a drill pushed out by a newer one loses its card.
+   */
+  drills: Record<string, string[]>;
   sessions: Record<string, SessionRecord>;
   /** Key `${sessionId}:${itemId}`. Pruned when the session ends. */
   presented: Record<string, PresentationRecord>;

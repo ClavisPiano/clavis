@@ -164,6 +164,8 @@ test.describe("reading is enabled", () => {
             pieces: {},
             imported: {},
             benchmarks: {},
+            tasks: {},
+            drills: {},
             settings: {},
             lastEvent: { at: last.at, id: last.id },
             eventCount: 999,

@@ -1,7 +1,7 @@
 /**
  * Concept cards for the pieces nodes (TP.5, TP.6). Same rules as `v1.ts`: `docs/content/cards.md`.
  * The card test requires a card for every enabled node, and `apply.pieces` and `apply.piece-ear`
- * are enabled with `pieceLine` and `pieceEar`.
+ * are enabled with `pieceLine` and `pieceEar`, and `apply.pieces-hands` with `pieceHands` (T5.6).
  */
 export const PIECE_CARDS_V1: unknown[] = [
   {
@@ -46,6 +46,30 @@ export const PIECE_CARDS_V1: unknown[] = [
       "The score is shown with the notes you got right and wrong marked.",
     ],
     examples: [],
+    links: [],
+  },
+  {
+    id: "concept.apply.pieces-hands",
+    nodeIds: ["apply.pieces-hands"],
+    title: "Playing a piece with both hands",
+    body: [
+      "Once you have played a tune all the way through with your right hand, and you can play a melody over left-hand chords, the tune comes back for both hands.",
+      "The right hand plays the melody you already know, on the top staff. The left hand holds a chord under it on the bottom staff: I, IV or V, one to a bar or one to each half bar. Each chord shares a note with the melody where it starts.",
+      "You learn it a phrase or two at a time, as before, and when every phrase has been played right once, you play it from start to finish. It needs a MIDI keyboard, so the app can hear both hands at once.",
+    ],
+    howTo: [
+      "The phrase appears on the grand staff, with the chord names beside it, and four clicks count you in at a slow, steady pulse.",
+      "Play both hands together from the beat after the fourth click: strike each chord with the melody note above it and hold it until the next one.",
+      "Every note must be in the exact octave and in time. The feedback names the bar and the hand of any slip, for example: bar 3, LH late.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "The left hand's C chord under the start of Hot Cross Buns",
+        clef: "bass",
+        positions: ["C3", "E3", "G3"],
+      },
+    ],
     links: [],
   },
 ];

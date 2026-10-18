@@ -1,5 +1,6 @@
 import { loadPieces } from "@clavis/content";
 import {
+  isHandsPiece,
   ExpectedResponseSchema,
   PIECES_NODE_ID,
   createPieceLine,
@@ -49,7 +50,10 @@ describe("every phrase of the shipped library", () => {
   const items = generator.listItems(node);
 
   it("has one item per phrase, and each is a valid, drawable line", () => {
-    const phrases = pieces.reduce((n, p) => n + p.phrases.length, 0);
+    // One hand only: hands-together pieces (T5.6) are pieceHands phrases.
+    const phrases = pieces
+      .filter((p) => !isHandsPiece(p))
+      .reduce((n, p) => n + p.phrases.length, 0);
     expect(items).toHaveLength(phrases);
     for (const params of items) {
       const inst = generator.generate(node, params, ctx);

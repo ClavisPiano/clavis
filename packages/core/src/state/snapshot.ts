@@ -33,7 +33,9 @@ export function restoreSnapshot(
     typeof o.nodes !== "object" ||
     typeof o.pieces !== "object" ||
     typeof o.imported !== "object" ||
-    typeof o.benchmarks !== "object"
+    typeof o.benchmarks !== "object" ||
+    typeof o.tasks !== "object" ||
+    typeof o.drills !== "object"
   ) {
     return undefined;
   }

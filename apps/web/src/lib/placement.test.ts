@@ -1,6 +1,27 @@
 import { describe, expect, it } from "vitest";
-import type { LearnerState } from "@clavis/core";
-import { hasPlacement, shouldOfferPlacement } from "./placement";
+import { loadGraph } from "@clavis/content";
+import { createRng, type LearnerState } from "@clavis/core";
+import {
+  hasPlacement,
+  placementPlanFor,
+  placementStoredInput,
+  shouldOfferPlacement,
+} from "./placement";
+
+describe("placement input (T5.9)", () => {
+  it("honours a stored MIDI choice only", () => {
+    expect(placementStoredInput("midi")).toBe("midi");
+    for (const v of ["mic", "tap", "fake", "", null]) expect(placementStoredInput(v)).toBeNull();
+  });
+
+  it("plans the HANDS section for MIDI and for no other input", () => {
+    const graph = loadGraph();
+    const sections = (kind: string) =>
+      new Set(placementPlanFor(graph, createRng(1), kind).stages.map((s) => s.section));
+    expect([...sections("midi")]).toEqual(["EAR", "READ", "HANDS"]);
+    for (const kind of ["mic", "tap", "fake"]) expect(sections(kind).has("HANDS")).toBe(false);
+  });
+});
 
 function state(over: Partial<LearnerState> = {}): LearnerState {
   return {
@@ -15,6 +36,8 @@ function state(over: Partial<LearnerState> = {}): LearnerState {
     pieces: {},
     imported: {},
     benchmarks: {},
+    tasks: {},
+    drills: {},
     settings: {},
     eventCount: 1,
     warnings: 0,

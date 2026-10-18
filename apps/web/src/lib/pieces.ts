@@ -3,6 +3,7 @@ import {
   GENERATORS,
   allPieces,
   createPieceEar,
+  createPieceHands,
   createPieceLine,
   type Generator,
   type GeneratorId,
@@ -11,8 +12,8 @@ import {
 } from "@clavis/core";
 
 /*
- * The pieces the app uses (MP, T7.4): the library plus the learner's imports. `pieceLine` and
- * `pieceEar` are built over those pieces, which live outside core, so they cannot be in the core
+ * The pieces the app uses (MP, T7.4): the library plus the learner's imports. `pieceLine`,
+ * `pieceEar` and `pieceHands` (T5.6) are built over those pieces, which live outside core, so they cannot be in the core
  * registry: the app builds them here and hands them, with the pieces, to the composer and the
  * session runtime. Imports change at runtime, so the set is derived from the learner state and
  * rebuilt whenever `state.imported` is a new object (every fold makes one).
@@ -44,6 +45,7 @@ function build(state: Imported | undefined): Built {
       ...GENERATORS,
       pieceLine: createPieceLine(pieces),
       pieceEar: createPieceEar(pieces),
+      pieceHands: createPieceHands(pieces),
     },
   };
   return built;
@@ -54,7 +56,7 @@ export function appPieces(state?: Imported): readonly Piece[] {
   return build(state).pieces;
 }
 
-/** The core generators plus `pieceLine` and `pieceEar` over the app's pieces. */
+/** The core generators plus `pieceLine`, `pieceEar` and `pieceHands` over the app's pieces. */
 export function appGenerators(state?: Imported): Partial<Record<GeneratorId, Generator>> {
   return build(state).generators;
 }

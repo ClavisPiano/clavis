@@ -1,6 +1,8 @@
 export * from "./types.js";
 export {
   REDUCER_VERSION,
+  TASK_ROLLING_ALPHA,
+  TASK_STRANDS,
   applyEvent,
   foldEvents,
   foldOnto,
