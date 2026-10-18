@@ -112,6 +112,8 @@
   }
 </script>
 
+<svelte:head><title>Clavis</title></svelte:head>
+
 {#if showHint}
   <aside class="hint" aria-label="Install hint">
     <p>
@@ -382,12 +384,15 @@
     border-color: var(--color-text);
   }
 
+  /* The muted text colour is too faint on a tinted day (contrast fails in dark mode). */
   .day.level-1 {
     background: color-mix(in srgb, var(--color-accent) 25%, var(--color-surface));
+    color: var(--color-text);
   }
 
   .day.level-2 {
     background: color-mix(in srgb, var(--color-accent) 55%, var(--color-surface));
+    color: var(--color-text);
   }
 
   .day.level-3 {

@@ -7,6 +7,8 @@ import type { NotationMark, NotationPort } from "./port";
 export interface NotationViewState {
   svg: string;
   marks: readonly NotationMark[];
+  /** The score on screen, so the view can describe it to a screen reader (T8.2). */
+  score?: ScoreSpec;
 }
 
 /** A `NotationPort` that also publishes what to draw, for `NotationView` to subscribe to. */
@@ -75,12 +77,12 @@ export function createNotationViewPort(
       const mine = ++generation;
       const { svg } = await renderer.render(score, { widthPx });
       if (mine !== generation) return;
-      set({ svg, marks: [] });
+      set({ svg, marks: [], score });
       await tick();
       for (let i = 0; i < frames; i++) await nextFrame(frameTimeoutMs);
     },
     highlight(marks) {
-      set({ svg: state.svg, marks: [...marks] });
+      set({ ...state, marks: [...marks] });
     },
     hide() {
       generation++;
