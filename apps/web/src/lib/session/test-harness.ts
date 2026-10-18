@@ -8,7 +8,6 @@ import {
   createScheduler,
   createUlidGenerator,
   getGenerator,
-  placementPlan,
   stimulusDurationSec,
   type ExpectedResponse,
   type LearningEvent,
@@ -20,6 +19,7 @@ import {
 } from "@clavis/core";
 import { scoreAttempt } from "@clavis/scoring";
 import type { NotationMark, NotationPort } from "../notation/port";
+import { placementPlanFor } from "../placement";
 import { SessionMachine, type SessionDeps, type SessionState } from "./machine";
 
 /* Test-only helpers for the session machine: a manual clock, fake player and a real core stack. */
@@ -155,7 +155,10 @@ export interface HarnessOptions {
   history?: LearningEvent[];
   seed?: number;
   saveHeadphones?: (v: boolean) => Promise<void>;
-  /** Placement mode (T3.16): present the placement plan instead of a composed session. */
+  /**
+   * Placement mode (T3.16): present the placement plan instead of a composed session. With
+   * `inputSource: "midi"` the plan holds the HANDS section (T5.9).
+   */
   placement?: boolean;
   /** Draws reading items. Without it, reading items are unavailable. */
   notation?: NotationPort;
@@ -183,10 +186,8 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
   await service.load();
   const player = new FakePlayer(clock);
   const mode = opts.mode ?? "instrument";
-  const input = new FakeInputAdapter({
-    source: opts.inputSource ?? (mode === "away" ? "tap" : "mic"),
-    clock,
-  });
+  const source = opts.inputSource ?? (mode === "away" ? "tap" : "mic");
+  const input = new FakeInputAdapter({ source, clock });
   let counter = opts.idSalt ?? 0;
   const newId = createUlidGenerator({
     now: () => T0 + clock.ctxMs,
@@ -205,7 +206,8 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     graph,
     milestones: opts.milestones ?? loadMilestones(),
     ...(opts.placement
-      ? { placement: { plan: placementPlan(graph, createRng(opts.seed ?? 1234)) } }
+      ? // As the runtime builds it: the HANDS section only with MIDI input.
+        { placement: { plan: placementPlanFor(graph, createRng(opts.seed ?? 1234), source) } }
       : {}),
     ...(opts.notation ? { notation: opts.notation } : {}),
     ...(opts.practiceStep ? { practiceStep: true } : {}),

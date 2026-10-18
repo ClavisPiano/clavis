@@ -946,7 +946,10 @@ export class SessionMachine {
       }
       if (!ready) {
         this.#placementSkippedReading = true;
-        this.#notes.push("Reading was skipped because notation could not load.");
+        const hands = plan.stages.some((s) => s.section === "HANDS");
+        this.#notes.push(
+          `${hands ? "Reading and hands were" : "Reading was"} skipped because notation could not load.`,
+        );
       }
     }
     try {
@@ -966,7 +969,8 @@ export class SessionMachine {
     const plan = this.#d.placement?.plan;
     if (!plan) return;
     let step = nextPlacementStep(plan, this.#placementAttempts);
-    if (step.kind === "item" && step.item.section === "READ" && this.#placementSkippedReading) {
+    // READ and HANDS both draw a score, and they come last, so without notation placement ends.
+    if (step.kind === "item" && step.item.section !== "EAR" && this.#placementSkippedReading) {
       step = { kind: "done", completed: step.completed, skippedStageIds: [] };
     }
     if (step.kind === "done") {
@@ -988,7 +992,7 @@ export class SessionMachine {
       estimatedSec: 0,
     };
     const rng = createRng((d.seed + Math.imul(index + 1, 0x9e3779b1)) >>> 0);
-    // C major throughout (R19). Family A bass reading takes the preferred key as is.
+    // C major throughout (R19). Family A items (bass reading, HANDS) take the preferred key as is.
     const instance = d.generate(planned, {
       rng,
       preferredKey: { tonic: "C", mode: "major" },
@@ -999,7 +1003,8 @@ export class SessionMachine {
       index,
       planned,
       instance,
-      block: item.section === "EAR" ? "ear" : "read",
+      // HANDS items belong to Apply in a session (R26), so they present the same way here.
+      block: item.section === "EAR" ? "ear" : item.section === "READ" ? "read" : "apply",
       phases: ["play"],
       phaseIdx: 0,
       stimulusEndMs: 0,

@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.16",
+  "contentVersion": "2026.10.17",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -393,6 +393,7 @@
       "params": {
         "staves": "grand",
         "bars": [2, 4],
+        "style": "lines",
         "keyOfDay": true
       },
       "mastery": {
@@ -412,6 +413,7 @@
       "params": {
         "staves": "grand",
         "bars": [4, 8],
+        "style": "sight",
         "graded": true
       },
       "mastery": {
@@ -816,7 +818,7 @@
     },
     {
       "id": "sightLine",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 60,
       "awayEligible": false,
       "requires": ["keys", "polyphonic", "notation"]

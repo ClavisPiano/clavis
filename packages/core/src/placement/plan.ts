@@ -1,6 +1,8 @@
 import type { SkillGraph, SkillNode } from "../graph/schema.js";
 import { bassNoteRead } from "../items/bass-note-read.js";
+import { coordTask } from "../items/coord-task.js";
 import { itemId } from "../items/ids.js";
+import { lhPattern } from "../items/lh-pattern.js";
 import type { ItemParams } from "../items/types.js";
 import type { Rng } from "../random.js";
 import { STAGE_SPECS, walk, type StageSpec } from "./evaluate.js";
@@ -8,12 +10,23 @@ import type {
   PlacementAttempt,
   PlacementItem,
   PlacementPlan,
+  PlacementSection,
   PlacementStage,
   PlacementStep,
 } from "./types.js";
 
 const EAR_135_DEGREES = [1, 3, 5] as const;
 const EAR_DIATONIC_DEGREES = [2, 4, 6, 7] as const;
+
+/** HANDS (spec 4 step 3): I-IV-V-I in C (family A), and a fixed melody (the first) over it. */
+const HANDS_PROGRESSION = ["I", "IV", "V", "I"];
+const HANDS_ITEMS = {
+  "hands.lh": { generator: lhPattern, params: { fam: "A", prog: HANDS_PROGRESSION } },
+  "hands.coord": {
+    generator: coordTask,
+    params: { fam: "A", prog: HANDS_PROGRESSION, mel: 1 },
+  },
+} as const satisfies Record<string, { generator: { id: string }; params: ItemParams }>;
 
 function shuffled<T>(items: readonly T[], rng: Rng): T[] {
   const a = [...items];
@@ -86,19 +99,55 @@ function readItems(
   });
 }
 
+/** The one fixed item of a HANDS stage, checked against the node's own item list. */
+function handsItem(spec: StageSpec, node: SkillNode): PlacementItem {
+  if (spec.id !== "hands.lh" && spec.id !== "hands.coord") {
+    throw new RangeError(`no HANDS item for stage ${spec.id}`);
+  }
+  const { generator, params } = HANDS_ITEMS[spec.id];
+  const id = itemId(node.id, params);
+  if (!generator.listItems(node).some((p) => itemId(node.id, p) === id)) {
+    throw new RangeError(`node ${node.id} has no item ${id}`);
+  }
+  return {
+    section: spec.section,
+    stageId: spec.id,
+    nodeId: node.id,
+    generator: spec.id === "hands.lh" ? "lhPattern" : "coordTask",
+    itemId: id,
+    params,
+  };
+}
+
+export interface PlacementPlanOptions {
+  /**
+   * The input hears several notes at once (MIDI, R26). Only then does the plan hold the HANDS
+   * section; without it the hands roots stay available (R9).
+   */
+  polyphonic?: boolean;
+}
+
 /**
  * The ordered placement plan (R19), C major throughout (T3.16 passes C major as `preferredKey`).
  * Items are shuffled within a stage by the seeded RNG. READ positions come from family A: all 4
  * landmarks, then 3 distinct step positions, then 3 distinct skip positions that are neither
- * landmarks nor step positions, so the three nodes test different notes.
+ * landmarks nor step positions, so the three nodes test different notes. With polyphonic input,
+ * HANDS follows (R27): one `lhPattern` item, then one `coordTask` item, both I-IV-V-I in C. They
+ * draw nothing from the RNG, so EAR and READ are the same with or without them.
  */
-export function placementPlan(graph: SkillGraph, rng: Rng): PlacementPlan {
+export function placementPlan(
+  graph: SkillGraph,
+  rng: Rng,
+  opts: PlacementPlanOptions = {},
+): PlacementPlan {
   const stages: PlacementStage[] = [];
   const used = new Set<string>();
   for (const spec of STAGE_SPECS) {
+    if (spec.section === "HANDS" && opts.polyphonic !== true) continue;
     const node = nodeOf(graph, spec);
     let items: PlacementItem[];
-    if (spec.id === "ear.135") items = earItems(spec, node, EAR_135_DEGREES, 3, rng);
+    if (spec.section === "HANDS") items = [handsItem(spec, node)];
+    else if (spec.id === "ear.135") items = earItems(spec, node, EAR_135_DEGREES, 3, rng);
     else if (spec.id === "ear.diatonic") items = earItems(spec, node, EAR_DIATONIC_DEGREES, 2, rng);
     else {
       const pool = familyAPositions(node).filter((p) => !used.has(p));
@@ -117,13 +166,14 @@ export function placementPlan(graph: SkillGraph, rng: Rng): PlacementPlan {
 /**
  * Next thing to present given the attempts so far (in presentation order). Early stops are applied:
  * a section stops after a stage scores available, and the diatonic stage is skipped unless 1-3-5 is
- * mastered. Pure: the same attempts always give the same step.
+ * mastered. Only the plan's sections run (HANDS only when the plan has it). Pure: the same
+ * attempts always give the same step.
  */
 export function nextPlacementStep(
   plan: PlacementPlan,
   attempts: readonly PlacementAttempt[],
 ): PlacementStep {
-  const p = walk(attempts);
+  const p = walk(attempts, new Set<PlacementSection>(plan.stages.map((s) => s.section)));
   if (p.current === null) {
     return { kind: "done", completed: p.completed, skippedStageIds: p.skipped.map((s) => s.id) };
   }

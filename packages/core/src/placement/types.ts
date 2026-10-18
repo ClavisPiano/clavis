@@ -3,14 +3,15 @@ import type { ItemParams } from "../items/types.js";
 /** A placement result for one node (the `placement.completed` event vocabulary, R5). */
 export type PlacementState = "mastered" | "fluent" | "available";
 
-export type PlacementSection = "EAR" | "READ";
+/** HANDS (spec 4 step 3, R27) runs only with polyphonic input (MIDI), so a plan may lack it. */
+export type PlacementSection = "EAR" | "READ" | "HANDS";
 
 /** One item to present. `itemId` is the real generator item id, so T3.16 can generate an instance. */
 export interface PlacementItem {
   section: PlacementSection;
   stageId: string;
   nodeId: string;
-  generator: "degreeId" | "bassNoteRead";
+  generator: "degreeId" | "bassNoteRead" | "lhPattern" | "coordTask";
   itemId: string;
   params: ItemParams;
   /** EAR items: the scale degree. */
@@ -28,6 +29,7 @@ export interface PlacementStage {
 }
 
 export interface PlacementPlan {
+  /** In order: EAR, READ, then HANDS when the input is polyphonic. */
   stages: PlacementStage[];
 }
 

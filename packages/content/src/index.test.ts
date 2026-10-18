@@ -106,7 +106,7 @@ describe("v1 skill graph", () => {
     }
   });
 
-  it("enables the ear M2 nodes and the ten reading nodes", () => {
+  it("enables the ear M2 nodes and the twelve reading nodes", () => {
     const enabled = graph.nodes.filter((n) => isNodeEnabled(n, graph.generators)).map((n) => n.id);
     for (const id of [
       "ear.degrees.major.135",
@@ -118,13 +118,15 @@ describe("v1 skill graph", () => {
       expect(enabled).toContain(id);
     }
     // R18: bassNoteRead covers five nodes, rhythmRead one. T5.10: bassChordRead the bass chords.
-    // The grand staff nodes wait for sightLine.
+    // T5.11: sightLine the two grand-staff nodes.
     expect(enabled.filter((id) => id.startsWith("read.")).sort()).toEqual([
       "read.bass.chords",
       "read.bass.intervals",
       "read.bass.landmarks",
       "read.bass.skips",
       "read.bass.steps",
+      "read.grand.2line",
+      "read.grand.sight",
       "read.minor.accidentals",
       "read.rhythm.basic",
       "read.treble.landmarks",
@@ -235,7 +237,8 @@ describe("v1 skill graph", () => {
         }
       }
     }
-  });
+    // Every item of every enabled generator, twice: this grows with the graph (about 4 s locally).
+  }, 30_000);
 
   it("gives latency-gated nodes a matching target", () => {
     for (const n of graph.nodes) {
