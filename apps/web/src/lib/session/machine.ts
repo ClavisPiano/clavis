@@ -1465,12 +1465,12 @@ export class SessionMachine {
       this.#setState(this.#listeningState(cur, cur.phaseIdx));
       const token = this.#token;
       void this.#enqueue(async () => {
-        const notes = (await this.#d.input.finishTake?.()) ?? [];
+        const notes = await this.#d.input.finishTake?.().catch((): NoteEvent[] => []);
         // The learner left (skip, pause, end) while the recording was being worked out.
         if (token !== this.#token || this.#cur !== cur) return;
         // Overtone ghosts sit far above the playing register: keep what is near the item's keys.
         const range = cur.instance.inputRange;
-        for (const raw of notes) {
+        for (const raw of notes ?? []) {
           if (range && (raw.pitch < range.low || raw.pitch > range.high)) continue;
           const offset = this.#offset(raw.source);
           const note: NoteEvent = { ...raw, onsetMs: raw.onsetMs - offset };

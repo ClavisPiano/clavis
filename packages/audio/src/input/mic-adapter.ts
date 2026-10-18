@@ -60,9 +60,10 @@ export class MicInputAdapter implements InputAdapter {
    */
   async finishTake(): Promise<NoteEvent[]> {
     const transcriber = this.#options.transcriber;
-    const take = await this.#mic.takeAudio?.();
-    if (!transcriber || !take || take.samples.length === 0) return [];
+    if (!transcriber) return [];
     try {
+      const take = await this.#mic.takeAudio?.();
+      if (!take || take.samples.length === 0) return [];
       const notes = await transcriber.transcribe(take.samples, take.sampleRate);
       return toNoteEvents(notes, { startMs: take.startMs });
     } catch {

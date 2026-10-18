@@ -245,6 +245,16 @@ describe("MicInputAdapter.finishTake", () => {
     expect(await b.finishTake()).toEqual([]);
   });
 
+  it("returns nothing when the source fails to hand over the take", async () => {
+    const ok: Transcriber = { transcribe: () => Promise.resolve([]) };
+    const src: MicSourceLike = {
+      ...source(take),
+      takeAudio: () => Promise.reject(new Error("worker gone")),
+    };
+    const mic = new MicInputAdapter({ source: src, getContext: ctx, transcriber: ok });
+    expect(await mic.finishTake()).toEqual([]);
+  });
+
   it("is not a transcribing input when the source cannot record", () => {
     const ok: Transcriber = { transcribe: () => Promise.resolve([]) };
     const mic = new MicInputAdapter({
