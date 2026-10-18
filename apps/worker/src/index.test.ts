@@ -114,7 +114,7 @@ describe("sync routes", () => {
     for (const type of ["text/plain", "application/x-www-form-urlencoded", ""]) {
       const res = await call("/api/sync/push", env, {
         method: "POST",
-        headers: { cookie: `clavis_session=${await tokenFor("u1")}`, "content-type": type },
+        headers: { cookie: `__Host-clavis_session=${await tokenFor("u1")}`, "content-type": type },
         body: JSON.stringify({ events: [ev(1)] }),
       });
       expect(res.status).toBe(415);
@@ -134,10 +134,10 @@ describe("sync routes", () => {
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
-  it("accepts the token from the clavis_session cookie", async () => {
+  it("accepts the token from the session cookie", async () => {
     const { env } = makeEnv();
     const res = await call("/api/sync/pull?after=0", env, {
-      headers: { cookie: `clavis_session=${await tokenFor("u1")}` },
+      headers: { cookie: `__Host-clavis_session=${await tokenFor("u1")}` },
     });
     expect(res.status).toBe(200);
   });
@@ -157,6 +157,21 @@ describe("sync routes", () => {
       headers: { authorization: `Bearer ${fresh}` },
     });
     expect(ok.status).toBe(200);
+  });
+
+  it("requires the exact Origin on a cookie-authenticated push, not a bearer one", async () => {
+    const { env } = makeEnv();
+    const cookie = `__Host-clavis_session=${await tokenFor("u1")}`;
+    const send = (headers: Record<string, string>) =>
+      call("/api/sync/push", env, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ events: [ev(1)] }),
+      });
+    expect((await send({ cookie })).status).toBe(403);
+    expect((await send({ cookie, origin: "https://evil.example" })).status).toBe(403);
+    expect((await send({ cookie, origin: env.EXPECTED_ORIGIN })).status).toBe(200);
+    expect((await send(await bearer("u1"))).status).toBe(200);
   });
 
   it("duplicate push is idempotent", async () => {
@@ -273,6 +288,26 @@ describe("sync routes", () => {
       body,
     });
     expect(res.status).toBe(413);
+  });
+
+  it("returns 413 for a streamed body without content-length that exceeds the cap", async () => {
+    const { env } = makeEnv();
+    const chunk = new TextEncoder().encode("x".repeat(512 * 1024));
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent++ >= 10) controller.close();
+        else controller.enqueue(chunk);
+      },
+    });
+    const res = await call("/api/sync/push", env, {
+      method: "POST",
+      headers: await bearer("u1"),
+      body,
+      duplex: "half",
+    } as RequestInit);
+    expect(res.status).toBe(413);
+    expect(sent).toBeLessThan(10);
   });
 
   it("returns 405 with allow for wrong methods", async () => {

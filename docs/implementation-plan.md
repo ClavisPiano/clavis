@@ -311,6 +311,32 @@ Tasks:
 | T7.2 | **`byEarPhrase` staged loop.** Spec 9 stages with gating, generalising TP.6 beyond known pieces | TP.6 | Machine tests per stage; Playwright |
 | T7.3 | **MusicXML import.** MusicXML and MXL to `ScoreSpec`, phrase splitting and difficulty estimate; stored locally, R2 later | T3.4 | Fixture imports round-trip; phrase splits tile the score |
 
+### M8: Hardening and follow-ups
+
+Work from the October 2026 review of security, reliability and usability. Each task has a GitHub issue. Pull request titles start with the task id, for example `T8.1: Backup nudge`. Rows marked Done were delivered before ids existed, as the pull requests named in the last column.
+
+| ID | Task | Issue | Status |
+|---|---|---|---|
+| T8.1 | **Backup nudge.** When the browser has not granted persistent storage and the learner is not signed in (or the last backup is old), show a periodic "back up your data" prompt on Home. Last backup time is device meta | #215 | Next |
+| T8.2 | **Accessibility.** Gate animations on `prefers-reduced-motion`; give each displayed score a text description that does not reveal read answers; add an axe check to the Playwright smoke tests | #214 | Planned |
+| T8.3 | **Practice cue scaling.** Select due rows in SQL (indexed time bucket) instead of `listAll`; spread sends beyond one run's cap; log dropped cues | #206 | Planned |
+| T8.4 | **Client timestamp clamp.** Events created on a device with a wrong clock never carry a timestamp far in the future, so they cannot sort last forever or be refused by the server | #207 | Planned |
+| T8.5 | **Session expiry.** Sliding renewal when under half the lifetime remains; a visible "sign in to resume sync" prompt when a 401 clears the signed-in hint | #204 | Planned |
+| T8.6 | **Registration abuse cap.** A global hourly cap on `register/verify` kept in D1, and a log line when a rate limiter errors | #209 | Planned |
+| T8.7 | **Recovery codes and passkeys.** Regenerate recovery codes; list, rename and remove passkeys (never the last credential unless codes exist); a low-codes warning | #212 | Planned |
+| T8.8 | **Account deletion and export.** `DELETE /api/me` removes D1 rows, the Durable Object data and R2 objects; a server-side export; `docs/privacy.md` and a Settings link | #213 | Planned |
+| T8.9 | **Review follow-ups.** Share the 1 MiB push cap between core and the web app; surface skipped oversized events in the UI; tests for the blob byte ceiling, the 403 mapping and a paged R2 list | #201, #207 | Planned |
+| T8.10 | Byte-bounded sync pushes and skipping oversized events | #201 | Done (#218) |
+| T8.11 | Service worker navigation timeout | #203 | Done (#219) |
+| T8.12 | Worker hardening: `__Host-` cookie, Origin on cookie push, bounded body reads | #210 | Done (#220) |
+| T8.13 | CI hardening: SHA pins, Dependabot, review prompt | #211 | Done (#221) |
+| T8.14 | Deploy: D1 migrations before `wrangler deploy` (`deploy:ci`) | #202 | Done (#222, #227) |
+| T8.15 | Session epoch, sign out everywhere, revoke on recovery | #208 | Held until the first `deploy:ci` run (#223) |
+| T8.16 | Dev reset and import warn that synced events return | #205 | Done (#224) |
+| T8.17 | Per-user event log and recording quotas | #207 | Done (#225) |
+
+Decisions made for M8: deploys stay on Workers Builds and `main` requires the `check` and `e2e` status checks (no Cloudflare token in GitHub, #202). Pushing to an existing push endpoint keeps replacing its owner (#210). Product questions still open: iPhone support for HANDS without MIDI (#216) and a shorter session after missed days (#217).
+
 ---
 
 ## 6. Open items for you

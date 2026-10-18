@@ -1,5 +1,5 @@
 import { DEFAULT_PULL_LIMIT, PullRequest, PushRequest } from "@clavis/core";
-import { EventLog, type SqlLike } from "./event-log";
+import { EventLog, QuotaExceededError, type SqlLike } from "./event-log";
 
 /** Adapt the Durable Object storage API to `SqlLike`. */
 export function durableSql(storage: DurableObjectStorage): SqlLike {
@@ -32,7 +32,13 @@ export class UserEvents {
       const parsed = PushRequest.safeParse(await request.json().catch(() => null));
       if (!parsed.success) return reply({ error: "invalid_request" }, 400);
       // Date.now is fine here: this is the Worker, not core.
-      return reply(this.log.push(parsed.data.events, Date.now()));
+      try {
+        return reply(this.log.push(parsed.data.events, Date.now()));
+      } catch (error) {
+        // 403 is a verdict on the account, not the batch: the client reports it and keeps pulling.
+        if (error instanceof QuotaExceededError) return reply({ error: "quota_exceeded" }, 403);
+        throw error;
+      }
     }
     if (url.pathname === "/pull" && request.method === "GET") {
       const parsed = PullRequest.safeParse(Object.fromEntries(url.searchParams));

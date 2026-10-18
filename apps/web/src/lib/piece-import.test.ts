@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   IMPORT_ERROR_MESSAGES,
   MAX_IMPORT_BYTES,
+  MAX_IMPORT_EVENT_BYTES,
   PICKUP_MESSAGE,
   buildImportEvent,
   cleanTitle,
@@ -187,6 +188,20 @@ describe("converting a file", () => {
     };
     const r = convertFile("musicxml", text(toMusicXml(shortLast)), { partIndex: 0, staff: 1 });
     expect(r).toEqual({ ok: false, message: PICKUP_MESSAGE });
+  });
+
+  it("refuses a score too large to travel in one sync push", () => {
+    const base = IMPORT_GOLDENS[0]?.expected;
+    const staff = base?.staves[0];
+    if (base === undefined || staff === undefined) throw new Error("no golden");
+    const copies = Math.ceil(MAX_IMPORT_EVENT_BYTES / JSON.stringify(base).length) * 2;
+    const big: ScoreSpec = {
+      ...base,
+      staves: [{ ...staff, measures: Array.from({ length: copies }, () => staff.measures).flat() }],
+    };
+    const r = convertFile("musicxml", text(toMusicXml(big)), { partIndex: 0, staff: 1 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("too much music");
   });
 
   it.each(IMPORT_REJECTS)("maps $name to the importer's message", ({ xml, code }) => {

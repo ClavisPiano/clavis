@@ -10,7 +10,7 @@ Deploys run in Cloudflare Workers Builds, connected to this repository from the 
 | --- | --- |
 | Root directory | `/` (the pnpm workspace root) |
 | Build command | `pnpm --filter @clavis/web build` |
-| Deploy command | `npx wrangler deploy --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
+| Deploy command | `pnpm --filter @clavis/worker run deploy:ci` |
 | Non-production branch deploy command | `npx wrangler versions upload --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
 | Production branch | `main` |
 | Build variable | `NODE_VERSION=22` if `.nvmrc` is not picked up |
@@ -18,7 +18,8 @@ Deploys run in Cloudflare Workers Builds, connected to this repository from the 
 - The Worker name in the dashboard must match `name` in `apps/worker/wrangler.jsonc` (`clavis`), or the build fails.
 - The static assets directory comes from `wrangler.jsonc` (`../web/build`, relative to the config file), so no output directory is set in the dashboard.
 - `/api/health` reports the deployed commit sha as `version`.
-- Every push to `main` deploys, whether or not CI is green. Merge only green PRs.
+- The `deploy:ci` script (`apps/worker/package.json`) runs `wrangler d1 migrations apply clavis --remote` and then `wrangler deploy --var VERSION:$WORKERS_CI_COMMIT_SHA`, so the exact steps live in the repo and the dashboard only names the script. Migrations run first, so a new migration is live before the code that needs it. The step is a no-op when nothing is pending, and a failed migration stops the deploy. Because the old Worker keeps serving until the deploy finishes, write every migration so the previous code still works against it (add columns and tables, never drop or rename in the same release; remove old columns in a later release). The Workers Builds API token needs D1 edit permission (Workers & Pages, clavis, Settings, Build, API token).
+- Every push to `main` deploys, whether or not CI is green. Merge only green PRs. Workers Builds cannot wait for GitHub checks. Gating a deploy on CI means deploying from a GitHub Actions job that runs after CI passes, which needs a Cloudflare API token stored as a repository secret (this repo deliberately holds none today). Until that is decided, protect `main` with the required `check` and `e2e` status checks so only green PRs can be merged.
 - Other branches upload a non-production version with a preview URL, shown on the PR by the Cloudflare GitHub app. Preview URLs must be enabled for the Worker (Settings, Domains & Routes, Preview URLs). Preview versions get no production traffic.
 
 ## Deploy manually
@@ -41,12 +42,13 @@ Local preview of the full stack: `pnpm --filter @clavis/worker dev` (builds the 
   ```
 
   Rotating it signs every user out. For local `wrangler dev`, put `SESSION_SECRET=...` in `apps/worker/.dev.vars` (git-ignored).
+- Each user's event log is capped at 500,000 events and 256 MiB of stored event JSON (`DEFAULT_LIMITS` in `event-log.ts`, tracked in a `stats` row so a push never scans the log). A push past either answers 403 `quota_exceeded` and stores none of the batch; the client reports a sync error and keeps pulling.
 - Each user's events live in a `UserEvents` Durable Object with SQLite storage (binding `USER_EVENTS`). The first deploy applies the `v1` migration in `wrangler.jsonc` (`new_sqlite_classes`). Add new classes or renames as new migration tags, never edit a shipped one.
-- Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `clavis_session` cookie. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
+- Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `__Host-clavis_session` cookie (the older `clavis_session` name is still read). A cookie-authenticated push also needs an `Origin` equal to `EXPECTED_ORIGIN`; bearer callers do not. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
 
 ## Passkey auth (D1)
 
-Passkeys (WebAuthn) are the only login method. Accounts, credentials, recovery code hashes and short-lived challenges live in a D1 database bound as `DB`. Session tokens are the HMAC tokens above, delivered in the `clavis_session` cookie (HttpOnly, Secure, SameSite=Lax, 30 days).
+Passkeys (WebAuthn) are the only login method. Accounts, credentials, recovery code hashes and short-lived challenges live in a D1 database bound as `DB`. Session tokens are the HMAC tokens above, delivered in the `__Host-clavis_session` cookie (HttpOnly, Secure, SameSite=Lax, Path=/, no Domain, 30 days). Sign out also clears the pre-prefix `clavis_session` cookie.
 
 One-time setup:
 
@@ -103,7 +105,7 @@ pnpm --filter @clavis/worker exec wrangler r2 bucket create clavis-blobs
 
 - `PUT|GET|DELETE /api/blobs/:name`. Auth is the same as sync. `PUT` and `DELETE` also need an `Origin` header equal to `EXPECTED_ORIGIN`. The stored key is always `<userId>/<name>` with the user id from the token. `name` matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` and has no `..`.
 - `PUT` accepts `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/wav` and `audio/mpeg`, up to 20 MiB (413 above that, 415 for other types). `GET` returns the stored content type with `cache-control: private`.
-- There is no server-side listing or quota yet. The client keeps its own copies under a size cap (200 MB) and uploads oldest first.
+- Per-user ceilings: 200 objects and 500 MiB in total (`MAX_USER_BLOBS`, `MAX_USER_BLOB_BYTES`). A `PUT` past either answers 403 `quota_exceeded`; replacing an existing name does not count toward the object count (a larger replacement can still hit the byte ceiling). The checks are not atomic across concurrent uploads, so the ceilings are approximate. The client keeps its own copies under a size cap (200 MB) and uploads oldest first. There is no listing endpoint.
 
 ## Finding the workers.dev URL
 

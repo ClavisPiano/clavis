@@ -42,6 +42,7 @@ Type-only imports are detected by dependency-cruiser (`tsPreCompilationDeps: tru
 - Use zod for schemas at boundaries (events, content, storage, network).
 - Event schemas: never edit a shipped schema version. Add a new version and an upcaster.
 - Pin exact dependency versions (no `^` or `~`). Look up current versions with `pnpm view <pkg> version`.
+- A new or upgraded dependency that ships to users also goes in `apps/web/src/lib/about/third-party.json` (shown on the About screen). Run `pnpm --filter @clavis/web notices` and commit the result; a test enforces it.
 - Prose style: avoid em dashes in docs and comments.
 
 ## Testing

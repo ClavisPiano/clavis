@@ -7,8 +7,11 @@ import { LearnerStateService } from "../state/service.js";
 import { makeSnapshot } from "../state/snapshot.js";
 import { ctx } from "../state/test-helpers.js";
 import {
+  MAX_PUSH_BYTES,
   SyncAuthError,
   SyncRejectedError,
+  chunkByBytes,
+  utf8Length,
   metaCursorStore,
   syncOnce,
   type SyncTransport,
@@ -124,7 +127,7 @@ class Client {
     return e;
   }
 
-  sync(opts: { pushBatch?: number; pullLimit?: number } = {}) {
+  sync(opts: { pushBatch?: number; pullLimit?: number; maxPushBytes?: number } = {}) {
     return syncOnce({
       store: this.store,
       learner: this.service,
@@ -315,5 +318,104 @@ describe("syncOnce", () => {
       }),
       { numRuns: 60 },
     );
+  });
+});
+
+describe("byte-bounded pushes", () => {
+  const sized = (n: number): LearningEvent[] =>
+    Array.from({ length: n }, (_, i) => ({
+      id: encodeTime(T + i) + "A" + String(i).padStart(15, "0"),
+      deviceId: "dev-A",
+      at: T + i,
+      type: "settings.changed",
+      v: 2,
+      patch: { budgetSec: 700 + i },
+    }));
+  const bytes = (e: unknown): number => utf8Length(JSON.stringify(e));
+
+  it("chunkByBytes keeps order, loses nothing and respects the cap (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 40 }),
+        fc.integer({ min: 200, max: 3000 }),
+        (n, cap) => {
+          const events = sized(n);
+          const chunks = chunkByBytes(events, cap);
+          expect(chunks.flat()).toEqual(events);
+          for (const c of chunks) {
+            if (c.length > 1) expect(bytes(c)).toBeLessThanOrEqual(cap);
+          }
+        },
+      ),
+    );
+  });
+
+  it("gives an event larger than the cap a chunk of its own", () => {
+    const events = sized(3);
+    const chunks = chunkByBytes(events, 10);
+    expect(chunks.map((c) => c.length)).toEqual([1, 1, 1]);
+  });
+
+  it("counts multi-byte characters as bytes", () => {
+    expect(utf8Length("aé€😀")).toBe(1 + 2 + 3 + 4);
+  });
+
+  it("splits a large batch into several pushes under the byte cap", async () => {
+    const server = new FakeServer();
+    const a = await new Client("A", server).init();
+    await a.service.append(sized(30));
+    const r = await a.sync({ maxPushBytes: 1000 });
+    expect(r.outcome).toBe("ok");
+    expect(server.rows.length).toBe(30);
+    expect(server.pushCalls).toBeGreaterThan(3);
+    expect(MAX_PUSH_BYTES).toBeLessThan(2 * 1024 * 1024);
+  });
+
+  it("halves a chunk the server answers 413 for", async () => {
+    const server = new FakeServer();
+    const a = await new Client("A", server).init();
+    await a.service.append(sized(8));
+    const r = await syncOnce({
+      store: a.store,
+      learner: a.service,
+      cursorStore: metaCursorStore(a.store),
+      transport: {
+        push: (req) =>
+          req.events.length > 2
+            ? Promise.reject(new SyncRejectedError(413))
+            : Promise.resolve(server.push(req)),
+        pull: (args) => Promise.resolve(server.pull(args)),
+      },
+    });
+    expect(r.outcome).toBe("ok");
+    expect(server.rows.length).toBe(8);
+    expect(await a.store.listUnsynced()).toEqual([]);
+  });
+
+  it("skips a single event the server refuses with 413 and still pushes newer ones", async () => {
+    const server = new FakeServer();
+    const a = await new Client("A", server).init();
+    const all = sized(4);
+    const big = all[0];
+    await a.service.append(all);
+    const seen: string[] = [];
+    const r = await syncOnce({
+      store: a.store,
+      learner: a.service,
+      cursorStore: metaCursorStore(a.store),
+      onOversized: (e) => seen.push(e.id),
+      transport: {
+        push: (req) =>
+          req.events.some((e) => e.id === big?.id)
+            ? Promise.reject(new SyncRejectedError(413))
+            : Promise.resolve(server.push(req)),
+        pull: (args) => Promise.resolve(server.pull(args)),
+      },
+    });
+    expect(r.outcome).toBe("ok");
+    expect(r.oversized).toBe(1);
+    expect(seen).toEqual([big?.id]);
+    expect(server.rows.length).toBe(3);
+    expect((await a.store.listUnsynced()).map((e) => e.id)).toEqual([big?.id]);
   });
 });

@@ -26,6 +26,9 @@ export function getSyncController(): SyncController {
         learner: r.service,
         transport: createFetchTransport(),
         cursorStore: metaCursorStore(r.store),
+        onOversized: (event) => {
+          console.warn(`Event ${event.id} (${event.type}) is too large to sync and was skipped`);
+        },
         onRejected: (batch, error) => {
           console.error(`Sync batch of ${String(batch.length)} events was rejected`, error, batch);
         },

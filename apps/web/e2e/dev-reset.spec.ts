@@ -47,3 +47,25 @@ test("reset everything without a backup leaves a fresh install", async ({ page }
   await expect(page.getByTestId("new-items-per-day")).not.toHaveValue("7");
   expect(downloaded).toBe(false);
 });
+
+test("reset warns that synced events come back when signed in", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("clavis.signedIn", "1");
+  });
+  await page.route("**/api/sync/pull**", (route) =>
+    route.fulfill({ json: { events: [], lastSeq: 0, hasMore: false } }),
+  );
+  await page.route("**/api/sync/push", (route) =>
+    route.fulfill({ json: { accepted: 0, duplicates: 0, lastSeq: 0 } }),
+  );
+  await page.goto("/dev/reset");
+  await expect(page.getByTestId("synced-notice")).toContainText("stay on the server");
+  await page.goto("/dev/state");
+  await expect(page.getByTestId("event-count")).toBeVisible();
+});
+
+test("reset shows no sync warning when signed out", async ({ page }) => {
+  await page.goto("/dev/reset");
+  await expect(page.getByTestId("reset-progress")).toBeVisible();
+  await expect(page.getByTestId("synced-notice")).toHaveCount(0);
+});

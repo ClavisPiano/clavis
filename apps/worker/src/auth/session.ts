@@ -96,9 +96,12 @@ export async function verifySession(
   }
 }
 
-const COOKIE_NAME = "clavis_session";
+/** `__Host-` makes browsers accept the cookie only if Secure, Path=/ and without a Domain. */
+export const COOKIE_NAME = "__Host-clavis_session";
+/** The name used before the prefix. Still read so signed-in users are not logged out. */
+export const LEGACY_COOKIE_NAME = "clavis_session";
 
-/** Token from `Authorization: Bearer` or the `clavis_session` cookie, or null. */
+/** Token from `Authorization: Bearer` or the session cookie (new or legacy name), or null. */
 export function extractToken(request: Request): string | null {
   const auth = request.headers.get("authorization");
   if (auth) {
@@ -107,10 +110,15 @@ export function extractToken(request: Request): string | null {
   }
   const cookie = request.headers.get("cookie");
   if (cookie) {
+    let legacy: string | null = null;
     for (const part of cookie.split(";")) {
       const eq = part.indexOf("=");
-      if (eq > 0 && part.slice(0, eq).trim() === COOKIE_NAME) return part.slice(eq + 1).trim();
+      if (eq <= 0) continue;
+      const name = part.slice(0, eq).trim();
+      if (name === COOKIE_NAME) return part.slice(eq + 1).trim();
+      if (name === LEGACY_COOKIE_NAME) legacy = part.slice(eq + 1).trim();
     }
+    if (legacy) return legacy;
   }
   return null;
 }
