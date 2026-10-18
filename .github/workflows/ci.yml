@@ -45,7 +45,7 @@ jobs:
       code: ${{ steps.plan.outputs.code }}
       projects: ${{ steps.plan.outputs.projects }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Plan
         id: plan
         env:
@@ -91,7 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           lfs: true
       - uses: ./.github/actions/setup
@@ -103,7 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup
       - run: pnpm --filter @clavis/web build
       # Check the notation (Verovio) chunk against its baseline.
@@ -125,9 +125,9 @@ jobs:
       # Mobile Safari is the WebKit engine with a phone-sized viewport, so it needs WebKit.
       BROWSER: ${{ matrix.project == 'chromium' && 'chromium' || 'webkit' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ env.BROWSER }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -136,7 +136,7 @@ jobs:
       - run: >-
           pnpm --filter @clavis/web exec playwright test
           --project="${{ matrix.project }}" --shard=${{ matrix.shard }}/2
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
           name: playwright-report-${{ env.BROWSER }}-${{ strategy.job-index }}

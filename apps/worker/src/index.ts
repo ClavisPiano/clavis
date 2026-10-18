@@ -3,7 +3,7 @@ import { authenticate } from "./auth/guard";
 import { handleAuth } from "./auth/handlers";
 import { handleBlob } from "./blobs";
 import type { Env } from "./env";
-import { API_HEADERS, json, methodNotAllowed } from "./http";
+import { API_HEADERS, json, methodNotAllowed, readLimited } from "./http";
 import { handlePush as handlePushApi } from "./push/handlers";
 import { runPracticeCues } from "./push/scheduled";
 
@@ -39,10 +39,18 @@ async function handlePush(request: Request, env: Env): Promise<Response> {
   if (!/^application\/json\s*(;|$)/i.test(type)) {
     return json({ error: "unsupported_media_type" }, 415);
   }
+  // Cookies are sent by browsers on cross-site requests, so a cookie-authenticated write also needs
+  // the exact Origin (bearer callers are not exposed to CSRF).
+  if (
+    !request.headers.has("authorization") &&
+    request.headers.get("origin") !== env.EXPECTED_ORIGIN
+  ) {
+    return json({ error: "forbidden" }, 403);
+  }
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > MAX_BODY_BYTES) return json({ error: "payload_too_large" }, 413);
-  const raw = await request.arrayBuffer();
-  if (raw.byteLength > MAX_BODY_BYTES) return json({ error: "payload_too_large" }, 413);
+  const raw = await readLimited(request, MAX_BODY_BYTES);
+  if (raw === null) return json({ error: "payload_too_large" }, 413);
   let body: unknown;
   try {
     body = JSON.parse(new TextDecoder().decode(raw));
