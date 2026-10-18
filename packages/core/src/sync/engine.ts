@@ -82,6 +82,52 @@ export interface SyncResult {
   skipped: number;
   /** Set for `error` and `offline`. */
   detail?: string;
+  /** Events the server cannot take because they are too large alone. They stay unsynced. */
+  oversized?: number;
+}
+
+/**
+ * Largest serialized push body the client builds. The Worker refuses 2 MiB, so this leaves room for
+ * the envelope and for multi-byte characters counted as UTF-16 units.
+ */
+export const MAX_PUSH_BYTES = 1024 * 1024;
+
+/** UTF-8 length of a string (core has no TextEncoder typing). */
+export function utf8Length(text: string): number {
+  let bytes = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
+}
+
+const eventBytes = (event: LearningEvent): number => utf8Length(JSON.stringify(event));
+
+/**
+ * Split events (in order) into chunks whose serialized JSON array stays within `maxBytes`. An event
+ * larger than the cap on its own still gets a chunk of its own: the server decides whether it fits
+ * (a 413 then makes `pushChunk` skip it). Keep in step with `MAX_IMPORT_EVENT_BYTES` in the web app.
+ */
+export function chunkByBytes(
+  events: readonly LearningEvent[],
+  maxBytes: number = MAX_PUSH_BYTES,
+): LearningEvent[][] {
+  const chunks: LearningEvent[][] = [];
+  let current: LearningEvent[] = [];
+  let size = 2; // the surrounding [ ]
+  for (const event of events) {
+    const bytes = eventBytes(event) + (current.length > 0 ? 1 : 0); // comma between items
+    if (current.length > 0 && size + bytes > maxBytes) {
+      chunks.push(current);
+      current = [];
+      size = 2;
+    }
+    current.push(event);
+    size += bytes;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
 }
 
 export interface SyncDeps {
@@ -90,9 +136,13 @@ export interface SyncDeps {
   transport: SyncTransport;
   cursorStore: SyncCursorStore;
   pushBatch?: number;
+  /** Cap on a push body in bytes. Defaults to `MAX_PUSH_BYTES`. */
+  maxPushBytes?: number;
   pullLimit?: number;
   /** Called with the rejected batch when the server refuses it (diagnostics). */
   onRejected?: (events: LearningEvent[], error: SyncRejectedError) => void;
+  /** Called with an event too large to push, which is skipped so it cannot block newer events. */
+  onOversized?: (event: LearningEvent) => void;
 }
 
 const describe = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -125,18 +175,46 @@ export async function syncOnce(deps: SyncDeps): Promise<SyncResult> {
 
 async function pushAll(deps: SyncDeps, result: SyncResult): Promise<void> {
   const size = Math.min(deps.pushBatch ?? MAX_PUSH_BATCH, MAX_PUSH_BATCH);
+  // Events the server refused even alone. They stay unsynced but are passed over for this run.
+  const skipped = new Set<string>();
   for (;;) {
-    const batch = await deps.store.listUnsynced(size);
+    const unsynced = await deps.store.listUnsynced(size + skipped.size);
+    const batch = unsynced.filter((e) => !skipped.has(e.id)).slice(0, size);
     if (batch.length === 0) return;
-    try {
-      await deps.transport.push({ events: batch });
-    } catch (error) {
-      if (error instanceof SyncRejectedError) deps.onRejected?.(batch, error);
-      throw error;
+    for (const chunk of chunkByBytes(batch, deps.maxPushBytes)) {
+      await pushChunk(deps, chunk, result, skipped);
     }
-    await deps.store.markSynced(batch.map((e) => e.id));
-    result.pushed += batch.length;
   }
+}
+
+/** Push one chunk. A 413 halves it; a single event that still gets 413 is skipped, not retried. */
+async function pushChunk(
+  deps: SyncDeps,
+  chunk: LearningEvent[],
+  result: SyncResult,
+  skipped: Set<string>,
+): Promise<void> {
+  try {
+    await deps.transport.push({ events: chunk });
+  } catch (error) {
+    if (error instanceof SyncRejectedError && error.status === 413) {
+      const [only] = chunk;
+      if (only && chunk.length === 1) {
+        skipped.add(only.id);
+        result.oversized = skipped.size;
+        deps.onOversized?.(only);
+        return;
+      }
+      const mid = Math.ceil(chunk.length / 2);
+      await pushChunk(deps, chunk.slice(0, mid), result, skipped);
+      await pushChunk(deps, chunk.slice(mid), result, skipped);
+      return;
+    }
+    if (error instanceof SyncRejectedError) deps.onRejected?.(chunk, error);
+    throw error;
+  }
+  await deps.store.markSynced(chunk.map((e) => e.id));
+  result.pushed += chunk.length;
 }
 
 async function pullAll(deps: SyncDeps, result: SyncResult): Promise<void> {
