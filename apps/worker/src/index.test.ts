@@ -142,6 +142,23 @@ describe("sync routes", () => {
     expect(res.status).toBe(200);
   });
 
+  it("rejects a token for a user that does not exist or whose epoch moved on", async () => {
+    const { env } = makeEnv();
+    const ghost = await call("/api/sync/pull?after=0", env, { headers: await bearer("nobody") });
+    expect(ghost.status).toBe(401);
+    const stale = await signSession({ sub: "u1", exp: future(), ep: 0 }, SECRET);
+    await env.DB.prepare("UPDATE users SET session_epoch = 1 WHERE id = ?").bind("u1").run();
+    const res = await call("/api/sync/pull?after=0", env, {
+      headers: { authorization: `Bearer ${stale}` },
+    });
+    expect(res.status).toBe(401);
+    const fresh = await signSession({ sub: "u1", exp: future(), ep: 1 }, SECRET);
+    const ok = await call("/api/sync/pull?after=0", env, {
+      headers: { authorization: `Bearer ${fresh}` },
+    });
+    expect(ok.status).toBe(200);
+  });
+
   it("duplicate push is idempotent", async () => {
     const { env } = makeEnv();
     await push(env, "u1", [ev(1), ev(2)]);

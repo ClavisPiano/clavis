@@ -51,11 +51,12 @@ function sessionCookie(token: string, maxAge: number): string {
 async function withSession(
   env: Env,
   userId: string,
+  epoch: number,
   body: unknown,
   status = 200,
 ): Promise<Response> {
   const exp = Math.floor(nowMs(env) / 1000) + SESSION_TTL_SECONDS;
-  const token = await signSession({ sub: userId, exp }, env.SESSION_SECRET);
+  const token = await signSession({ sub: userId, exp, ep: epoch }, env.SESSION_SECRET);
   return json(body, status, { "set-cookie": sessionCookie(token, SESSION_TTL_SECONDS) });
 }
 
@@ -154,7 +155,7 @@ async function registerVerify(request: Request, env: Env, repo: AuthRepo): Promi
     // Most likely the credential id is already registered.
     return json({ error: "credential_exists" }, 409);
   }
-  return withSession(env, stored.userId, { userId: stored.userId, recoveryCodes: codes });
+  return withSession(env, stored.userId, 0, { userId: stored.userId, recoveryCodes: codes });
 }
 
 async function verifyRegistration(env: Env, response: unknown, expectedChallenge: string) {
@@ -212,7 +213,9 @@ async function loginVerify(request: Request, env: Env, repo: AuthRepo): Promise<
     return json({ error: "verification_failed" }, 401);
   }
   await repo.touchCredential(credential.id, newCounter, nowMs(env));
-  return withSession(env, credential.userId, { userId: credential.userId });
+  const epoch = await repo.sessionEpoch(credential.userId);
+  if (epoch === null) return json({ error: "verification_failed" }, 401);
+  return withSession(env, credential.userId, epoch, { userId: credential.userId });
 }
 
 async function recovery(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
@@ -220,14 +223,16 @@ async function recovery(request: Request, env: Env, repo: AuthRepo): Promise<Res
   if (!body) return invalidRequest();
   const userId = await repo.useRecoveryCode(await hashCode(body.code), nowMs(env));
   if (!userId) return json({ error: "invalid_code" }, 401);
+  // A recovery code means the passkey may be lost or stolen: end every other session first.
+  const epoch = await repo.bumpSessionEpoch(userId);
+  if (epoch === null) return json({ error: "invalid_code" }, 401);
   const left = await repo.recoveryCodesLeft(userId);
-  return withSession(env, userId, { userId, recoveryCodesLeft: left });
+  return withSession(env, userId, epoch, { userId, recoveryCodesLeft: left });
 }
 
 async function addOptions(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
   const userId = await authenticate(request, env);
-  if (userId === null || !(await repo.userExists(userId)))
-    return json({ error: "unauthorized" }, 401);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
   if ((await readBody(request, NoBody)) === null) return invalidRequest();
   const existing = await repo.listCredentials(userId);
   const options = await registrationOptions(
@@ -241,8 +246,7 @@ async function addOptions(request: Request, env: Env, repo: AuthRepo): Promise<R
 
 async function addVerify(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
   const userId = await authenticate(request, env);
-  if (userId === null || !(await repo.userExists(userId)))
-    return json({ error: "unauthorized" }, 401);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
   const body = await readBody(request, VerifyBody);
   if (!body) return invalidRequest();
   const stored = await repo.consumeChallenge(body.challengeId, "add", nowMs(env));
@@ -272,10 +276,18 @@ function logout(): Response {
   return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
 }
 
+/** Sign out everywhere: bump the epoch so every token issued so far stops working. */
+async function logoutAll(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
+  const userId = await authenticate(request, env);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
+  if ((await readBody(request, NoBody)) === null) return invalidRequest();
+  await repo.bumpSessionEpoch(userId);
+  return logout();
+}
+
 async function me(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
   const userId = await authenticate(request, env);
-  if (userId === null || !(await repo.userExists(userId)))
-    return json({ error: "unauthorized" }, 401);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
   const [passkeys, recoveryCodesLeft] = await Promise.all([
     repo.listCredentials(userId),
     repo.recoveryCodesLeft(userId),
@@ -294,6 +306,7 @@ const POST_ROUTES: Record<string, PostHandler> = {
   "/api/auth/passkeys/options": addOptions,
   "/api/auth/passkeys/verify": addVerify,
   "/api/auth/logout": () => Promise.resolve(logout()),
+  "/api/auth/logout/all": logoutAll,
 };
 
 /** Seconds a client should wait after a 429; the limiters count over 60 s windows. */

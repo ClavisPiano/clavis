@@ -7,6 +7,8 @@ export interface SessionClaims {
   sub: string;
   /** Expiry as unix seconds. */
   exp: number;
+  /** User session epoch the token was issued under. Absent on tokens from before epochs (0). */
+  ep?: number;
 }
 
 const encoder = new TextEncoder();
@@ -43,7 +45,9 @@ function hmacKey(secret: string, usage: "sign" | "verify"): Promise<CryptoKey> {
 }
 
 export async function signSession(claims: SessionClaims, secret: string): Promise<string> {
-  const payload = toBase64Url(encoder.encode(JSON.stringify({ sub: claims.sub, exp: claims.exp })));
+  const payload = toBase64Url(
+    encoder.encode(JSON.stringify({ sub: claims.sub, exp: claims.exp, ep: claims.ep ?? 0 })),
+  );
   const sig = await crypto.subtle.sign(
     "HMAC",
     await hmacKey(secret, "sign"),
@@ -79,12 +83,14 @@ export async function verifySession(
     if (!bytes) return null;
     const claims: unknown = JSON.parse(new TextDecoder().decode(bytes));
     if (typeof claims !== "object" || claims === null) return null;
-    const { sub, exp } = claims as Record<string, unknown>;
+    const { sub, exp, ep } = claims as Record<string, unknown>;
     if (typeof sub !== "string" || sub === "" || typeof exp !== "number" || !Number.isFinite(exp)) {
       return null;
     }
     if (exp * 1000 <= nowMs) return null;
-    return { sub, exp };
+    const epoch = ep === undefined ? 0 : ep;
+    if (typeof epoch !== "number" || !Number.isInteger(epoch) || epoch < 0) return null;
+    return { sub, exp, ep: epoch };
   } catch {
     return null;
   }

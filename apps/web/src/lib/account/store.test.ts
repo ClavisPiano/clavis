@@ -18,6 +18,7 @@ function setup(overrides: Partial<AuthApi> = {}, ceremonies: Partial<Ceremonies>
     passkeyOptions: vi.fn(() => Promise.resolve({ challengeId: "c3", options: {} as never })),
     passkeyVerify: vi.fn(() => Promise.resolve({ userId: "u1", passkeys: 2 })),
     logout: vi.fn(() => Promise.resolve()),
+    logoutAll: vi.fn(() => Promise.resolve()),
     ...overrides,
   };
   const cer: Ceremonies = {
@@ -200,6 +201,16 @@ describe("account store", () => {
     await t.store.refresh();
     expect(await t.store.signOut()).toBe(true);
     expect(t.api.logout).toHaveBeenCalledOnce();
+    expect(t.store.snapshot.account).toEqual({ kind: "anonymous" });
+    expect(t.onSignedOut).toHaveBeenCalledOnce();
+  });
+
+  it("signs out everywhere through the logoutAll call", async () => {
+    const t = setup({ me: vi.fn(() => Promise.resolve(me)) });
+    await t.store.refresh();
+    expect(await t.store.signOutEverywhere()).toBe(true);
+    expect(t.api.logoutAll).toHaveBeenCalledOnce();
+    expect(t.api.logout).not.toHaveBeenCalled();
     expect(t.store.snapshot.account).toEqual({ kind: "anonymous" });
     expect(t.onSignedOut).toHaveBeenCalledOnce();
   });

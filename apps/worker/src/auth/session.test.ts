@@ -7,7 +7,14 @@ const claims = { sub: "user-1", exp: NOW / 1000 + 60 };
 describe("session tokens", () => {
   it("round-trips", async () => {
     const token = await signSession(claims, "s1");
-    expect(await verifySession(token, "s1", NOW)).toEqual(claims);
+    expect(await verifySession(token, "s1", NOW)).toEqual({ ...claims, ep: 0 });
+  });
+
+  it("carries the session epoch, and rejects a malformed one", async () => {
+    const token = await signSession({ ...claims, ep: 3 }, "s1");
+    expect((await verifySession(token, "s1", NOW))?.ep).toBe(3);
+    const bad = await signSession({ ...claims, ep: -1 }, "s1");
+    expect(await verifySession(bad, "s1", NOW)).toBeNull();
   });
 
   it("rejects a wrong secret, tampering, expiry and garbage", async () => {

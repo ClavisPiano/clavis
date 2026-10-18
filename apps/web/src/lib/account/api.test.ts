@@ -101,6 +101,8 @@ describe("auth API request shapes", () => {
     expect(JSON.parse(bodyOf(calls[0]?.init.body))).toEqual({ code: "AAAA-BBBB" });
     expect(calls[1]?.url).toBe("/api/auth/logout");
     expect(calls[1]?.init.credentials).toBe("include");
+    await api.logoutAll();
+    expect(calls[2]?.url).toBe("/api/auth/logout/all");
   });
 });
 
