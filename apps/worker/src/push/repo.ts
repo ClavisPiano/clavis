@@ -1,4 +1,5 @@
 import type { AsyncSql, Statement } from "../auth/sql";
+import { CUE_WINDOW_MIN, cueUtcMinute, utcMinuteOfDay } from "./cue-time";
 
 /**
  * Devices one user may hold a cue on. Each cron run sends at most `MAX_SENDS_PER_RUN` pushes, so
@@ -37,7 +38,12 @@ export interface PushRepo {
   deleteOwned(userId: string, endpoint: string): Promise<boolean>;
   /** Record that the user practised on `day` (applies to all their devices, never moves back). */
   markPractised(userId: string, day: string): Promise<void>;
-  listAll(): Promise<PushSubscriptionRow[]>;
+  /**
+   * Rows whose cue time is within the due window of `nowMs`, plus any row stored without its UTC
+   * cue minute (written before the column existed), which is given one first. A superset of the
+   * due cues: weekday, sent and practised days are still checked by `isDue`.
+   */
+  listNearDue(nowMs: number): Promise<PushSubscriptionRow[]>;
   /** Apply the outcome of a cron run atomically: set sent days and delete dead endpoints. */
   applySendResults(sent: { endpoint: string; day: string }[], gone: string[]): Promise<void>;
 }
@@ -61,8 +67,9 @@ export function createPushRepo(sql: AsyncSql): PushRepo {
       await sql.batch([
         {
           query: `INSERT INTO push_subscriptions
-             (endpoint, user_id, p256dh, auth, time_local, weekdays, tz_offset_min, habit, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             (endpoint, user_id, p256dh, auth, time_local, weekdays, tz_offset_min, habit, created_at,
+              cue_utc_min)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (endpoint) DO UPDATE SET
              last_sent_day = CASE WHEN user_id = excluded.user_id THEN last_sent_day END,
              last_practised_day = CASE WHEN user_id = excluded.user_id THEN last_practised_day END,
@@ -72,7 +79,8 @@ export function createPushRepo(sql: AsyncSql): PushRepo {
              time_local = excluded.time_local,
              weekdays = excluded.weekdays,
              tz_offset_min = excluded.tz_offset_min,
-             habit = excluded.habit`,
+             habit = excluded.habit,
+             cue_utc_min = excluded.cue_utc_min`,
           bindings: [
             sub.endpoint,
             sub.userId,
@@ -83,6 +91,7 @@ export function createPushRepo(sql: AsyncSql): PushRepo {
             sub.tzOffsetMin,
             sub.habit,
             nowMs,
+            cueUtcMinute(sub.timeLocal, sub.tzOffsetMin),
           ],
         },
         {
@@ -122,8 +131,23 @@ export function createPushRepo(sql: AsyncSql): PushRepo {
       );
     },
 
-    async listAll() {
-      const rows = await sql.all<Raw>("SELECT * FROM push_subscriptions");
+    async listNearDue(nowMs) {
+      // Give rows from before the column existed their UTC cue minute, once.
+      await sql.run(
+        `UPDATE push_subscriptions SET cue_utc_min = (
+           (
+             CAST(substr(time_local, 1, 2) AS INTEGER) * 60 + CAST(substr(time_local, 4, 2) AS INTEGER)
+             - tz_offset_min
+           ) % 1440 + 1440
+         ) % 1440
+         WHERE cue_utc_min IS NULL AND time_local GLOB '[0-2][0-9]:[0-5][0-9]'`,
+      );
+      const rows = await sql.all<Raw>(
+        `SELECT * FROM push_subscriptions
+         WHERE cue_utc_min IS NULL OR ((? - cue_utc_min + 1440) % 1440) < ?`,
+        utcMinuteOfDay(nowMs),
+        CUE_WINDOW_MIN,
+      );
       return rows.map((r) => ({
         endpoint: r.endpoint,
         userId: r.user_id,

@@ -5,6 +5,8 @@ import type { Env } from "./env";
 import auth from "../migrations/0001_auth.sql?raw";
 import push from "../migrations/0002_push.sql?raw";
 import epoch from "../migrations/0003_session_epoch.sql?raw";
+import cueUtc from "../migrations/0004_push_cue_utc.sql?raw";
+import usersCreatedAt from "../migrations/0005_users_created_at.sql?raw";
 
 /** SQLite wants Uint8Array for BLOBs; D1 binds ArrayBuffer. */
 const toSqliteValue = (v: unknown): unknown => (v instanceof ArrayBuffer ? new Uint8Array(v) : v);
@@ -17,6 +19,8 @@ export function fakeD1(db: DatabaseSync = new DatabaseSync(":memory:")): D1Datab
   db.exec(auth);
   db.exec(push);
   db.exec(epoch);
+  db.exec(cueUtc);
+  db.exec(usersCreatedAt);
   const prepare = (query: string) => ({
     bind: (...bindings: unknown[]) => {
       const values = bindings.map(toSqliteValue);

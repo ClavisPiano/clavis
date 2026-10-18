@@ -120,7 +120,7 @@ export default {
       runPracticeCues(env, { nowMs: controller.scheduledTime }).then(
         (r) => {
           console.log(
-            `practice cue: due=${String(r.due)} sent=${String(r.sent)} pruned=${String(r.pruned)} failed=${String(r.failed)}`,
+            `practice cue: due=${String(r.due)} sent=${String(r.sent)} pruned=${String(r.pruned)} failed=${String(r.failed)} deferred=${String(r.deferred)} dropped=${String(r.dropped)}`,
           );
         },
         (e: unknown) => {
