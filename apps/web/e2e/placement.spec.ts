@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { stubMidi } from "./midi-helpers";
 import { answerCurrentPhase, storedEventTypes } from "./session-helpers";
 
 /*
@@ -173,5 +174,115 @@ test.describe("placement", () => {
     await expect(page.getByTestId("placement-offer")).toHaveCount(0);
     // Skipping stores no event.
     expect(await storedEventTypes(page)).toEqual(["device.registered"]);
+  });
+});
+
+/*
+ * The HANDS section (T5.9, R27) with a stubbed Web MIDI keyboard chosen in settings (the stored
+ * input choice). EAR and READ are answered "I don't know", so they stop at their first stage; then
+ * the left-hand chords and the two-hand item are played in real time at the written 60 bpm.
+ */
+
+interface Key {
+  midi: number;
+  onsetBeats: number;
+  durationBeats: number;
+}
+
+/** Every key the current HANDS item asks for, with the tempo, read from the test hook. */
+async function currentKeys(page: Page): Promise<{ kind: string; keys: Key[]; tempoBpm: number }> {
+  return await page.evaluate(() => {
+    const play = window.__clavisSession?.expected?.play;
+    if (play?.kind === "chordLine") {
+      const keys = play.chords.flatMap((c) =>
+        c.midi.map((midi) => ({ midi, onsetBeats: c.onsetBeats, durationBeats: c.durationBeats })),
+      );
+      return { kind: play.kind, keys, tempoBpm: play.tempoBpm };
+    }
+    if (play?.kind === "performance") {
+      return { kind: play.kind, keys: play.notes, tempoBpm: play.tempoBpm };
+    }
+    throw new Error("expected a HANDS item");
+  });
+}
+
+/** Play keys in real time, scheduled in the page: down at the onset, up before the written end. */
+async function performKeys(page: Page, keys: Key[], tempoBpm: number): Promise<void> {
+  await page.waitForFunction(() => window.__clavisSession?.phase === "listening-play");
+  await page.evaluate(
+    async ({ keys, beatMs }) => {
+      let end = 0;
+      for (const k of keys) {
+        const down = 50 + k.onsetBeats * beatMs;
+        const up = down + k.durationBeats * beatMs * 0.85;
+        end = Math.max(end, up);
+        setTimeout(() => window.__fakeMidi?.send("kb-1", [0x90, k.midi, 90]), down);
+        setTimeout(() => window.__fakeMidi?.send("kb-1", [0x80, k.midi, 0]), up);
+      }
+      await new Promise((resolve) => setTimeout(resolve, end + 50));
+    },
+    { keys, beatMs: 60_000 / tempoBpm },
+  );
+}
+
+test.describe("placement HANDS section on a MIDI keyboard", () => {
+  test.setTimeout(240_000);
+  test.skip(({ browserName }) => browserName !== "chromium", "Web MIDI is a Chromium feature");
+
+  test("runs after READ and places both hands nodes at fluent", async ({ page }) => {
+    await stubMidi(page);
+    // MIDI chosen in settings, as a stored choice: placement honours it.
+    await page.goto("/");
+    await page.evaluate(() => {
+      window.localStorage.setItem("clavisInput", "midi");
+    });
+    await page.goto("/placement?audio=silent");
+    await expect(page.getByTestId("placement-how-hands")).toBeVisible();
+    await page.getByTestId("placement-start").click();
+
+    const root = page.getByTestId("placement");
+    const played: string[] = [];
+    const deadline = Date.now() + 200_000;
+    while (Date.now() < deadline) {
+      const state = await root.getAttribute("data-state");
+      if (state === "summary") break;
+      if (state === "error") throw new Error("placement reached the error state");
+      if (state !== "listening") {
+        await page.waitForTimeout(50);
+        continue;
+      }
+      const kind = await page.evaluate(() => window.__clavisSession?.expected?.play?.kind);
+      if (kind !== "chordLine" && kind !== "performance") {
+        await page
+          .getByTestId("skip")
+          .click({ timeout: 500 })
+          .catch(() => undefined);
+        continue;
+      }
+      await expect(page.getByTestId("notation-slot")).toHaveAttribute("data-block", "apply");
+      await expect(page.getByTestId("chord-labels").locator(".chord")).toHaveCount(4);
+      const item = await currentKeys(page);
+      played.push(item.kind);
+      await performKeys(page, item.keys, item.tempoBpm);
+      // The tick shows only briefly; the summary below says whether it was right.
+      await expect(root).not.toHaveAttribute("data-state", "listening", { timeout: 15_000 });
+    }
+    expect(played).toEqual(["chordLine", "performance"]);
+
+    const summary = page.getByTestId("placement-summary");
+    await expect(summary).toBeVisible();
+    for (const id of ["hands.lh.triads.root", "hands.coord.basic"]) {
+      await expect(summary.locator(`[data-node="${id}"]`)).toHaveAttribute("data-state", "fluent");
+    }
+    expect(await storedEventTypes(page)).toEqual(["device.registered", "placement.completed"]);
+    const after = await nodeStates(page);
+    expect(after["hands.lh.triads.root"]).toBe("fluent");
+    expect(after["hands.coord.basic"]).toBe("fluent");
+  });
+
+  test("is not offered without MIDI", async ({ page }) => {
+    await page.goto("/placement?input=fake");
+    await expect(page.getByTestId("placement-how")).toBeVisible();
+    await expect(page.getByTestId("placement-how-hands")).toHaveCount(0);
   });
 });

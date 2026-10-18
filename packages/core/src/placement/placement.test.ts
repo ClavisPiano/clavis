@@ -38,6 +38,13 @@ const GRAPH: SkillGraph = {
         fullRange: ["C2", "E4"],
       },
     },
+    {
+      ...byId("hands.lh.triads.root"),
+      id: "hands.coord.basic",
+      prerequisites: ["hands.lh.triads.root"],
+      itemGenerators: ["coordTask"],
+      params: { rh: "melody", lh: "block", chords: ["I", "IV", "V", "vi"] },
+    },
   ],
 };
 
@@ -298,3 +305,138 @@ const GOLDEN: { id: string; ids: string[] }[] = [
   { id: "read.steps", ids: ["B3", "E3", "F2"].map((p) => `read.bass.steps|fam=A|pos=${p}`) },
   { id: "read.skips", ids: ["D3", "E4", "C3"].map((p) => `read.bass.skips|fam=A|pos=${p}`) },
 ];
+
+describe("HANDS section (R27, MIDI only)", () => {
+  const LH = "hands.lh.triads.root";
+  const CO = "hands.coord.basic";
+  /** EAR and READ stopped at their first stage, so HANDS comes next. */
+  const earlyStops = [...att(EAR135, 9, 0), ...att(LM, 4, 0)];
+  const handsPlan = placementPlan(GRAPH, createRng(1), { polyphonic: true });
+
+  it("table: a correct item places its node at fluent, otherwise available", () => {
+    const cases: [string, PlacementAttempt[], Record<string, PlacementState>][] = [
+      ["both correct", [...att(LH, 1, 1), ...att(CO, 1, 1)], { [LH]: "fluent", [CO]: "fluent" }],
+      [
+        "chords correct, hands together wrong",
+        [...att(LH, 1, 1), ...att(CO, 1, 0)],
+        { [LH]: "fluent", [CO]: "available" },
+      ],
+      ["chords wrong: the second is not placed", att(LH, 1, 0), { [LH]: "available" }],
+      [
+        "chords wrong, a stray coordination attempt is ignored",
+        [...att(LH, 1, 0), ...att(CO, 1, 1)],
+        { [LH]: "available" },
+      ],
+      ["chords correct, coordination unanswered", att(LH, 1, 1), { [LH]: "fluent" }],
+      // Latency plays no part: one item, right or wrong.
+      [
+        "correct but slow",
+        [...att(LH, 1, 1, 60_000), ...att(CO, 1, 1, 60_000)],
+        { [LH]: "fluent", [CO]: "fluent" },
+      ],
+    ];
+    for (const [name, hands, expected] of cases) {
+      expect(placementResults([...earlyStops, ...hands], GRAPH), name).toEqual({
+        [EAR135]: "available",
+        [LM]: "available",
+        ...expected,
+      });
+    }
+  });
+
+  it("never places hands nodes above fluent, even when EAR and READ are mastered", () => {
+    const all = [
+      ...att(EAR135, 9, 9),
+      ...att(DIA, 8, 8),
+      ...att(LM, 4, 4),
+      ...att(ST, 3, 3),
+      ...att(SK, 3, 3),
+      ...att(LH, 1, 1),
+      ...att(CO, 1, 1),
+    ];
+    const r = placementResults(all, GRAPH);
+    expect([r[LH], r[CO]]).toEqual(["fluent", "fluent"]);
+  });
+
+  it("is in the plan only with polyphonic input, after READ, one fixed item per stage", () => {
+    for (const plan of [
+      placementPlan(GRAPH, createRng(1)),
+      placementPlan(GRAPH, createRng(1), { polyphonic: false }),
+    ]) {
+      expect(plan.stages.some((s) => s.section === "HANDS")).toBe(false);
+    }
+    expect(handsPlan.stages.map((s) => s.id)).toEqual([
+      "ear.135",
+      "ear.diatonic",
+      "read.landmarks",
+      "read.steps",
+      "read.skips",
+      "hands.lh",
+      "hands.coord",
+    ]);
+    const hands = handsPlan.stages.filter((s) => s.section === "HANDS").flatMap((s) => s.items);
+    expect(hands.map((i) => [i.generator, i.itemId])).toEqual([
+      ["lhPattern", "hands.lh.triads.root|fam=A|prog=I-IV-V-I"],
+      ["coordTask", "hands.coord.basic|fam=A|mel=1|prog=I-IV-V-I"],
+    ]);
+  });
+
+  it("leaves EAR and READ unchanged for a seed", () => {
+    const withHands = placementPlan(GRAPH, createRng(42), { polyphonic: true });
+    expect(withHands.stages.slice(0, 5)).toEqual(placementPlan(GRAPH, createRng(42)).stages);
+  });
+
+  it("throws when a polyphonic plan's graph lacks a hands node", () => {
+    expect(() => placementPlan(V1_GRAPH, createRng(1), { polyphonic: true })).toThrow();
+  });
+
+  it("nextPlacementStep: without HANDS the plan ends after READ", () => {
+    const step = nextPlacementStep(placementPlan(GRAPH, createRng(1)), earlyStops);
+    expect(step.kind).toBe("done");
+    if (step.kind === "done") expect(step.skippedStageIds).not.toContain("hands.lh");
+  });
+
+  it("nextPlacementStep: HANDS runs after READ, even when EAR and READ stopped early", () => {
+    const first = nextPlacementStep(handsPlan, earlyStops);
+    expect(first.kind === "item" && [first.item.stageId, first.stageStart]).toEqual([
+      "hands.lh",
+      true,
+    ]);
+    const second = nextPlacementStep(handsPlan, [...earlyStops, ...att(LH, 1, 1)]);
+    expect(second.kind === "item" && second.item.stageId).toBe("hands.coord");
+    const done = nextPlacementStep(handsPlan, [...earlyStops, ...att(LH, 1, 1), ...att(CO, 1, 0)]);
+    expect(done.kind).toBe("done");
+  });
+
+  it("nextPlacementStep: a wrong chord item skips the coordination item", () => {
+    const step = nextPlacementStep(handsPlan, [...earlyStops, ...att(LH, 1, 0)]);
+    expect(step.kind).toBe("done");
+    if (step.kind === "done")
+      expect(step.skippedStageIds).toEqual([
+        "ear.diatonic",
+        "read.steps",
+        "read.skips",
+        "hands.coord",
+      ]);
+  });
+
+  it("property: terminates, and coordination is placed exactly when the chords are fluent", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({ correct: fc.boolean(), latencyMs: fc.integer({ min: 100, max: 4000 }) }),
+          { minLength: 40, maxLength: 40 },
+        ),
+        (outcomes) => {
+          const attempts = run(handsPlan, (i) => outcomes[i % outcomes.length] as never);
+          expect(attempts.length).toBeLessThanOrEqual(9 + 8 + 4 + 3 + 3 + 2);
+          expect(attempts.filter((a) => a.nodeId === LH)).toHaveLength(1);
+          const r = placementResults(attempts, GRAPH);
+          if (r[LH] === "available") expect(r[CO]).toBeUndefined();
+          else expect(r[CO]).toBeDefined();
+          for (const id of [LH, CO]) expect(r[id]).not.toBe("mastered");
+        },
+      ),
+    );
+  });
+});
