@@ -141,13 +141,9 @@ const feedbackOf = (r: Rig) => {
 describe("a grand-staff performance item", () => {
   it("asks for both hands", () => {
     const expected = { play: TARGET, responseWindowMs: 20_000 };
-    expect(promptFor("play", ["play"], expected, "instrument", true)).toBe(
-      "Play this with both hands",
-    );
+    expect(promptFor(expected, "instrument", true)).toBe("Play this with both hands");
     const rhOnly = { ...TARGET, notes: TARGET.notes.filter((n) => n.hand === "rh") };
-    expect(promptFor("play", ["play"], { ...expected, play: rhOnly }, "instrument", true)).toBe(
-      "Play this phrase",
-    );
+    expect(promptFor({ ...expected, play: rhOnly }, "instrument", true)).toBe("Play this phrase");
   });
 
   it("ends the phase once every note is struck and the hands are still, and grades it", async () => {
@@ -180,7 +176,7 @@ describe("a grand-staff performance item", () => {
     expect(s.feedback.lines[0]).toBe("Bar 2: LH played C3 instead of D3");
     expect(attemptOf(await logOf(r)).errors?.[0]).toMatchObject({
       code: "note.wrong",
-      detail: { id: "n7", measure: 2, beat: 1, hand: "lh", part: "play" },
+      detail: { id: "n7", measure: 2, beat: 1, hand: "lh" },
     });
     const marks = r.notation.marks.at(-1) ?? [];
     expect(marks.filter((m) => m.kind === "wrong").map((m) => m.noteId)).toEqual(["n7"]);
