@@ -336,8 +336,8 @@ Work from the October 2026 review of security, reliability and usability. Each t
 | T8.15 | Session epoch, sign out everywhere, revoke on recovery | #208 | Done (#223) |
 | T8.16 | Dev reset and import warn that synced events return | #205 | Done (#224) |
 | T8.17 | Per-user event log and recording quotas | #207 | Done (#225) |
-| T8.18 | Welcome back: shorter review session after missed days | #217 | In progress |
-| T8.19 | Chords on the microphone (opt-in): record a take, transcribe with Basic Pitch, grade like MIDI. Review page and criteria in R31 | #216 | In progress |
+| T8.18 | Welcome back: shorter review session after missed days | #217 | Done (#239) |
+| T8.19 | Chords on the microphone (opt-in): record a take, transcribe with Basic Pitch, grade like MIDI. Review page and criteria in R31 | #216 | Done (#240) |
 
 Decisions made for M8: deploys stay on Workers Builds and `main` requires the `check` and `e2e` status checks (no Cloudflare token in GitHub, #202). Pushing to an existing push endpoint keeps replacing its owner (#210). Product questions still open: iPhone support for HANDS without MIDI (#216) and a shorter session after missed days (#217).
 
