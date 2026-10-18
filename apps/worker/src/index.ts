@@ -1,6 +1,6 @@
 import { DEFAULT_PULL_LIMIT, PullRequest, PushRequest } from "@clavis/core";
-import { authenticate } from "./auth/guard";
-import { handleAuth } from "./auth/handlers";
+import { authenticateSession } from "./auth/guard";
+import { handleAuth, renewalCookie } from "./auth/handlers";
 import { handleBlob } from "./blobs";
 import type { Env } from "./env";
 import { API_HEADERS, json, methodNotAllowed, readLimited } from "./http";
@@ -21,10 +21,12 @@ function userStub(env: Env, userId: string): DurableObjectStub {
 }
 
 /** Forward to the user's DO; a throw there becomes a JSON 500 with the API headers. */
-async function relay(call: () => Promise<Response>): Promise<Response> {
+async function relay(call: () => Promise<Response>, renewed: string | null): Promise<Response> {
   try {
     const res = await call();
-    return new Response(await res.text(), { status: res.status, headers: API_HEADERS });
+    const headers = new Headers(API_HEADERS);
+    if (renewed && res.ok) headers.set("set-cookie", renewed);
+    return new Response(await res.text(), { status: res.status, headers });
   } catch {
     return json({ error: "internal" }, 500);
   }
@@ -32,8 +34,9 @@ async function relay(call: () => Promise<Response>): Promise<Response> {
 
 async function handlePush(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") return methodNotAllowed("POST");
-  const userId = await authenticate(request, env);
-  if (userId === null) return unauthorized();
+  const claims = await authenticateSession(request, env);
+  if (claims === null) return unauthorized();
+  const userId = claims.sub;
   // A cross-site form can send the cookie with text/plain but not with application/json.
   const type = request.headers.get("content-type") ?? "";
   if (!/^application\/json\s*(;|$)/i.test(type)) {
@@ -59,25 +62,31 @@ async function handlePush(request: Request, env: Env): Promise<Response> {
   }
   const parsed = PushRequest.safeParse(body);
   if (!parsed.success) return json({ error: "invalid_request" }, 400);
-  return relay(() =>
-    userStub(env, userId).fetch("https://user-events/push", {
-      method: "POST",
-      body: JSON.stringify(parsed.data),
-    }),
+  return relay(
+    () =>
+      userStub(env, userId).fetch("https://user-events/push", {
+        method: "POST",
+        body: JSON.stringify(parsed.data),
+      }),
+    await renewalCookie(request, env, claims),
   );
 }
 
 async function handlePull(request: Request, url: URL, env: Env): Promise<Response> {
   if (request.method !== "GET") return methodNotAllowed("GET");
-  const userId = await authenticate(request, env);
-  if (userId === null) return unauthorized();
+  const claims = await authenticateSession(request, env);
+  if (claims === null) return unauthorized();
+  const userId = claims.sub;
   const parsed = PullRequest.safeParse(Object.fromEntries(url.searchParams));
   if (!parsed.success) return json({ error: "invalid_request" }, 400);
   const query = new URLSearchParams({
     after: String(parsed.data.after),
     limit: String(parsed.data.limit ?? DEFAULT_PULL_LIMIT),
   });
-  return relay(() => userStub(env, userId).fetch(`https://user-events/pull?${query.toString()}`));
+  return relay(
+    () => userStub(env, userId).fetch(`https://user-events/pull?${query.toString()}`),
+    await renewalCookie(request, env, claims),
+  );
 }
 
 async function handleApi(request: Request, url: URL, env: Env): Promise<Response> {
@@ -111,7 +120,7 @@ export default {
       runPracticeCues(env, { nowMs: controller.scheduledTime }).then(
         (r) => {
           console.log(
-            `practice cue: due=${String(r.due)} sent=${String(r.sent)} pruned=${String(r.pruned)} failed=${String(r.failed)}`,
+            `practice cue: due=${String(r.due)} sent=${String(r.sent)} pruned=${String(r.pruned)} failed=${String(r.failed)} deferred=${String(r.deferred)} dropped=${String(r.dropped)}`,
           );
         },
         (e: unknown) => {

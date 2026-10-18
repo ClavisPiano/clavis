@@ -56,6 +56,8 @@ export interface AuthApi {
     response: unknown,
   ) => Promise<{ userId: string; passkeys: number }>;
   logout: () => Promise<void>;
+  /** Ends this session and every other one (the server bumps the session epoch). */
+  logoutAll: () => Promise<void>;
 }
 
 export function createAuthApi(
@@ -140,6 +142,9 @@ export function createAuthApi(
       }),
     async logout() {
       await call("POST", "/auth/logout", z.object({ ok: z.boolean() }));
+    },
+    async logoutAll() {
+      await call("POST", "/auth/logout/all", z.object({ ok: z.boolean() }));
     },
   };
 }

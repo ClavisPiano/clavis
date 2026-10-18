@@ -44,7 +44,13 @@ export interface AuthRepo {
   listCredentials(userId: string): Promise<CredentialRecord[]>;
   /** Record a successful assertion. */
   touchCredential(id: string, counter: number, nowMs: number): Promise<void>;
+  /** How many accounts were created at or after `sinceMs`. */
+  countUsersSince(sinceMs: number): Promise<number>;
   userExists(userId: string): Promise<boolean>;
+  /** The user's session epoch, or null when the user does not exist. */
+  sessionEpoch(userId: string): Promise<number | null>;
+  /** Invalidate every session issued so far and return the new epoch. */
+  bumpSessionEpoch(userId: string): Promise<number | null>;
   recoveryCodesLeft(userId: string): Promise<number>;
   /** Mark the code used and return its user id; null when unknown or already used. */
   useRecoveryCode(codeHash: string, nowMs: number): Promise<string | null>;
@@ -156,9 +162,33 @@ export function createAuthRepo(sql: AsyncSql): AuthRepo {
       );
     },
 
+    async countUsersSince(sinceMs) {
+      const rows = await sql.all<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM users WHERE created_at >= ?",
+        sinceMs,
+      );
+      return rows[0]?.n ?? 0;
+    },
+
     async userExists(userId) {
       const rows = await sql.all("SELECT 1 AS one FROM users WHERE id = ?", userId);
       return rows.length > 0;
+    },
+
+    async sessionEpoch(userId) {
+      const rows = await sql.all<{ session_epoch: number }>(
+        "SELECT session_epoch FROM users WHERE id = ?",
+        userId,
+      );
+      return rows[0]?.session_epoch ?? null;
+    },
+
+    async bumpSessionEpoch(userId) {
+      const rows = await sql.all<{ session_epoch: number }>(
+        "UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ? RETURNING session_epoch",
+        userId,
+      );
+      return rows[0]?.session_epoch ?? null;
     },
 
     async recoveryCodesLeft(userId) {

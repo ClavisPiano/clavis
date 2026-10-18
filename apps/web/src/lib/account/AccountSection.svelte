@@ -160,6 +160,15 @@
         >
           Sign out
         </button>
+        <button
+          type="button"
+          class="button"
+          data-testid="sign-out-everywhere"
+          disabled={busy}
+          onclick={() => void account.store.signOutEverywhere()}
+        >
+          Sign out everywhere
+        </button>
       </div>
       <p class="muted">Signing out keeps your practice on this device. It just stops syncing.</p>
     {:else if snap.account.kind === "anonymous"}

@@ -4,6 +4,9 @@ import { UserEvents } from "./user-events";
 import type { Env } from "./env";
 import auth from "../migrations/0001_auth.sql?raw";
 import push from "../migrations/0002_push.sql?raw";
+import epoch from "../migrations/0003_session_epoch.sql?raw";
+import cueUtc from "../migrations/0004_push_cue_utc.sql?raw";
+import usersCreatedAt from "../migrations/0005_users_created_at.sql?raw";
 
 /** SQLite wants Uint8Array for BLOBs; D1 binds ArrayBuffer. */
 const toSqliteValue = (v: unknown): unknown => (v instanceof ArrayBuffer ? new Uint8Array(v) : v);
@@ -15,6 +18,9 @@ const toSqliteValue = (v: unknown): unknown => (v instanceof ArrayBuffer ? new U
 export function fakeD1(db: DatabaseSync = new DatabaseSync(":memory:")): D1Database {
   db.exec(auth);
   db.exec(push);
+  db.exec(epoch);
+  db.exec(cueUtc);
+  db.exec(usersCreatedAt);
   const prepare = (query: string) => ({
     bind: (...bindings: unknown[]) => {
       const values = bindings.map(toSqliteValue);
@@ -148,6 +154,18 @@ export function fakeLimiter(limit = Number.POSITIVE_INFINITY): RateLimit & { key
   };
 }
 
+/** Users the default fake database starts with, so tokens for them authenticate. */
+export const SEEDED_USERS = ["u1", "u2", "u3"];
+
+function seededD1(): D1Database {
+  const db = new DatabaseSync(":memory:");
+  const d1 = fakeD1(db);
+  for (const id of SEEDED_USERS) {
+    db.prepare("INSERT INTO users (id, created_at) VALUES (?, 0)").run(id);
+  }
+  return d1;
+}
+
 export function makeEnv(overrides: Partial<Env> = {}): { env: Env; seen: string[] } {
   const seen: string[] = [];
   const ASSETS = {
@@ -163,7 +181,7 @@ export function makeEnv(overrides: Partial<Env> = {}): { env: Env; seen: string[
     VERSION: "abc123",
     USER_EVENTS: fakeNamespace(),
     SESSION_SECRET: SECRET,
-    DB: fakeD1(),
+    DB: seededD1(),
     BLOBS: fakeBucket(),
     AUTH_LIMITER: fakeLimiter(),
     AUTH_RECOVERY_LIMITER: fakeLimiter(),

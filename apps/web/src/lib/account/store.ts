@@ -45,6 +45,8 @@ export interface AccountStoreDeps {
   onSignedIn: () => void;
   /** Called after sign-out, or when a signed-in session turns out to be expired. */
   onSignedOut: () => void;
+  /** Called just after `onSignedOut` when the cause was an expired session, not a sign out. */
+  onSessionExpired?: () => void;
   /**
    * False when this device has never signed in (no signed-in hint): `refresh` then reports
    * anonymous without calling `/api/me`, so anonymous learners make no failing requests.
@@ -64,6 +66,8 @@ export interface AccountStore {
   addPasskey(): Promise<boolean>;
   dismissPasskeySuggestion(): void;
   signOut(): Promise<boolean>;
+  /** Sign out on every device, for example after losing one. */
+  signOutEverywhere(): Promise<boolean>;
   clearError(): void;
 }
 
@@ -112,7 +116,10 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
       if (e instanceof AccountError && e.kind === "unauthorized") {
         const wasSignedIn = snap.account.kind === "signedIn";
         set({ account: { kind: "anonymous" }, offline: false });
-        if (wasSignedIn) deps.onSignedOut();
+        if (wasSignedIn) {
+          deps.onSignedOut();
+          deps.onSessionExpired?.();
+        }
       } else {
         // Offline or a server problem: keep what we last knew.
         set({ offline: true });
@@ -141,6 +148,16 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
   }
 
   /** Runs one action in `phase`, ignoring the call if another action is in flight. */
+  function signedOutState(): void {
+    set({
+      account: { kind: "anonymous" },
+      recoveryCodes: undefined,
+      suggestPasskey: false,
+      offline: false,
+    });
+    deps.onSignedOut();
+  }
+
   async function action(phase: AccountPhase, body: () => Promise<void>): Promise<boolean> {
     if (snap.phase !== "idle") return false;
     set({ phase, error: undefined });
@@ -154,6 +171,7 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
         // The session expired while signed in.
         set({ account: { kind: "anonymous" } });
         deps.onSignedOut();
+        deps.onSessionExpired?.();
       }
       return false;
     } finally {
@@ -240,13 +258,12 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
     signOut: () =>
       action("signingOut", async () => {
         await api.logout();
-        set({
-          account: { kind: "anonymous" },
-          recoveryCodes: undefined,
-          suggestPasskey: false,
-          offline: false,
-        });
-        deps.onSignedOut();
+        signedOutState();
+      }),
+    signOutEverywhere: () =>
+      action("signingOut", async () => {
+        await api.logoutAll();
+        signedOutState();
       }),
     clearError() {
       set({ error: undefined });
