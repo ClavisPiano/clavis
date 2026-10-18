@@ -13,6 +13,7 @@ export const READ_CARD_NODE_IDS = [
   "read.bass.steps",
   "read.bass.skips",
   "read.bass.intervals",
+  "read.bass.chords",
   "read.minor.accidentals",
   "read.rhythm.basic",
   "read.treble.landmarks",
@@ -167,6 +168,43 @@ export const READ_CARDS_V1: unknown[] = [
       { label: "Generic intervals (musictheory.net)", url: `${MT}/30` },
       { label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` },
     ],
+  },
+  {
+    id: "concept.read.bass.chords",
+    nodeIds: ["read.bass.chords"],
+    title: "Reading bass chords",
+    body: [
+      "A triad is three notes stacked in thirds. On the staff a root-position triad is a snowman: three lines or three spaces in a row, with the root at the bottom.",
+      "An inversion puts a different note at the bottom. In first inversion the third is lowest, and the root moves to the top, so there is a gap of a 4th at the top of the stack. In second inversion the fifth is lowest, and the gap is at the bottom.",
+      "Read the shape first, then the bottom note, and the key signature gives the rest. Your hand learns each shape as one grip.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "One chord appears on the bass staff. There is no sound first.",
+      "Play all three notes together with your left hand, in exactly the right octave.",
+      "Only the notes count, not the timing, but the quicker you find the chord the better. A wrong note is named, for example E instead of F.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "C major in root position: C E G",
+        clef: "bass",
+        positions: ["C3", "E3", "G3"],
+      },
+      {
+        kind: "staff",
+        label: "First inversion: E G C",
+        clef: "bass",
+        positions: ["E3", "G3", "C4"],
+      },
+      {
+        kind: "staff",
+        label: "Second inversion: G C E",
+        clef: "bass",
+        positions: ["G2", "C3", "E3"],
+      },
+    ],
+    links: [{ label: "Triads (musictheory.net)", url: `${MT}/40` }],
   },
   {
     id: "concept.read.minor.accidentals",

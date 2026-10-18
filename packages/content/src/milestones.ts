@@ -83,6 +83,11 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can read bass clef notes by the distance from the note before.",
   },
   {
+    nodeId: "read.bass.chords",
+    statement:
+      "You can read a major or minor triad on the bass clef, in any inversion, and play it at once.",
+  },
+  {
     nodeId: "read.minor.accidentals",
     statement: "You can read the raised sixth and seventh in minor keys on the bass clef.",
   },

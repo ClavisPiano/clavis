@@ -337,7 +337,11 @@ export function promptFor(expected: ExpectedResponse, mode: SessionMode, display
     if (play.kind === "exactPitch") return "Play this note";
     if (play.kind === "sequence") return "Play these notes";
     if (play.kind === "line") return "Play this phrase";
-    if (play.kind === "chordLine") return "Play these chords with your left hand";
+    if (play.kind === "chordLine") {
+      return play.chords.length === 1
+        ? "Play this chord with your left hand"
+        : "Play these chords with your left hand";
+    }
     if (play.kind === "performance") {
       const hands = new Set(play.notes.map((n) => n.hand));
       return hands.size > 1 ? "Play this with both hands" : "Play this phrase";
@@ -1102,7 +1106,9 @@ export class SessionMachine {
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
-      ...(cur.instance.expected.play?.kind === "chordLine"
+      // Reading a chord is the task when its labels are hidden (T5.10); feedback still names it.
+      ...(cur.instance.expected.play?.kind === "chordLine" &&
+      cur.instance.expected.play.showLabels !== false
         ? {
             chords: cur.instance.expected.play.chords.map((c) => ({
               roman: c.roman,

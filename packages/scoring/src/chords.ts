@@ -6,6 +6,7 @@ import type {
   NoteEvent,
 } from "@clavis/core";
 import { alignPerformance } from "./align/align.js";
+import { OVERALL_WEIGHTS, TOLERANCES } from "./align/tolerances.js";
 import type { ExpectedNote, NoteResult, PerformedNote } from "./align/types.js";
 import type { PartResult } from "./single.js";
 import { err, inWindow, req } from "./util.js";
@@ -17,6 +18,11 @@ export const CHORD_PASS_OVERALL = 0.8;
  * but a repeated or invented chord is.
  */
 export const CHORD_MAX_EXTRA_NOTES = 1;
+/**
+ * Tones-only lines (`gradeTiming: false`): notes this close are one chord, so a block chord that is
+ * pressed a little unevenly still counts. Never narrower than the source's own window.
+ */
+export const TONES_ONLY_CLUSTER_MS = 300;
 
 export interface ChordLineInput {
   chords: ChordLineTarget["chords"];
@@ -25,6 +31,8 @@ export interface ChordLineInput {
   stimulusEndMs: number;
   responseWindowMs: number;
   source: InputSource;
+  /** False grades the tones only: no early or late, and `partial` leaves timing out. */
+  gradeTiming?: boolean;
 }
 
 /** Ids are `c<chord>.<tone>`; the chord index is read back from them. */
@@ -42,6 +50,10 @@ const chordIndexOf = (id: string): number => Number(id.slice(1, id.indexOf("."))
  * `chord.missing-tone`, `chord.extra`, then `chord.early` and `chord.late`. Each names the chord by
  * its index, numeral and symbol so feedback can say "in the IV chord". Latency is the first note
  * after the reference time, as in the other scorers.
+ *
+ * With `gradeTiming: false` (a chord read from the staff, T5.10) only the tones count: notes within
+ * `TONES_ONLY_CLUSTER_MS` are one chord, nothing is early, late or short, and the overall score is
+ * the pitch and completeness terms of the alignment, reweighted to sum to one.
  */
 export function scoreChordLine(input: ChordLineInput): PartResult {
   const notes = inWindow(input.notes, input.stimulusEndMs, input.responseWindowMs);
@@ -60,11 +72,17 @@ export function scoreChordLine(input: ChordLineInput): PartResult {
     ...(n.offsetMs === undefined ? {} : { offsetMs: n.offsetMs }),
     ...(n.velocity === undefined ? {} : { velocity: n.velocity }),
   }));
+  const timed = input.gradeTiming !== false;
   const result = alignPerformance({
     expected,
     tempoBpm: input.tempoBpm,
     performed,
-    options: { source: input.source },
+    options: timed
+      ? { source: input.source }
+      : {
+          source: input.source,
+          clusterWindowMs: Math.max(TONES_ONLY_CLUSTER_MS, TOLERANCES[input.source].clusterMs),
+        },
   });
 
   const byChord = new Map<number, NoteResult[]>();
@@ -107,7 +125,7 @@ export function scoreChordLine(input: ChordLineInput): PartResult {
     const off = results
       .filter((r) => r.cls === "early" || r.cls === "late")
       .sort((a, b) => Math.abs(b.deviationMs ?? 0) - Math.abs(a.deviationMs ?? 0))[0];
-    if (off !== undefined) {
+    if (off !== undefined && timed) {
       timing.push(
         err(off.cls === "early" ? "chord.early" : "chord.late", {
           ...label(i),
@@ -128,7 +146,11 @@ export function scoreChordLine(input: ChordLineInput): PartResult {
 
   const errors = [...wrong, ...missed, ...extra, ...timing];
   if (first === undefined) errors.unshift(err("response.timeout"));
-  const overall = result.summary.overall;
+  const { pitchAccuracy, completeness } = result.summary;
+  const overall = timed
+    ? result.summary.overall
+    : (OVERALL_WEIGHTS.pitch * pitchAccuracy + OVERALL_WEIGHTS.completeness * completeness) /
+      (OVERALL_WEIGHTS.pitch + OVERALL_WEIGHTS.completeness);
   const outcome: AttemptOutcome = {
     correct:
       first !== undefined &&
