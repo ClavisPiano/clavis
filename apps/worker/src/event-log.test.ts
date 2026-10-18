@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import type { SyncEnvelope } from "@clavis/core";
-import { EventLog } from "./event-log";
+import { EventLog, QuotaExceededError } from "./event-log";
 import { nodeSql } from "./test-support";
 
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -110,5 +110,36 @@ describe("EventLog", () => {
         },
       ),
     );
+  });
+});
+
+describe("EventLog quotas", () => {
+  it("refuses a push that would pass the event ceiling and stores none of it", () => {
+    const log = new EventLog(nodeSql(), { maxEvents: 3, maxBytes: 1_000_000 });
+    expect(log.push([ev(1), ev(2)], 1).accepted).toBe(2);
+    expect(() => log.push([ev(3), ev(4)], 2)).toThrow(QuotaExceededError);
+    // The failed batch rolled back, so one more event still fits.
+    expect(log.push([ev(3)], 3).accepted).toBe(1);
+    expect(log.pull(0).events.map((e) => e.event.id)).toEqual([ulid(1), ulid(2), ulid(3)]);
+  });
+
+  it("refuses a push that would pass the byte ceiling", () => {
+    const log = new EventLog(nodeSql(), { maxEvents: 100, maxBytes: 300 });
+    expect(() => log.push([1, 2, 3, 4].map(ev), 1)).toThrow(QuotaExceededError);
+    expect(log.pull(0).events).toEqual([]);
+  });
+
+  it("does not count duplicates against the ceiling", () => {
+    const log = new EventLog(nodeSql(), { maxEvents: 2, maxBytes: 1_000_000 });
+    log.push([ev(1), ev(2)], 1);
+    expect(log.push([ev(1), ev(2)], 2)).toMatchObject({ accepted: 0, duplicates: 2 });
+  });
+
+  it("counts a log that predates the stats table", () => {
+    const sql = nodeSql();
+    new EventLog(sql).push([ev(1), ev(2)], 1);
+    sql.exec("DROP TABLE stats");
+    const reopened = new EventLog(sql, { maxEvents: 2, maxBytes: 1_000_000 });
+    expect(() => reopened.push([ev(3)], 2)).toThrow(QuotaExceededError);
   });
 });

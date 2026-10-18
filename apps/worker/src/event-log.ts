@@ -24,16 +24,47 @@ const SCHEMA = `CREATE TABLE IF NOT EXISTS events (
   received_at INTEGER NOT NULL
 )`;
 
+/** Running totals, so a push does not have to scan the log to know how big it is. */
+const STATS_SCHEMA = `CREATE TABLE IF NOT EXISTS stats (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  events INTEGER NOT NULL,
+  bytes INTEGER NOT NULL
+)`;
+
+/** Per-user ceilings. Generous for a real learner (about 70k events a year), a wall for abuse. */
+export interface EventLogLimits {
+  maxEvents: number;
+  maxBytes: number;
+}
+
+export const DEFAULT_LIMITS: EventLogLimits = { maxEvents: 500_000, maxBytes: 256 * 1024 * 1024 };
+
+export class QuotaExceededError extends Error {
+  override readonly name = "QuotaExceededError";
+}
+
 /** Append-only, idempotent event log for one user. The caller serialises access (a DO does). */
 export class EventLog {
-  constructor(private readonly sql: SqlLike) {
+  constructor(
+    private readonly sql: SqlLike,
+    private readonly limits: EventLogLimits = DEFAULT_LIMITS,
+  ) {
     sql.exec(SCHEMA);
+    sql.exec(STATS_SCHEMA);
+    // Logs written before the stats table existed are counted once.
+    sql.exec(
+      `INSERT OR IGNORE INTO stats (id, events, bytes)
+       SELECT 1, COUNT(*), COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM events
+       WHERE NOT EXISTS (SELECT 1 FROM stats)`,
+    );
   }
 
   push(events: readonly SyncEnvelope[], receivedAt: number): PushResponse {
     return this.sql.transaction(() => {
       let accepted = 0;
+      let addedBytes = 0;
       for (const event of events) {
+        const body = JSON.stringify(event);
         const rows = this.sql.exec<{ seq: number }>(
           // The NOT EXISTS guard keeps seqs gap free (an ignored insert would still burn a rowid
           // under AUTOINCREMENT); OR IGNORE backs it up on the UNIQUE constraint.
@@ -42,11 +73,25 @@ export class EventLog {
            RETURNING seq`,
           event.id,
           event.at,
-          JSON.stringify(event),
+          body,
           receivedAt,
           event.id,
         );
-        if (rows.length > 0) accepted++;
+        if (rows.length > 0) {
+          accepted++;
+          addedBytes += utf8Length(body);
+        }
+      }
+      if (accepted > 0) {
+        const [stats] = this.sql.exec<{ events: number; bytes: number }>(
+          "UPDATE stats SET events = events + ?, bytes = bytes + ? WHERE id = 1 RETURNING events, bytes",
+          accepted,
+          addedBytes,
+        );
+        // Throwing inside the transaction rolls the whole batch back.
+        if (stats && (stats.events > this.limits.maxEvents || stats.bytes > this.limits.maxBytes)) {
+          throw new QuotaExceededError("event storage quota exceeded");
+        }
       }
       const last = this.sql.exec<{ seq: number | null }>("SELECT MAX(seq) AS seq FROM events");
       return { accepted, duplicates: events.length - accepted, lastSeq: last[0]?.seq ?? 0 };
@@ -70,4 +115,14 @@ export class EventLog {
       hasMore: rows.length > limit,
     };
   }
+}
+
+/** UTF-8 length of a string. */
+function utf8Length(text: string): number {
+  let bytes = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
 }

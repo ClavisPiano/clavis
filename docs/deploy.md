@@ -42,6 +42,7 @@ Local preview of the full stack: `pnpm --filter @clavis/worker dev` (builds the 
   ```
 
   Rotating it signs every user out. For local `wrangler dev`, put `SESSION_SECRET=...` in `apps/worker/.dev.vars` (git-ignored).
+- Each user's event log is capped at 500,000 events and 256 MiB of stored event JSON (`DEFAULT_LIMITS` in `event-log.ts`, tracked in a `stats` row so a push never scans the log). A push past either answers 403 `quota_exceeded` and stores none of the batch; the client reports a sync error and keeps pulling.
 - Each user's events live in a `UserEvents` Durable Object with SQLite storage (binding `USER_EVENTS`). The first deploy applies the `v1` migration in `wrangler.jsonc` (`new_sqlite_classes`). Add new classes or renames as new migration tags, never edit a shipped one.
 - Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `__Host-clavis_session` cookie (the older `clavis_session` name is still read). A cookie-authenticated push also needs an `Origin` equal to `EXPECTED_ORIGIN`; bearer callers do not. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
 
@@ -100,7 +101,7 @@ pnpm --filter @clavis/worker exec wrangler r2 bucket create clavis-blobs
 
 - `PUT|GET|DELETE /api/blobs/:name`. Auth is the same as sync. `PUT` and `DELETE` also need an `Origin` header equal to `EXPECTED_ORIGIN`. The stored key is always `<userId>/<name>` with the user id from the token. `name` matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` and has no `..`.
 - `PUT` accepts `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/wav` and `audio/mpeg`, up to 20 MiB (413 above that, 415 for other types). `GET` returns the stored content type with `cache-control: private`.
-- There is no server-side listing or quota yet. The client keeps its own copies under a size cap (200 MB) and uploads oldest first.
+- Per-user ceilings: 200 objects and 500 MiB in total (`MAX_USER_BLOBS`, `MAX_USER_BLOB_BYTES`). A `PUT` past either answers 403 `quota_exceeded`; replacing an existing name does not count toward the object count (a larger replacement can still hit the byte ceiling). The checks are not atomic across concurrent uploads, so the ceilings are approximate. The client keeps its own copies under a size cap (200 MB) and uploads oldest first. There is no listing endpoint.
 
 ## Finding the workers.dev URL
 

@@ -11,6 +11,31 @@ import { API_HEADERS, json, methodNotAllowed, readLimited } from "./http";
 
 const PREFIX = "/api/blobs/";
 
+/** Per-user ceilings on stored recordings. The client keeps its own copies under 200 MB. */
+export const MAX_USER_BLOBS = 200;
+export const MAX_USER_BLOB_BYTES = 500 * 1024 * 1024;
+
+/** True when storing `size` bytes at `key` would take the user past a ceiling. */
+async function overQuota(env: Env, userId: string, key: string, size: number): Promise<boolean> {
+  let count = 0;
+  let bytes = 0;
+  let cursor: string | undefined;
+  do {
+    const page = await env.BLOBS.list({
+      prefix: `${userId}/`,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    for (const object of page.objects) {
+      // Replacing an object frees its old bytes.
+      if (object.key === key) continue;
+      count++;
+      bytes += object.size;
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor !== undefined);
+  return count + 1 > MAX_USER_BLOBS || bytes + size > MAX_USER_BLOB_BYTES;
+}
+
 /** Decode and validate the `:name` segment; null when it is not acceptable. */
 export function parseBlobName(pathname: string): string | null {
   if (!pathname.startsWith(PREFIX)) return null;
@@ -68,6 +93,9 @@ export async function handleBlob(request: Request, url: URL, env: Env): Promise<
     const bytes = await readLimited(request, MAX_BLOB_BYTES);
     if (bytes === null) return json({ error: "payload_too_large" }, 413);
     if (bytes.byteLength === 0) return json({ error: "invalid_request" }, 400);
+    if (await overQuota(env, userId, key, bytes.byteLength)) {
+      return json({ error: "quota_exceeded" }, 403);
+    }
     await env.BLOBS.put(key, bytes, { httpMetadata: { contentType: type } });
     return json({ ok: true, size: bytes.byteLength }, 200);
   } catch {

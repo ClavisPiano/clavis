@@ -119,6 +119,13 @@ export function fakeBucket(): R2Bucket & { keys: () => string[] } {
       objects.delete(key);
       return Promise.resolve();
     },
+    list: ({ prefix = "" }: { prefix?: string } = {}) =>
+      Promise.resolve({
+        objects: [...objects.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, o]) => ({ key, size: o.bytes.byteLength })),
+        truncated: false,
+      }),
     keys: () => [...objects.keys()],
   };
   return bucket as unknown as R2Bucket & { keys: () => string[] };
