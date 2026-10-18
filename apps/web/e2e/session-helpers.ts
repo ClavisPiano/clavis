@@ -67,6 +67,12 @@ export async function runToSummary(page: Page): Promise<string[]> {
         .getByTestId("continue")
         .click({ timeout: 2_000 })
         .catch(() => undefined);
+    } else if (state === "selfAssess") {
+      // Fluent and mastered skills sometimes ask "Was that right?" before feedback (R28).
+      await page
+        .getByTestId("self-assess-right")
+        .click({ timeout: 2_000 })
+        .catch(() => undefined);
     } else if (state === "feedback") {
       const next = page.getByTestId("next");
       // The session can move on by itself (auto-advance, or the budget running out on a slow

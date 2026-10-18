@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.15",
+  "contentVersion": "2026.10.17",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -376,12 +376,12 @@
       },
       "mastery": {
         "minAccuracy": 0.9,
-        "maxMedianLatencyMs": 2500,
+        "maxMedianLatencyMs": 3000,
         "windowAttempts": 20,
         "distinctSessions": 2
       },
       "keyDependent": true,
-      "targetLatencyMs": 2500
+      "targetLatencyMs": 3000
     },
     {
       "id": "read.grand.2line",
@@ -536,7 +536,8 @@
       "params": {
         "pattern": "block",
         "voiceLeading": "close",
-        "inversions": ["root", "first", "second"]
+        "inversions": ["root", "first", "second"],
+        "chords": ["I", "IV", "V", "vi"]
       },
       "mastery": {
         "minAccuracy": 0.8,
@@ -553,7 +554,8 @@
       "prerequisites": ["hands.lh.inversions"],
       "itemGenerators": ["lhPatternVariants"],
       "params": {
-        "patterns": ["broken", "alberti"]
+        "patterns": ["broken", "alberti"],
+        "chords": ["I", "IV", "V", "vi"]
       },
       "mastery": {
         "minAccuracy": 0.8,
@@ -570,7 +572,8 @@
       "prerequisites": ["hands.lh.broken"],
       "itemGenerators": ["lhPatternVariants"],
       "params": {
-        "patterns": ["root-5-8", "syncopated"]
+        "patterns": ["root-5-8", "syncopated"],
+        "chords": ["I", "IV", "V", "vi"]
       },
       "mastery": {
         "minAccuracy": 0.8,
@@ -588,7 +591,8 @@
       "itemGenerators": ["coordTask"],
       "params": {
         "rh": "melody",
-        "lh": "block"
+        "lh": "block",
+        "chords": ["I", "IV", "V", "vi"]
       },
       "mastery": {
         "minAccuracy": 0.8,
@@ -603,7 +607,7 @@
       "title": "Hands together, moving bass",
       "description": "Right-hand melody over a broken or pop left-hand pattern.",
       "prerequisites": ["hands.coord.basic", "hands.lh.broken"],
-      "itemGenerators": ["coordTask"],
+      "itemGenerators": ["coordTaskMoving"],
       "params": {
         "rh": "melody",
         "lh": ["broken", "pop"]
@@ -621,7 +625,7 @@
       "title": "Minor leading tone",
       "description": "Left-hand patterns using the raised seventh of harmonic minor.",
       "prerequisites": ["hands.lh.triads.root", "ear.degrees.minor"],
-      "itemGenerators": ["lhPatternVariants"],
+      "itemGenerators": ["lhPatternMinor"],
       "params": {
         "mode": "harmonic-minor",
         "chords": ["i", "iv", "V"],
@@ -807,7 +811,7 @@
     },
     {
       "id": "bassChordRead",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 8,
       "awayEligible": false,
       "requires": ["keys", "polyphonic", "notation"]
@@ -828,13 +832,27 @@
     },
     {
       "id": "lhPatternVariants",
-      "implemented": false,
-      "seedDurationSec": 90,
+      "implemented": true,
+      "seedDurationSec": 30,
       "awayEligible": false,
-      "requires": ["keys", "polyphonic"]
+      "requires": ["keys", "polyphonic", "notation"]
+    },
+    {
+      "id": "lhPatternMinor",
+      "implemented": false,
+      "seedDurationSec": 30,
+      "awayEligible": false,
+      "requires": ["keys", "polyphonic", "notation"]
     },
     {
       "id": "coordTask",
+      "implemented": true,
+      "seedDurationSec": 45,
+      "awayEligible": false,
+      "requires": ["keys", "polyphonic", "notation"]
+    },
+    {
+      "id": "coordTaskMoving",
       "implemented": false,
       "seedDurationSec": 90,
       "awayEligible": false,

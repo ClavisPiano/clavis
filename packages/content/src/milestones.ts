@@ -58,6 +58,24 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can play root position I, IV, V and vi chords with your left hand in any key.",
   },
   {
+    nodeId: "hands.lh.inversions",
+    statement:
+      "You can move between I, IV, V and vi chords with your left hand using inversions, keeping shared notes still.",
+  },
+  {
+    nodeId: "hands.lh.broken",
+    statement: "You can play broken chords and an Alberti bass with your left hand in any key.",
+  },
+  {
+    nodeId: "hands.lh.pop",
+    statement:
+      "You can play root, fifth and octave patterns, straight and syncopated, with your left hand.",
+  },
+  {
+    nodeId: "hands.coord.basic",
+    statement: "You can play a simple tune with your right hand over block chords in your left.",
+  },
+  {
     nodeId: "ear.degrees.minor",
     statement: "You can hear the degrees of a minor scale in any key and play them.",
   },
@@ -81,6 +99,11 @@ const MILESTONES_V1: unknown[] = [
   {
     nodeId: "read.bass.intervals",
     statement: "You can read bass clef notes by the distance from the note before.",
+  },
+  {
+    nodeId: "read.bass.chords",
+    statement:
+      "You can read a major or minor triad on the bass clef, in any inversion, and play it at once.",
   },
   {
     nodeId: "read.minor.accidentals",

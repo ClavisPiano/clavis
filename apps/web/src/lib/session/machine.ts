@@ -23,6 +23,7 @@ import {
   type PlacementState,
   type PlannedItem,
   type ScoreSpec,
+  type SelfAssessment,
   type SessionMode,
   type SessionPlan,
   type SkillGraph,
@@ -39,6 +40,7 @@ import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
 import type { NotationMark, NotationPort } from "../notation/port";
 import {
   answerLine,
+  chordLabels,
   keyboardGuide,
   keyNotes,
   targetPitchClasses,
@@ -54,10 +56,13 @@ import { noteNamer } from "./spelling";
  * injected, so the whole flow runs in unit tests with fakes.
  *
  *   idle -> [headphones] -> preparing -> [orient] -> ( [intro] -> presenting -> listening
- *     ([cue], play) -> feedback )* -> summary
+ *     ([cue], play) -> [selfAssess] -> feedback )* -> summary
  *
  * Items that set `cue` (play it by ear, R29) pause after the stimulus for an ungraded "sing or hum
  * it" step: nothing listens and nothing is timed until `ready()`. Only the played answer is graded.
+ *
+ * `selfAssess` (spec 8.4, R28) asks "Was that right?" before feedback on some answers to fluent
+ * and mastered skills; see `#selfAssessable`.
  *
  * Reading items (`instance.display`) show notation while presenting. Their reference time is the
  * moment the score is painted, or the end of a count-in that starts then (R17).
@@ -186,8 +191,13 @@ export interface ItemView {
   revealed?: true;
   /** Buttons to answer with, for choice items (R21). They replace the keyboard. */
   choices?: ChoiceOption[];
-  /** Chord lines (T5.3): each chord's numeral and symbol, shown as text beside the staff. */
+  /**
+   * Chord lines (T5.3) and hands-together items (T5.5): each chord's numeral and symbol, one per
+   * bar for the latter, shown as text beside the staff.
+   */
   chords?: { roman: string; symbol: string }[];
+  /** Two-hand items (T5.5): the staff says which hand plays what (treble right, bass left). */
+  bothHands?: true;
 }
 
 export interface NodeChange {
@@ -224,6 +234,12 @@ export interface PlacedNode {
 /** How long the correct/incorrect tick shows in placement before the next item. */
 export const PLACEMENT_TICK_MS = 500;
 
+/** Self-assessment is asked on every this-many-th eligible attempt of a session (R28). */
+export const SELF_ASSESS_EVERY = 3;
+
+/** Error codes that mean a part of the answer was never given (a timeout or silence). */
+const NO_ANSWER_CODES: ReadonlySet<string> = new Set(["response.timeout", "sing.none"]);
+
 export type SessionState =
   | { kind: "idle" }
   | { kind: "headphones" }
@@ -258,6 +274,13 @@ export type SessionState =
       autoContinueMs?: number;
       /** For the guide keyboard: the pitch classes asked for and the notes the learner played. */
       answerKeys?: { targetPcs: number[]; played: number[] };
+    }
+  | {
+      /** Before feedback (spec 8.4): the learner says whether they think the answer was right. */
+      kind: "selfAssess";
+      item: ItemView;
+      /** The attempt is still held back, so Try again can discard it and ask the item again. */
+      canRetry: boolean;
     }
   | { kind: "paused"; resumeTo: SessionState["kind"] }
   | { kind: "summary"; summary: SessionSummary }
@@ -328,6 +351,33 @@ export function choiceQuestion(options: readonly ChoiceOption[]): string {
   return `${labels.slice(0, -1).join(", ")} or ${last}?`;
 }
 
+/** A single-line left-hand pattern (broken, Alberti, pop), T5.7. */
+function isLeftHandLine(instance: ItemInstance): boolean {
+  return instance.generator === "lhPatternVariants" && instance.expected.play?.kind === "line";
+}
+
+/**
+ * Chord labels shown beside the staff: each chord of a chord line (T5.3), unless reading the chord
+ * is the task (T5.10), or the chords a left-hand pattern line (T5.7) or a hands-together item
+ * (T5.5) is built on, from its presentation.
+ */
+function chordLabelsOf(instance: ItemInstance): { chords?: { roman: string; symbol: string }[] } {
+  const play = instance.expected.play;
+  if (play?.kind === "chordLine") {
+    if (play.showLabels === false) return {};
+    return { chords: play.chords.map((c) => ({ roman: c.roman, symbol: c.symbol })) };
+  }
+  const { prog, symbols } = instance.presentation;
+  const strings = (v: unknown): v is string[] =>
+    Array.isArray(v) && v.every((x) => typeof x === "string");
+  if (isLeftHandLine(instance) && strings(prog) && strings(symbols)) {
+    return { chords: prog.map((roman, i) => ({ roman, symbol: symbols[i] ?? "" })) };
+  }
+  // Hands together (T5.5): one chord per bar, from the presentation.
+  const chords = play?.kind === "performance" ? chordLabels(instance) : undefined;
+  return chords ? { chords } : {};
+}
+
 export function promptFor(expected: ExpectedResponse, mode: SessionMode, display = false): string {
   const play = expected.play;
   if (play?.kind === "choice") return choiceQuestion(play.options);
@@ -337,7 +387,11 @@ export function promptFor(expected: ExpectedResponse, mode: SessionMode, display
     if (play.kind === "exactPitch") return "Play this note";
     if (play.kind === "sequence") return "Play these notes";
     if (play.kind === "line") return "Play this phrase";
-    if (play.kind === "chordLine") return "Play these chords with your left hand";
+    if (play.kind === "chordLine") {
+      return play.chords.length === 1
+        ? "Play this chord with your left hand"
+        : "Play these chords with your left hand";
+    }
     if (play.kind === "performance") {
       const hands = new Set(play.notes.map((n) => n.hand));
       return hands.size > 1 ? "Play this with both hands" : "Play this phrase";
@@ -380,7 +434,19 @@ export class SessionMachine {
    * The attempt of the item on the feedback screen, written only when the learner moves on, pauses
    * or ends the session. Until then Try again can drop it (a key press the app missed).
    */
-  #pending: { events: LearningEvent[]; correct: boolean; nodeId: string } | undefined;
+  #pending:
+    | {
+        events: LearningEvent[];
+        correct: boolean;
+        nodeId: string;
+        /** The attempt counted towards the self-assessment cadence. */
+        eligible: boolean;
+      }
+    | undefined;
+  /** Attempts in this session that could be self-assessed, asked or not (R28). */
+  #assessable = 0;
+  /** While self-assessing: the feedback to show once the learner has answered. */
+  #afterAssess: { shown: SessionState; correct: boolean; errors: AttemptError[] } | undefined;
   #runSummary: SessionSummary["run"];
 
   #startedWall = 0;
@@ -513,8 +579,11 @@ export class SessionMachine {
    */
   retry(): void {
     const pending = this.#pending;
-    if (this.#state.kind !== "feedback" || !this.#cur || !pending) return;
+    const kind = this.#state.kind;
+    if ((kind !== "feedback" && kind !== "selfAssess") || !this.#cur || !pending) return;
     this.#pending = undefined;
+    this.#afterAssess = undefined;
+    if (pending.eligible) this.#assessable--;
     this.#attempts--;
     if (pending.correct) this.#correct--;
     this.#sessionAttempts[pending.nodeId] = (this.#sessionAttempts[pending.nodeId] ?? 1) - 1;
@@ -523,11 +592,16 @@ export class SessionMachine {
     this.#playStimulus();
   }
 
-  /** Skip the current item (logged as an incorrect attempt). Elsewhere it acts like `next`. */
+  /**
+   * Skip the current item (logged as an incorrect attempt). On the self-assessment question it
+   * goes on to feedback without an answer. Elsewhere it acts like `next`.
+   */
   skip(): void {
     const s = this.#state;
     if (s.kind === "presenting" || s.kind === "listening") {
       void this.#enqueue(() => this.#completeItem(true));
+    } else if (s.kind === "selfAssess") {
+      this.#leaveSelfAssess();
     } else {
       this.next();
     }
@@ -569,6 +643,22 @@ export class SessionMachine {
     this.#endPhase();
   }
 
+  /**
+   * Self-assessment (spec 8.4): record what the learner thinks of the answer, then show feedback
+   * as usual. It goes on the held-back attempt and never changes the rating.
+   */
+  selfAssess(answer: SelfAssessment): void {
+    const pending = this.#pending;
+    if (this.#state.kind !== "selfAssess" || !pending) return;
+    this.#pending = {
+      ...pending,
+      events: pending.events.map((e) =>
+        e.type === "attempt.completed" ? { ...e, selfAssessment: answer } : e,
+      ),
+    };
+    this.#leaveSelfAssess();
+  }
+
   /** Feedback: hear the reference and your attempt back to back. */
   replay(): void {
     const s = this.#state;
@@ -586,12 +676,23 @@ export class SessionMachine {
     if (s.kind === "paused" || s.kind === "summary" || s.kind === "error") return;
     if (s.kind === "nothing") return;
     // The app may be closed from the background, so a held-back attempt is written now.
-    const committed = s.kind === "feedback" && this.#pending !== undefined;
+    const committed =
+      (s.kind === "feedback" || s.kind === "selfAssess") && this.#pending !== undefined;
     this.commit();
-    this.#beforePause = committed ? { ...s, canRetry: false } : s;
+    let before: SessionState = s;
+    const after = this.#afterAssess;
+    if (s.kind === "selfAssess" && after && this.#cur) {
+      // The attempt is now written without an answer, so the question is dropped: resuming shows
+      // the feedback it was holding back.
+      this.#markScore(this.#cur, after.correct, after.errors);
+      before = after.shown;
+      this.#afterAssess = undefined;
+    }
+    if (committed && before.kind === "feedback") before = { ...before, canRetry: false };
+    this.#beforePause = before;
     this.#pausedAt = this.#d.clock.wallNow();
     this.#stopActivity();
-    this.#setState({ kind: "paused", resumeTo: s.kind });
+    this.#setState({ kind: "paused", resumeTo: before.kind });
   }
 
   resume(): void {
@@ -615,15 +716,7 @@ export class SessionMachine {
       case "feedback":
         this.#setState(before);
         // Pausing cancelled the auto-advance timer, and auto-advancing feedback has no Next button.
-        if (before.feedback.autoAdvance) {
-          this.#schedule(AUTO_ADVANCE_MS, () => {
-            this.next();
-          });
-        } else if (before.autoContinueMs !== undefined) {
-          this.#schedule(before.autoContinueMs, () => {
-            this.next();
-          });
-        }
+        this.#scheduleFeedbackAdvance(before);
         break;
       default:
         this.#setState(before);
@@ -1085,6 +1178,9 @@ export class SessionMachine {
     const early = isEarly(stage);
     const notes = early ? keyNotes(cur.instance, node) : undefined;
     const guide = early ? keyboardGuide(cur.instance) : undefined;
+    const play = cur.instance.expected.play;
+    const bothHands =
+      play?.kind === "performance" && new Set(play.notes.map((n) => n.hand)).size > 1;
     return {
       position: cur.index + 1,
       // Placement stops early, so it has no fixed total.
@@ -1102,14 +1198,8 @@ export class SessionMachine {
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
-      ...(cur.instance.expected.play?.kind === "chordLine"
-        ? {
-            chords: cur.instance.expected.play.chords.map((c) => ({
-              roman: c.roman,
-              symbol: c.symbol,
-            })),
-          }
-        : {}),
+      ...chordLabelsOf(cur.instance),
+      ...(bothHands ? { bothHands: true as const } : {}),
     };
   }
 
@@ -1188,6 +1278,10 @@ export class SessionMachine {
   }
 
   #promptFor(cur: Current): string {
+    // Broken and pop left-hand patterns (T5.7) are lines, but the hand matters.
+    if (isLeftHandLine(cur.instance) && this.#d.mode === "instrument") {
+      return "Play this pattern with your left hand";
+    }
     return promptFor(cur.instance.expected, this.#d.mode, cur.instance.display !== undefined);
   }
 
@@ -1430,6 +1524,7 @@ export class SessionMachine {
       const attemptEvent: LearningEvent = {
         ...this.#base(),
         type: "attempt.completed" as const,
+        v: 2 as const,
         sessionId: this.#sessionId,
         itemId: cur.instance.itemId,
         nodeId,
@@ -1441,8 +1536,11 @@ export class SessionMachine {
       // Piece runs and revealed scores write at once; everything else waits so it can be retried.
       // Placement returned above, so it never gets here: Try again cannot reach its attempts.
       const retryable = !this.#plan?.run && !reveal;
+      const eligible = retryable && this.#selfAssessable(nodeState, skipped, errors);
+      const ask = eligible && this.#assessable % SELF_ASSESS_EVERY === 0;
+      if (eligible) this.#assessable++;
       if (retryable) {
-        this.#pending = { events: [attemptEvent], correct: outcome.correct, nodeId };
+        this.#pending = { events: [attemptEvent], correct: outcome.correct, nodeId, eligible };
       } else {
         await d.append([attemptEvent]);
       }
@@ -1451,9 +1549,6 @@ export class SessionMachine {
       if (this.#plan?.run) this.#runResults.push(outcome.correct);
 
       if (this.#hasEnded()) return;
-      if (cur.instance.display && this.#notationShown) {
-        this.#d.notation?.highlight(feedbackMarks(cur.instance.display, outcome.correct, errors));
-      }
       const shown: SessionState = {
         kind: "feedback",
         item: this.#itemView(cur),
@@ -1471,23 +1566,87 @@ export class SessionMachine {
           : {}),
       };
       if (this.#state.kind === "paused") {
-        // Backgrounded while saving: show the feedback when the learner comes back.
+        // Backgrounded while saving (only attempts written at once, which are never asked): show
+        // the feedback when the learner comes back.
+        this.#markScore(cur, outcome.correct, errors);
         this.#beforePause = shown;
         return;
       }
-      this.#setState(reveal ? { ...shown, item: { ...shown.item, revealed: true } } : shown);
-      if (reveal) this.#revealScore(cur, outcome.correct, errors);
-      if (feedback.autoAdvance) {
-        this.#schedule(AUTO_ADVANCE_MS, () => {
-          this.next();
-        });
-      } else if (autoContinueMs !== undefined) {
-        this.#schedule(autoContinueMs, () => {
-          this.next();
-        });
+      if (ask) {
+        // Nothing on screen gives the result away until the learner has answered.
+        this.#afterAssess = { shown, correct: outcome.correct, errors };
+        this.#setState({ kind: "selfAssess", item: shown.item, canRetry: true });
+        return;
       }
+      this.#showFeedback(
+        cur,
+        reveal ? { ...shown, item: { ...shown.item, revealed: true } } : shown,
+        outcome.correct,
+        errors,
+        reveal,
+      );
     } finally {
       this.#completing = false;
+    }
+  }
+
+  /**
+   * Self-assessment (spec 8.4, R28): only for skills at fluent or mastered, and never in placement
+   * (which returns before this), extra practice or when no answer was given. Piece runs and
+   * revealed scores are excluded by the caller. Of the eligible attempts, every
+   * `SELF_ASSESS_EVERY`-th in the session is asked, starting with the first.
+   */
+  #selfAssessable(
+    nodeState: NodeState,
+    skipped: boolean,
+    errors: readonly AttemptError[],
+  ): boolean {
+    if (nodeState !== "fluent" && nodeState !== "mastered") return false;
+    if (this.#d.placement || this.#d.practice === true || skipped) return false;
+    return !errors.some((e) => NO_ANSWER_CODES.has(e.code));
+  }
+
+  /** From the self-assessment question to the feedback it held back. */
+  #leaveSelfAssess(): void {
+    const after = this.#afterAssess;
+    const cur = this.#cur;
+    if (this.#state.kind !== "selfAssess" || !after || !cur) return;
+    this.#afterAssess = undefined;
+    this.#showFeedback(cur, after.shown, after.correct, after.errors, false);
+  }
+
+  /** Show feedback: mark a reading item's score, draw a revealed score, start the timers. */
+  #showFeedback(
+    cur: Current,
+    shown: SessionState,
+    correct: boolean,
+    errors: readonly AttemptError[],
+    reveal: boolean,
+  ): void {
+    this.#markScore(cur, correct, errors);
+    this.#setState(shown);
+    if (reveal) this.#revealScore(cur, correct, errors);
+    this.#scheduleFeedbackAdvance(shown);
+  }
+
+  /** Reading items: mark the score being read from right and wrong. */
+  #markScore(cur: Current, correct: boolean, errors: readonly AttemptError[]): void {
+    if (cur.instance.display && this.#notationShown) {
+      this.#d.notation?.highlight(feedbackMarks(cur.instance.display, correct, errors));
+    }
+  }
+
+  /** A faded correct answer, or the auto-continue setting, moves on by itself. */
+  #scheduleFeedbackAdvance(shown: SessionState): void {
+    if (shown.kind !== "feedback") return;
+    if (shown.feedback.autoAdvance) {
+      this.#schedule(AUTO_ADVANCE_MS, () => {
+        this.next();
+      });
+    } else if (shown.autoContinueMs !== undefined) {
+      this.#schedule(shown.autoContinueMs, () => {
+        this.next();
+      });
     }
   }
 

@@ -434,6 +434,133 @@ export const CARDS_V1: unknown[] = [
     links: [{ label: "Triads (musictheory.net)", url: `${MT}/40` }],
   },
   {
+    id: "concept.hands.lh.inversions",
+    nodeIds: ["hands.lh.inversions"],
+    title: "Inversions and voice leading",
+    body: [
+      "A triad can be stacked with any of its notes at the bottom. With the root lowest it is in root position; with the third lowest it is in first inversion; with the fifth lowest it is in second inversion. The chord keeps its name, and the symbol shows the bass note after a slash: F/C is an F chord with C at the bottom.",
+      "Choosing inversions lets your hand stay in one place. Moving from C to F, keep C where it is and move E up to F and G up to A. Each finger moves a step or not at all.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "Four chords are written on the bass staff, with a count-in of four clicks before the first.",
+      "Play each chord with your left hand, all three notes together, holding it for two beats.",
+      "Every chord tone must be right. A wrong note is named, for example E instead of F.",
+    ],
+    examples: [
+      {
+        kind: "progression",
+        label: "I IV V I with the hand kept still",
+        romans: ["I", "IV", "V", "I"],
+        afterCadence: false,
+      },
+      {
+        kind: "staff",
+        label: "F over C, second inversion: C F A",
+        clef: "bass",
+        positions: ["C3", "F3", "A3"],
+      },
+    ],
+    links: [{ label: "Triad inversion (musictheory.net)", url: `${MT}/42` }],
+  },
+  {
+    id: "concept.hands.lh.broken",
+    nodeIds: ["hands.lh.broken"],
+    title: "Broken chords and Alberti bass",
+    body: [
+      "A broken chord plays the notes of a chord one at a time instead of together. Here each chord becomes four even eighth notes.",
+      "The plain broken pattern goes root, third, fifth, third: in C that is C E G E. The Alberti bass, common in classical music, goes root, fifth, third, fifth: C G E G. Keep your hand over the chord shape and let the fingers do the work.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "A line of eighth notes is written on the bass staff, with the chord names alongside and a count-in of four clicks.",
+      "Play it with your left hand, two eighth notes to each click.",
+      "First every note must be right, then the rhythm is judged.",
+    ],
+    examples: [
+      {
+        kind: "staff",
+        label: "Broken C chord: C E G E",
+        clef: "bass",
+        positions: ["C3", "E3", "G3", "E3"],
+      },
+      {
+        kind: "staff",
+        label: "Alberti bass on C: C G E G",
+        clef: "bass",
+        positions: ["C3", "G3", "E3", "G3"],
+      },
+    ],
+    links: [
+      { label: "Alberti bass (Wikipedia)", url: "https://en.wikipedia.org/wiki/Alberti_bass" },
+    ],
+  },
+  {
+    id: "concept.hands.lh.pop",
+    nodeIds: ["hands.lh.pop"],
+    title: "Pop left-hand patterns",
+    body: [
+      "Much pop and rock piano uses only the root, the fifth and the octave of each chord in the left hand: in C, that is C, G and the C above.",
+      "Root-5-8 plays the root for a beat, then the fifth and the octave as two eighth notes. The syncopated version plays the root as a short eighth, then the fifth on the half beat, held across the beat, then the octave. The note that falls between the clicks gives the pattern its push.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "The pattern is written on the bass staff, with the chord names alongside and a count-in of four clicks.",
+      "Play it with your left hand, each chord lasting two clicks.",
+      "First every note must be right, then the rhythm is judged.",
+    ],
+    examples: [
+      {
+        kind: "rhythm",
+        label: "Root-5-8 rhythm: a beat, then two eighths",
+        onsetsBeats: [0, 1, 1.5, 2, 3, 3.5],
+      },
+      {
+        kind: "rhythm",
+        label: "Syncopated: the fifth lands between the clicks",
+        onsetsBeats: [0, 0.5, 1.5, 2, 2.5, 3.5],
+      },
+      {
+        kind: "staff",
+        label: "Root, fifth and octave on C",
+        clef: "bass",
+        positions: ["C2", "G2", "C3"],
+      },
+    ],
+    links: [],
+  },
+  {
+    id: "concept.hands.coord.basic",
+    nodeIds: ["hands.coord.basic"],
+    title: "Hands together",
+    body: [
+      "Now both hands play at once, on a grand staff: the top (treble) staff is your right hand and the bottom (bass) staff your left. A brace joins the two staves, and notes lined up one above the other are played together.",
+      "Your left hand holds one block chord through each bar, the root-position triads you already know. Your right hand plays a tune in steady quarter notes over it, in a five-finger position on the home note, so it never has to move. The tune lands on a note of the chord on beats 1 and 3, which is why it fits the harmony.",
+      "Start each bar with both hands together, then keep the left hand still while the right hand moves. If it falls apart, play slowly in your head first: the count-in sets the pace, and you only need one beat per second.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "Four bars are written on the grand staff, with the chord of each bar named, and a count-in of four clicks comes before the first bar.",
+      "Strike each chord with your left hand on beat 1 and hold it for the whole bar, while your right hand plays the four quarter notes of the tune.",
+      "Every note of both hands must be right. Feedback names the bar and the hand, for example Bar 3: LH late.",
+    ],
+    examples: [
+      {
+        kind: "progression",
+        label: "The left hand: I IV V I as block chords",
+        romans: ["I", "IV", "V", "I"],
+        afterCadence: false,
+      },
+      {
+        kind: "staff",
+        label: "The right hand's five notes: C D E F G",
+        clef: "treble",
+        positions: ["C4", "D4", "E4", "F4", "G4"],
+      },
+    ],
+    links: [{ label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` }],
+  },
+  {
     id: "concept.byear.melody.simple",
     nodeIds: ["byear.melody.simple"],
     title: "Playing a heard melody",
