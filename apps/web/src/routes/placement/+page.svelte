@@ -1,18 +1,22 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { isMidiSupported } from "@clavis/audio";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import NotationView from "../../lib/components/NotationView.svelte";
+  import { INPUT_STORAGE_KEY } from "../../lib/input";
+  import { placementStoredInput } from "../../lib/placement";
   import { updateState } from "../../lib/pwa/update-state.svelte";
   import type { SessionState } from "../../lib/session/machine";
   import { parseSessionParams } from "../../lib/session/params";
   import { createSessionRuntime, type SessionRuntime } from "../../lib/session/runtime";
 
   /*
-   * Placement (T3.16, R19): ear, then reading, at the instrument. The session machine runs in its
-   * placement mode: no intro cards, a brief tick instead of feedback, and one stored event at the
-   * end. Answers come from the microphone; the stored on-screen keyboard choice is ignored because
-   * placement is for the instrument.
+   * Placement (T3.16, R19): ear, then reading, then hands (T5.9, MIDI only), at the instrument. The
+   * session machine runs in its placement mode: no intro cards, a brief tick instead of feedback,
+   * and one stored event at the end. Answers come from the microphone, or a MIDI keyboard when that
+   * is the stored choice; a stored on-screen keyboard choice is ignored because placement is for
+   * the instrument.
    */
 
   type Phase = "loading" | "failed" | "ready";
@@ -21,6 +25,8 @@
   let failure = $state("");
   let runtime = $state.raw<SessionRuntime | undefined>();
   let view = $state.raw<SessionState>({ kind: "idle" });
+  /** The HANDS section runs: the input is a MIDI keyboard the browser can reach. */
+  let hands = $state(false);
 
   const machine = $derived(runtime?.machine);
   const running = $derived(
@@ -28,8 +34,15 @@
   );
 
   onMount(() => {
-    // `?input=` still applies (tests use fake input); the stored choice does not.
-    const p = parseSessionParams(page.url.searchParams, null);
+    // `?input=` still applies (tests use fake input); of the stored choices only MIDI does.
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(INPUT_STORAGE_KEY);
+    } catch {
+      // Storage can be blocked; the mic answers.
+    }
+    const p = parseSessionParams(page.url.searchParams, placementStoredInput(stored));
+    hands = p.inputKind === "midi" && isMidiSupported();
     let off: (() => void) | undefined;
     let current: SessionRuntime | undefined;
     let gone = false;
@@ -80,11 +93,16 @@
   }
 
   function sectionLabel(block: "ear" | "read" | "apply"): string {
-    return block === "ear" ? "Ear, C major" : block === "apply" ? "Pieces" : "Reading";
+    return block === "ear" ? "Ear, C major" : block === "apply" ? "Hands" : "Reading";
   }
 
   /** What the learner is asked to do, in words. */
-  function instruction(block: "ear" | "read" | "apply"): string {
+  function instruction(block: "ear" | "read" | "apply", bothHands: boolean): string {
+    if (block === "apply") {
+      return bothHands
+        ? "After the count-in, play in time: right hand on the top staff, left hand on the bottom."
+        : "After the count-in, play the chords in time with your left hand.";
+    }
     return block === "ear"
       ? "Listen to the chords, which set the key (C major), then play the one note you hear on your piano. Any octave counts."
       : "Play the note shown on the staff, in the right octave.";
@@ -92,6 +110,14 @@
 </script>
 
 <svelte:head><title>Placement</title></svelte:head>
+
+{#snippet chordLabels(chords: { roman: string; symbol: string }[])}
+  <p class="chord-labels" data-testid="chord-labels" aria-label="Chords to play">
+    {#each chords as c, i (i)}
+      <span class="chord"><span class="deg">{c.roman}</span> {c.symbol}</span>
+    {/each}
+  </p>
+{/snippet}
 
 <div class="placement" data-testid="placement" data-state={view.kind}>
   {#if phase === "loading"}
@@ -123,6 +149,12 @@
         <li>
           <strong>Reading.</strong> A note is shown on the bass staff. Play it in the right octave.
         </li>
+        {#if hands}
+          <li data-testid="placement-how-hands">
+            <strong>Hands.</strong> Play I-IV-V-I in C with your left hand, then a simple melody over
+            the same chords with both hands. A count-in sets the beat.
+          </li>
+        {/if}
         <li>
           Not sure? Tap "I don't know". It stops by itself when things get hard. Each question is
           marked right or wrong, with no hints, because this only measures where you are.
@@ -138,7 +170,11 @@
       <section class="card" data-testid="presenting">
         <p class="eyebrow">{sectionLabel(view.item.block)}</p>
         <p class="prompt" aria-live="polite">{view.prompt}</p>
-        <p class="hint">{instruction(view.item.block)}</p>
+        {#if view.item.chords}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render chordLabels(view.item.chords)}
+        {/if}
+        <p class="hint">{instruction(view.item.block, view.item.bothHands === true)}</p>
         <button type="button" class="secondary" data-testid="skip" onclick={() => machine?.skip()}>
           I don't know
         </button>
@@ -147,7 +183,13 @@
       <section class="card" data-testid="listening">
         <p class="eyebrow">{sectionLabel(view.item.block)}</p>
         <p class="prompt" aria-live="polite" data-testid="prompt">{view.prompt}</p>
-        <p class="hint" data-testid="placement-hint">{instruction(view.item.block)}</p>
+        {#if view.item.chords}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+          {@render chordLabels(view.item.chords)}
+        {/if}
+        <p class="hint" data-testid="placement-hint">
+          {instruction(view.item.block, view.item.bothHands === true)}
+        </p>
         <button type="button" class="secondary" data-testid="skip" onclick={() => machine?.skip()}>
           I don't know
         </button>
@@ -245,6 +287,20 @@
 
   .lead {
     font-size: 1.15rem;
+  }
+
+  .chord-labels {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-2) var(--space-4);
+    margin: 0;
+    font-size: 1.15rem;
+  }
+
+  .chord .deg {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
   }
 
   .notation-slot {
