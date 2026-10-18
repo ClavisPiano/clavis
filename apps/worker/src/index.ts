@@ -1,4 +1,5 @@
 import { DEFAULT_PULL_LIMIT, PullRequest, PushRequest } from "@clavis/core";
+import { handleAccount, isAccountRoute } from "./account";
 import { authenticateSession } from "./auth/guard";
 import { handleAuth, renewalCookie } from "./auth/handlers";
 import { handleBlob } from "./blobs";
@@ -96,6 +97,7 @@ async function handleApi(request: Request, url: URL, env: Env): Promise<Response
     }
     return json({ ok: true, version: env.VERSION });
   }
+  if (isAccountRoute(url.pathname, request.method)) return handleAccount(request, url, env);
   if (url.pathname === "/api/me" || url.pathname.startsWith("/api/auth/")) {
     return handleAuth(request, url, env);
   }

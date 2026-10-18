@@ -26,6 +26,7 @@ interface Fake {
   labels: Map<string, string>;
   pushes: { events: { type?: string }[] }[];
   requests: string[];
+  deleted: number;
 }
 
 async function installFakeBackend(page: Page): Promise<Fake> {
@@ -36,6 +37,7 @@ async function installFakeBackend(page: Page): Promise<Fake> {
     labels: new Map(),
     pushes: [],
     requests: [],
+    deleted: 0,
   };
   const json = (route: Route, body: unknown, status = 200): Promise<void> =>
     route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -46,7 +48,22 @@ async function installFakeBackend(page: Page): Promise<Fake> {
     fake.requests.push(`${req.method()} ${path}`);
     const body = (req.postDataJSON() ?? {}) as Record<string, unknown>;
     switch (path) {
+      case "/api/me/export":
+        if (!fake.signedIn) return json(route, { error: "unauthorized" }, 401);
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          headers: { "content-disposition": 'attachment; filename="clavis-export.json"' },
+          body: JSON.stringify({ format: "clavis-export-1", events: [] }),
+        });
       case "/api/me":
+        if (req.method() === "DELETE") {
+          if (!fake.signedIn) return json(route, { error: "unauthorized" }, 401);
+          fake.deleted += 1;
+          fake.signedIn = false;
+          fake.credentialIds.clear();
+          return json(route, { ok: true });
+        }
         return fake.signedIn
           ? json(route, {
               userId: "user-1",
@@ -305,6 +322,66 @@ test("the only passkey cannot be removed when no recovery codes are left", async
   await page.getByTestId("passkey-remove-confirm").click();
   await expect(page.getByTestId("account-error")).toContainText("only passkey");
   await expect(page.getByTestId("passkey-item")).toHaveCount(1);
+});
+
+test("deleting the account asks first, signs out, and a new account gets the history again", async ({
+  page,
+}) => {
+  const fake = await installFakeBackend(page);
+  await addVirtualAuthenticator(page);
+  await page.goto("/settings");
+  await page.getByTestId("create-account").click();
+  await page.getByTestId("codes-saved").check();
+  await page.getByTestId("codes-done").click();
+  await expect(page.getByTestId("sync-status")).toContainText("Synced.");
+  const registered = () =>
+    fake.pushes.flatMap((p) => p.events).filter((e) => e.type === "device.registered").length;
+  expect(registered()).toBe(1);
+
+  // Cancel backs out and nothing is sent.
+  await page.getByTestId("delete-account").click();
+  await expect(page.getByTestId("delete-confirm")).toContainText("cannot be undone");
+  await page.getByTestId("delete-cancel").click();
+  await expect(page.getByTestId("delete-confirm")).toHaveCount(0);
+  expect(fake.deleted).toBe(0);
+
+  await page.getByTestId("delete-account").click();
+  await page.getByTestId("delete-confirm-yes").click();
+  await expect(page.getByTestId("account-deleted")).toContainText(
+    "Practice on this device is untouched",
+  );
+  await expect(page.getByTestId("create-account")).toBeVisible();
+  expect(fake.deleted).toBe(1);
+
+  // The device kept its practice; a new account receives all of it again.
+  await page.getByTestId("create-account").click();
+  await page.getByTestId("codes-saved").check();
+  await page.getByTestId("codes-done").click();
+  await expect(page.getByTestId("sync-status")).toContainText("Synced.");
+  await expect.poll(registered).toBe(2);
+});
+
+test("the data export downloads a JSON file", async ({ page }) => {
+  await installFakeBackend(page);
+  await addVirtualAuthenticator(page);
+  await page.goto("/settings");
+  await page.getByTestId("create-account").click();
+  await page.getByTestId("codes-saved").check();
+  await page.getByTestId("codes-done").click();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByTestId("export-data").click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("clavis-export.json");
+});
+
+test("the privacy page is reachable from Settings and states what is kept", async ({ page }) => {
+  await page.goto("/settings");
+  await page.getByTestId("privacy-link").click();
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(page.getByRole("heading", { name: "Privacy", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Deleting your account" })).toBeVisible();
+  await expect(page.getByTestId("privacy")).toContainText("no advertising, no analytics");
 });
 
 test("recovery code sign in prompts to add a passkey on this device", async ({ page }) => {

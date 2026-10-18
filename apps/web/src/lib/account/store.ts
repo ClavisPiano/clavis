@@ -54,6 +54,11 @@ export interface AccountStoreDeps {
   onSignedIn: () => void;
   /** Called after sign-out, or when a signed-in session turns out to be expired. */
   onSignedOut: () => void;
+  /**
+   * Called after the server deleted the account, before the signed-out state is reported. The
+   * device must forget what it had synced, so a later account gets the whole history.
+   */
+  onAccountDeleted?: () => Promise<void>;
   /** Called just after `onSignedOut` when the cause was an expired session, not a sign out. */
   onSessionExpired?: () => void;
   /**
@@ -85,6 +90,8 @@ export interface AccountStore {
   signOut(): Promise<boolean>;
   /** Sign out on every device, for example after losing one. */
   signOutEverywhere(): Promise<boolean>;
+  /** Delete the account and its server data. Practice on this device is kept. */
+  deleteAccount(): Promise<boolean>;
   clearError(): void;
 }
 
@@ -306,6 +313,12 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
     signOut: () =>
       action("signingOut", async () => {
         await api.logout();
+        signedOutState();
+      }),
+    deleteAccount: () =>
+      action("signingOut", async () => {
+        await api.deleteAccount();
+        await deps.onAccountDeleted?.();
         signedOutState();
       }),
     signOutEverywhere: () =>

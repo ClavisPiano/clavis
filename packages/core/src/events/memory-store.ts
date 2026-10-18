@@ -36,6 +36,11 @@ export class MemoryEventStore implements EventStore {
     for (const id of ids) this.unsynced.delete(id);
   }
 
+  async markAllUnsynced(): Promise<void> {
+    await Promise.resolve();
+    this.unsynced = new Set(this.events.keys());
+  }
+
   async getSnapshot(key: string): Promise<Snapshot | undefined> {
     await Promise.resolve();
     return this.snapshots.get(key);

@@ -34,6 +34,11 @@ export interface EventStore {
   listUnsynced(limit?: number): Promise<LearningEvent[]>;
   /** Unknown ids are ignored. */
   markSynced(ids: string[]): Promise<void>;
+  /**
+   * Mark every stored event as not yet synced, so the next sync pushes them all. Used when the
+   * server copy is gone (the account was deleted) and the events must reach a new account.
+   */
+  markAllUnsynced(): Promise<void>;
   getSnapshot(key: string): Promise<Snapshot | undefined>;
   putSnapshot(snapshot: Snapshot): Promise<void>;
   clearSnapshots(): Promise<void>;

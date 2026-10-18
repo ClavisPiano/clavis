@@ -44,6 +44,12 @@ export interface PushRepo {
    * due cues: weekday, sent and practised days are still checked by `isDue`.
    */
   listNearDue(nowMs: number): Promise<PushSubscriptionRow[]>;
+  /** The user's cue settings per device, without the endpoint or its keys (for the data export). */
+  listCues(
+    userId: string,
+  ): Promise<
+    { timeLocal: string; weekdays: number; tzOffsetMin: number; habit: string; createdAt: number }[]
+  >;
   /** Apply the outcome of a cron run atomically: set sent days and delete dead endpoints. */
   applySendResults(sent: { endpoint: string; day: string }[], gone: string[]): Promise<void>;
 }
@@ -119,6 +125,26 @@ export function createPushRepo(sql: AsyncSql): PushRepo {
         userId,
       );
       return removed.length > 0;
+    },
+
+    async listCues(userId) {
+      const rows = await sql.all<{
+        time_local: string;
+        weekdays: number;
+        tz_offset_min: number;
+        habit: string;
+        created_at: number;
+      }>(
+        "SELECT time_local, weekdays, tz_offset_min, habit, created_at FROM push_subscriptions WHERE user_id = ? ORDER BY created_at, endpoint",
+        userId,
+      );
+      return rows.map((r) => ({
+        timeLocal: r.time_local,
+        weekdays: r.weekdays,
+        tzOffsetMin: r.tz_offset_min,
+        habit: r.habit,
+        createdAt: r.created_at,
+      }));
     },
 
     async markPractised(userId, day) {

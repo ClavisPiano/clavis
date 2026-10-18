@@ -83,6 +83,8 @@ export interface AuthApi {
   removePasskey: (id: string) => Promise<{ passkeys: number }>;
   /** Replaces all recovery codes; the new ones are returned once. */
   regenerateRecoveryCodes: () => Promise<string[]>;
+  /** Deletes the account and everything stored for it on the server. This device's data stays. */
+  deleteAccount: () => Promise<void>;
   logout: () => Promise<void>;
   /** Ends this session and every other one (the server bumps the session epoch). */
   logoutAll: () => Promise<void>;
@@ -93,7 +95,7 @@ export function createAuthApi(
   base = "/api",
 ): AuthApi {
   async function call<S extends z.ZodType>(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     schema: S,
     opts: {
@@ -181,6 +183,9 @@ export function createAuthApi(
       }),
     async regenerateRecoveryCodes() {
       return (await call("POST", "/auth/recovery/regenerate", NewCodes)).recoveryCodes;
+    },
+    async deleteAccount() {
+      await call("DELETE", "/me", Ok);
     },
     async logout() {
       await call("POST", "/auth/logout", z.object({ ok: z.boolean() }));

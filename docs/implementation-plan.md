@@ -317,14 +317,14 @@ Work from the October 2026 review of security, reliability and usability. Each t
 
 | ID | Task | Issue | Status |
 |---|---|---|---|
-| T8.1 | **Backup nudge.** When the browser has not granted persistent storage and the learner is not signed in (or the last backup is old), show a periodic "back up your data" prompt on Home. Last backup time is device meta | #215 | Next |
-| T8.2 | **Accessibility.** Gate animations on `prefers-reduced-motion`; give each displayed score a text description that does not reveal read answers; add an axe check to the Playwright smoke tests | #214 | Planned |
-| T8.3 | **Practice cue scaling.** Select due rows in SQL (indexed time bucket) instead of `listAll`; spread sends beyond one run's cap; log dropped cues | #206 | Planned |
-| T8.4 | **Client timestamp clamp.** Events created on a device with a wrong clock never carry a timestamp far in the future, so they cannot sort last forever or be refused by the server | #207 | Planned |
-| T8.5 | **Session expiry.** Sliding renewal when under half the lifetime remains (cookie-authenticated `/api/me` and sync); a visible "sign in to resume sync" prompt on Home when a 401 clears the signed-in hint | #204 | In review |
-| T8.6 | **Registration abuse cap.** A global hourly cap on `register/verify` kept in D1, and a log line when a rate limiter errors | #209 | Done |
-| T8.7 | **Recovery codes and passkeys.** Regenerate recovery codes; list, rename and remove passkeys (never the last credential unless codes exist); a low-codes warning | #212 | In review |
-| T8.8 | **Account deletion and export.** `DELETE /api/me` removes D1 rows, the Durable Object data and R2 objects; a server-side export; `docs/privacy.md` and a Settings link | #213 | Planned |
+| T8.1 | **Backup nudge.** When the browser has not granted persistent storage and the learner is not signed in (or the last backup is old), show a periodic "back up your data" prompt on Home. Last backup time is kept in the device's local storage | #215 | Done (#229) |
+| T8.2 | **Accessibility.** Gate animations on `prefers-reduced-motion`; give each displayed score a text description that does not reveal read answers; add an axe check to the Playwright smoke tests | #214 | Done (#230) |
+| T8.3 | **Practice cue scaling.** Select due rows in SQL (indexed time bucket) instead of `listAll`; spread sends beyond one run's cap; log dropped cues | #206 | Done (#231) |
+| T8.4 | **Client timestamp clamp.** Events created on a device with a wrong clock never carry a timestamp far in the future, so they cannot sort last forever or be refused by the server | #207 | Done (#232) |
+| T8.5 | **Session expiry.** Sliding renewal when under half the lifetime remains (cookie-authenticated `/api/me` and sync); a visible "sign in to resume sync" prompt on Home when a 401 clears the signed-in hint | #204 | Done (#233) |
+| T8.6 | **Registration abuse cap.** A global hourly cap on `register/verify` kept in D1, and a log line when a rate limiter errors | #209 | Done (#234) |
+| T8.7 | **Recovery codes and passkeys.** Regenerate recovery codes; list, rename and remove passkeys (never the last credential unless codes exist); a low-codes warning | #212 | Done (#235) |
+| T8.8 | **Account deletion and export.** `DELETE /api/me` removes D1 rows, the Durable Object data and R2 objects; a server-side export; `docs/privacy.md` and a Settings link | #213 | In review |
 | T8.9 | **Review follow-ups.** Share the 1 MiB push cap between core and the web app; surface skipped oversized events in the UI; tests for the blob byte ceiling, the 403 mapping and a paged R2 list | #201, #207 | Planned |
 | T8.10 | Byte-bounded sync pushes and skipping oversized events | #201 | Done (#218) |
 | T8.11 | Service worker navigation timeout | #203 | Done (#219) |

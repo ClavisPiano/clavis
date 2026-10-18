@@ -123,6 +123,10 @@ export class DexieEventStore implements EventStore {
     await this.db.events.where("id").anyOf(ids).modify({ synced: 1 });
   }
 
+  async markAllUnsynced(): Promise<void> {
+    await this.db.events.toCollection().modify({ synced: 0 });
+  }
+
   getSnapshot(key: string): Promise<Snapshot | undefined> {
     return Promise.resolve(this.db.snapshots.get(key));
   }

@@ -27,6 +27,7 @@ function setup(overrides: Partial<AuthApi> = {}, ceremonies: Partial<Ceremonies>
     renamePasskey: vi.fn(() => Promise.resolve()),
     removePasskey: vi.fn(() => Promise.resolve({ passkeys: 1 })),
     regenerateRecoveryCodes: vi.fn(() => Promise.resolve(NEW_CODES)),
+    deleteAccount: vi.fn(() => Promise.resolve()),
     logout: vi.fn(() => Promise.resolve()),
     logoutAll: vi.fn(() => Promise.resolve()),
     ...overrides,
@@ -40,18 +41,20 @@ function setup(overrides: Partial<AuthApi> = {}, ceremonies: Partial<Ceremonies>
   const onSignedIn = vi.fn();
   const onSignedOut = vi.fn();
   const onSessionExpired = vi.fn();
+  const onAccountDeleted = vi.fn(() => Promise.resolve());
   const store = createAccountStore({
     api,
     ceremonies: cer,
     onSignedIn,
     onSignedOut,
     onSessionExpired,
+    onAccountDeleted,
   });
   const phases: string[] = [];
   store.subscribe((s: AccountSnapshot) => {
     if (phases.at(-1) !== s.phase) phases.push(s.phase);
   });
-  return { api, cer, store, onSignedIn, onSignedOut, onSessionExpired, phases };
+  return { api, cer, store, onSignedIn, onSignedOut, onSessionExpired, onAccountDeleted, phases };
 }
 
 const me = { userId: "u1", passkeys: 1, recoveryCodesLeft: 10 };
@@ -397,6 +400,39 @@ describe("format", () => {
       expect(t.store.snapshot.account).toMatchObject({ recoveryCodesLeft: 10 });
       t.store.acknowledgeRecoveryCodes();
       expect(t.store.snapshot.recoveryCodes).toBeUndefined();
+    });
+
+    it("deleting the account resets sync state before reporting signed out, and is not an expiry", async () => {
+      const order: string[] = [];
+      const t = setup(signedIn);
+      t.onAccountDeleted.mockImplementation(() => {
+        order.push("reset");
+        return Promise.resolve();
+      });
+      t.onSignedOut.mockImplementation(() => {
+        order.push("signedOut");
+      });
+      await t.store.refresh();
+      await t.store.loadPasskeys();
+      expect(await t.store.deleteAccount()).toBe(true);
+      expect(t.api.deleteAccount).toHaveBeenCalledOnce();
+      expect(order).toEqual(["reset", "signedOut"]);
+      expect(t.store.snapshot.account).toEqual({ kind: "anonymous" });
+      expect(t.store.snapshot.passkeys).toBeUndefined();
+      expect(t.onSessionExpired).not.toHaveBeenCalled();
+    });
+
+    it("a failed deletion keeps the account, the sync state and an error", async () => {
+      const t = setup({
+        ...signedIn,
+        deleteAccount: vi.fn(() => Promise.reject(new AccountError("server", "x", 500))),
+      });
+      await t.store.refresh();
+      expect(await t.store.deleteAccount()).toBe(false);
+      expect(t.onAccountDeleted).not.toHaveBeenCalled();
+      expect(t.onSignedOut).not.toHaveBeenCalled();
+      expect(t.store.snapshot.account.kind).toBe("signedIn");
+      expect(t.store.snapshot.error?.kind).toBe("server");
     });
 
     it("a 401 while managing means the session expired", async () => {

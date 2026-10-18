@@ -268,3 +268,19 @@ describe("passkey management and recovery code API", () => {
     expect(describeAccountError(new AccountError("lastPasskey", "x"))).toMatch(/only passkey/);
   });
 });
+
+describe("account deletion API", () => {
+  it("sends DELETE /api/me with credentials and no body", async () => {
+    const { api, calls } = fake(() => jsonRes({ ok: true }));
+    await api.deleteAccount();
+    expect(calls[0]?.url).toBe("/api/me");
+    expect(calls[0]?.init.method).toBe("DELETE");
+    expect(calls[0]?.init.credentials).toBe("include");
+    expect(calls[0]?.init.body).toBeUndefined();
+  });
+
+  it("maps 401 to unauthorized and 500 to server", async () => {
+    expect(await kindOf(fake(() => jsonRes({}, 401)).api.deleteAccount())).toBe("unauthorized");
+    expect(await kindOf(fake(() => jsonRes({}, 500)).api.deleteAccount())).toBe("server");
+  });
+});
