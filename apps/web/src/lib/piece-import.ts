@@ -60,7 +60,8 @@ export const PICKUP_MESSAGE =
   "This score has a pickup bar or incomplete measures; that is not supported yet.";
 
 /**
- * Largest serialized score and phrases an import event may carry. The event travels in a sync push
+ * Largest serialized score and phrases (UTF-8 bytes) an import event may carry. Matches
+ * `MAX_PUSH_BYTES` in core's sync engine. The event travels in a sync push
  * that the server limits to 2 MiB, so a bigger score would stop other events syncing.
  */
 export const MAX_IMPORT_EVENT_BYTES = 1024 * 1024;
@@ -179,7 +180,9 @@ export function convertFile(
       difficulty,
     });
     if (!check.success) return { ok: false, message: pieceProblemMessage(check.error.issues) };
-    if (JSON.stringify({ score, phrases }).length > MAX_IMPORT_EVENT_BYTES) {
+    if (
+      new TextEncoder().encode(JSON.stringify({ score, phrases })).length > MAX_IMPORT_EVENT_BYTES
+    ) {
       return { ok: false, message: TOO_MANY_NOTES_MESSAGE };
     }
     return { ok: true, candidate: { score, phrases, difficulty } };

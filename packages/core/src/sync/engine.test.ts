@@ -350,6 +350,16 @@ describe("byte-bounded pushes", () => {
     );
   });
 
+  it("gives an event larger than the cap a chunk of its own", () => {
+    const events = sized(3);
+    const chunks = chunkByBytes(events, 10);
+    expect(chunks.map((c) => c.length)).toEqual([1, 1, 1]);
+  });
+
+  it("counts multi-byte characters as bytes", () => {
+    expect(utf8Length("aé€😀")).toBe(1 + 2 + 3 + 4);
+  });
+
   it("splits a large batch into several pushes under the byte cap", async () => {
     const server = new FakeServer();
     const a = await new Client("A", server).init();

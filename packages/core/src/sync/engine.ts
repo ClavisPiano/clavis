@@ -104,20 +104,24 @@ export function utf8Length(text: string): number {
 
 const eventBytes = (event: LearningEvent): number => utf8Length(JSON.stringify(event));
 
-/** Split events (in order) into chunks whose serialized size stays within `maxBytes`. */
+/**
+ * Split events (in order) into chunks whose serialized JSON array stays within `maxBytes`. An event
+ * larger than the cap on its own still gets a chunk of its own: the server decides whether it fits
+ * (a 413 then makes `pushChunk` skip it). Keep in step with `MAX_IMPORT_EVENT_BYTES` in the web app.
+ */
 export function chunkByBytes(
   events: readonly LearningEvent[],
   maxBytes: number = MAX_PUSH_BYTES,
 ): LearningEvent[][] {
   const chunks: LearningEvent[][] = [];
   let current: LearningEvent[] = [];
-  let size = 0;
+  let size = 2; // the surrounding [ ]
   for (const event of events) {
-    const bytes = eventBytes(event) + 1; // the comma between array items
+    const bytes = eventBytes(event) + (current.length > 0 ? 1 : 0); // comma between items
     if (current.length > 0 && size + bytes > maxBytes) {
       chunks.push(current);
       current = [];
-      size = 0;
+      size = 2;
     }
     current.push(event);
     size += bytes;
