@@ -21,6 +21,14 @@ export interface MeResponse {
   recoveryCodesLeft: number;
 }
 
+/** A passkey as the server lists it. Times are unix milliseconds. */
+export interface PasskeyInfo {
+  id: string;
+  label: string | null;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
 export interface OptionsResponse<O> {
   challengeId: string;
   options: O;
@@ -38,6 +46,19 @@ const Recovered = z.object({
   userId: z.string(),
   recoveryCodesLeft: z.number().int().nonnegative(),
 });
+const PasskeyList = z.object({
+  passkeys: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string().nullable(),
+      createdAt: z.number(),
+      lastUsedAt: z.number().nullable(),
+    }),
+  ),
+});
+const Ok = z.object({ ok: z.boolean() });
+const PasskeyRemoved = z.object({ passkeys: z.number().int().nonnegative() });
+const NewCodes = z.object({ recoveryCodes: z.array(z.string()) });
 const PasskeyAdded = z.object({ userId: z.string(), passkeys: z.number().int().nonnegative() });
 
 export interface AuthApi {
@@ -55,6 +76,13 @@ export interface AuthApi {
     challengeId: string,
     response: unknown,
   ) => Promise<{ userId: string; passkeys: number }>;
+  listPasskeys: () => Promise<PasskeyInfo[]>;
+  /** An empty label clears the name. */
+  renamePasskey: (id: string, label: string) => Promise<void>;
+  /** Removing one ends every other session; the server keeps this one signed in. */
+  removePasskey: (id: string) => Promise<{ passkeys: number }>;
+  /** Replaces all recovery codes; the new ones are returned once. */
+  regenerateRecoveryCodes: () => Promise<string[]>;
   logout: () => Promise<void>;
   /** Ends this session and every other one (the server bumps the session epoch). */
   logoutAll: () => Promise<void>;
@@ -72,7 +100,7 @@ export function createAuthApi(
       body?: unknown;
       unauthorizedKind?: "unauthorized" | "rejected";
       /** Only registration can mean "this passkey already exists" by a 409. */
-      conflictKind?: "alreadyRegistered" | "rejected";
+      conflictKind?: "alreadyRegistered" | "rejected" | "lastPasskey";
     } = {},
   ): Promise<z.output<S>> {
     const init: RequestInit = { method, credentials: "include" };
@@ -140,6 +168,20 @@ export function createAuthApi(
         body: { challengeId, response },
         conflictKind: "alreadyRegistered",
       }),
+    async listPasskeys() {
+      return (await call("GET", "/auth/passkeys", PasskeyList)).passkeys;
+    },
+    async renamePasskey(id, label) {
+      await call("POST", "/auth/passkeys/rename", Ok, { body: { id, label } });
+    },
+    removePasskey: (id) =>
+      call("POST", "/auth/passkeys/remove", PasskeyRemoved, {
+        body: { id },
+        conflictKind: "lastPasskey",
+      }),
+    async regenerateRecoveryCodes() {
+      return (await call("POST", "/auth/recovery/regenerate", NewCodes)).recoveryCodes;
+    },
     async logout() {
       await call("POST", "/auth/logout", z.object({ ok: z.boolean() }));
     },

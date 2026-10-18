@@ -117,6 +117,12 @@ const VerifyBody = z.object({
   response: z.looseObject({ id: z.string().min(1).max(2048) }),
 });
 const RecoveryBody = z.object({ code: z.string().min(1).max(64) });
+const PasskeyIdBody = z.object({ id: z.string().min(1).max(2048) });
+const MAX_PASSKEY_LABEL = 60;
+const RenameBody = z.object({
+  id: z.string().min(1).max(2048),
+  label: z.string().max(MAX_PASSKEY_LABEL * 2),
+});
 
 const invalidRequest = (): Response => json({ error: "invalid_request" }, 400);
 const invalidChallenge = (): Response => json({ error: "invalid_challenge" }, 400);
@@ -162,6 +168,12 @@ async function registrationsPaused(env: Env, repo: AuthRepo): Promise<Response |
   });
 }
 
+/** A fresh set of recovery codes: the plain text to show once, and the hashes to store. */
+async function newRecoveryCodes(): Promise<{ codes: string[]; hashes: string[] }> {
+  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, generateRecoveryCode);
+  return { codes, hashes: await Promise.all(codes.map(hashCode)) };
+}
+
 async function registerOptions(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
   if ((await readBody(request, NoBody)) === null) return invalidRequest();
   const paused = await registrationsPaused(env, repo);
@@ -183,8 +195,7 @@ async function registerVerify(request: Request, env: Env, repo: AuthRepo): Promi
   const verification = await verifyRegistration(env, body.response, stored.challenge);
   if (!verification) return json({ error: "verification_failed" }, 400);
   const { credential } = verification;
-  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, generateRecoveryCode);
-  const hashes = await Promise.all(codes.map(hashCode));
+  const { codes, hashes } = await newRecoveryCodes();
   try {
     await repo.createUser(
       stored.userId,
@@ -319,6 +330,57 @@ async function addVerify(request: Request, env: Env, repo: AuthRepo): Promise<Re
   return json({ userId, passkeys: (await repo.listCredentials(userId)).length });
 }
 
+async function listPasskeys(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
+  const userId = await authenticate(request, env);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
+  return json({ passkeys: await repo.listPasskeys(userId) });
+}
+
+async function renamePasskey(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
+  const userId = await authenticate(request, env);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
+  const body = await readBody(request, RenameBody);
+  if (!body) return invalidRequest();
+  const label = body.label.trim();
+  if (label.length > MAX_PASSKEY_LABEL) return invalidRequest();
+  if (!(await repo.renamePasskey(userId, body.id, label === "" ? null : label))) {
+    return json({ error: "not_found" }, 404);
+  }
+  return json({ ok: true });
+}
+
+/**
+ * Remove a passkey (a lost device). Ends every other session, because the person removing it may
+ * be doing so after a theft, and keeps this one signed in on a fresh token.
+ */
+async function removePasskey(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
+  const userId = await authenticate(request, env);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
+  const body = await readBody(request, PasskeyIdBody);
+  if (!body) return invalidRequest();
+  const result = await repo.removePasskey(userId, body.id);
+  if (result === "not_found") return json({ error: "not_found" }, 404);
+  if (result === "last_credential") return json({ error: "last_credential" }, 409);
+  const epoch = await repo.bumpSessionEpoch(userId);
+  if (epoch === null) return json({ error: "unauthorized" }, 401);
+  const passkeys = (await repo.listPasskeys(userId)).length;
+  return withSession(env, userId, epoch, { passkeys });
+}
+
+/** Replace every recovery code (used or not) with ten new ones, shown once. */
+async function regenerateRecoveryCodes(
+  request: Request,
+  env: Env,
+  repo: AuthRepo,
+): Promise<Response> {
+  const userId = await authenticate(request, env);
+  if (userId === null) return json({ error: "unauthorized" }, 401);
+  if ((await readBody(request, NoBody)) === null) return invalidRequest();
+  const { codes, hashes } = await newRecoveryCodes();
+  await repo.replaceRecoveryCodes(userId, hashes);
+  return json({ recoveryCodes: codes });
+}
+
 /** Clears the session cookie, and any cookie set under the name used before the `__Host-` prefix. */
 function logout(): Response {
   const headers = new Headers(API_HEADERS);
@@ -363,6 +425,9 @@ const POST_ROUTES: Record<string, PostHandler> = {
   "/api/auth/login/options": loginOptions,
   "/api/auth/login/verify": loginVerify,
   "/api/auth/recovery": recovery,
+  "/api/auth/recovery/regenerate": regenerateRecoveryCodes,
+  "/api/auth/passkeys/rename": renamePasskey,
+  "/api/auth/passkeys/remove": removePasskey,
   "/api/auth/passkeys/options": addOptions,
   "/api/auth/passkeys/verify": addVerify,
   "/api/auth/logout": () => Promise.resolve(logout()),
@@ -374,7 +439,9 @@ export const RATE_LIMIT_RETRY_AFTER_S = 60;
 
 /** Which limiter guards a route. Signed-in routes (passkeys, logout) are not rate limited. */
 function limiterFor(path: string, env: Env): RateLimit | undefined {
-  if (path === "/api/auth/recovery") return env.AUTH_RECOVERY_LIMITER;
+  if (path === "/api/auth/recovery" || path === "/api/auth/recovery/regenerate") {
+    return env.AUTH_RECOVERY_LIMITER;
+  }
   if (path.startsWith("/api/auth/register/") || path.startsWith("/api/auth/login/")) {
     return env.AUTH_LIMITER;
   }
@@ -401,6 +468,9 @@ export async function handleAuth(request: Request, url: URL, env: Env): Promise<
   if (url.pathname === "/api/me") {
     if (request.method !== "GET") return methodNotAllowed("GET");
     return me(request, env, repo);
+  }
+  if (url.pathname === "/api/auth/passkeys" && request.method === "GET") {
+    return listPasskeys(request, env, repo);
   }
   const handler = POST_ROUTES[url.pathname];
   if (!handler) return json({ error: "not_found" }, 404);

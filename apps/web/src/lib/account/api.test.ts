@@ -226,3 +226,45 @@ describe("auth API error mapping", () => {
     );
   });
 });
+
+describe("passkey management and recovery code API", () => {
+  it("lists passkeys with GET and parses the shape", async () => {
+    const list = [{ id: "a", label: null, createdAt: 1, lastUsedAt: null }];
+    const { api, calls } = fake(() => jsonRes({ passkeys: list }));
+    expect(await api.listPasskeys()).toEqual(list);
+    expect(calls[0]?.url).toBe("/api/auth/passkeys");
+    expect(calls[0]?.init.method).toBe("GET");
+  });
+
+  it("rename, remove and regenerate POST the documented bodies", async () => {
+    const { api, calls } = fake((c) =>
+      c.url.endsWith("/remove")
+        ? jsonRes({ passkeys: 1 })
+        : c.url.endsWith("/regenerate")
+          ? jsonRes({ recoveryCodes: ["A", "B"] })
+          : jsonRes({ ok: true }),
+    );
+    await api.renamePasskey("a", "Work");
+    expect(await api.removePasskey("a")).toEqual({ passkeys: 1 });
+    expect(await api.regenerateRecoveryCodes()).toEqual(["A", "B"]);
+    expect(calls.map((c) => c.url)).toEqual([
+      "/api/auth/passkeys/rename",
+      "/api/auth/passkeys/remove",
+      "/api/auth/recovery/regenerate",
+    ]);
+    expect(JSON.parse(bodyOf(calls[0]?.init.body))).toEqual({ id: "a", label: "Work" });
+    expect(JSON.parse(bodyOf(calls[1]?.init.body))).toEqual({ id: "a" });
+  });
+
+  it("maps a 409 on remove to lastPasskey, 401 to unauthorized, 429 to rateLimited", async () => {
+    expect(await kindOf(fake(() => jsonRes({}, 409)).api.removePasskey("a"))).toBe("lastPasskey");
+    expect(await kindOf(fake(() => jsonRes({}, 401)).api.listPasskeys())).toBe("unauthorized");
+    expect(await kindOf(fake(() => jsonRes({}, 429)).api.regenerateRecoveryCodes())).toBe(
+      "rateLimited",
+    );
+  });
+
+  it("describes the lastPasskey error in plain language", () => {
+    expect(describeAccountError(new AccountError("lastPasskey", "x"))).toMatch(/only passkey/);
+  });
+});

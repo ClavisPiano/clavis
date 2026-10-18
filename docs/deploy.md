@@ -74,6 +74,17 @@ pnpm --filter @clavis/worker exec wrangler d1 migrations apply clavis --local
 
 Each user row has a `session_epoch` (migration `0003_session_epoch.sql`). Tokens carry the epoch they were issued under (`ep`, 0 when absent), and every authenticated request checks it with one indexed D1 read, which also rejects tokens for users that no longer exist. `POST /api/auth/logout/all` bumps the epoch, ending every session on every device. Using a recovery code bumps it too, because a recovery usually means a lost or stolen passkey. Plain `logout` still only clears this device's cookie. A key id in the token for `SESSION_SECRET` rotation is not implemented yet.
 
+### Passkeys and recovery codes
+
+Signed-in routes (all `POST` except the list; migration `0006_credential_label.sql` adds the optional `credentials.label`):
+
+- `GET /api/auth/passkeys` lists `{ id, label, createdAt, lastUsedAt }` for the user. The public key and counter are never returned.
+- `POST /api/auth/passkeys/rename` `{ id, label }` sets the name (trimmed, up to 60 characters; empty clears it). 404 for an unknown or another user's passkey.
+- `POST /api/auth/passkeys/remove` `{ id }` deletes a passkey. The delete is refused with 409 `last_credential` when it would leave no passkey and no unused recovery code, in one SQL statement so two requests cannot both pass the check. A removal bumps the session epoch (the person may be removing a stolen device) and returns a fresh cookie, so this device stays signed in and every other session ends.
+- `POST /api/auth/recovery/regenerate` replaces every recovery code, used or not, with ten new ones, returned once. It shares the recovery rate limiter.
+
+The Settings screen shows the passkey list, rename and remove (with a confirmation), a warning at three or fewer unused codes, and a "Make new recovery codes" button.
+
 ### Registration cap
 
 `register/options` and `register/verify` return 503 `registration_paused` (Retry-After 3600) when `MAX_REGISTRATIONS_PER_HOUR` (100, in `auth/handlers.ts`) accounts were created in the last hour, counted from `users.created_at` (index added by `0005_users_created_at.sql`). It is global, so it bounds a flood spread across many IPs; the per-IP limiters stay as the first line. The cap logs a warning when it trips, and a limiter that errors logs `auth rate limiter failed` and lets the request through. Sign in is never capped. Raising the cap is a code change and a deploy.

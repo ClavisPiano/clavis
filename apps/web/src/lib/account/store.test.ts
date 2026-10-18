@@ -7,6 +7,12 @@ import { recoveryCodesText, syncStatusText } from "./format";
 
 const CODES = Array.from({ length: 10 }, (_, i) => `CODE-${String(i)}`);
 
+const NEW_CODES = Array.from({ length: 10 }, (_, i) => `NEW-${String(i)}`);
+const PASSKEYS = [
+  { id: "a", label: "Laptop", createdAt: 1, lastUsedAt: 2 },
+  { id: "b", label: null, createdAt: 3, lastUsedAt: null },
+];
+
 function setup(overrides: Partial<AuthApi> = {}, ceremonies: Partial<Ceremonies> = {}) {
   const api: AuthApi = {
     me: vi.fn(() => Promise.reject(new AccountError("unauthorized", "no", 401))),
@@ -17,6 +23,10 @@ function setup(overrides: Partial<AuthApi> = {}, ceremonies: Partial<Ceremonies>
     recovery: vi.fn(() => Promise.resolve({ userId: "u1", recoveryCodesLeft: 9 })),
     passkeyOptions: vi.fn(() => Promise.resolve({ challengeId: "c3", options: {} as never })),
     passkeyVerify: vi.fn(() => Promise.resolve({ userId: "u1", passkeys: 2 })),
+    listPasskeys: vi.fn(() => Promise.resolve(PASSKEYS)),
+    renamePasskey: vi.fn(() => Promise.resolve()),
+    removePasskey: vi.fn(() => Promise.resolve({ passkeys: 1 })),
+    regenerateRecoveryCodes: vi.fn(() => Promise.resolve(NEW_CODES)),
     logout: vi.fn(() => Promise.resolve()),
     logoutAll: vi.fn(() => Promise.resolve()),
     ...overrides,
@@ -318,5 +328,86 @@ describe("format", () => {
     const text = recoveryCodesText(CODES);
     for (const c of CODES) expect(text).toContain(c);
     expect(text).not.toContain("—");
+  });
+
+  describe("passkey and recovery code management", () => {
+    const signedIn = {
+      me: vi.fn(() => Promise.resolve({ userId: "u1", passkeys: 2, recoveryCodesLeft: 2 })),
+    };
+
+    it("loads the passkey list and clears it on sign out", async () => {
+      const t = setup(signedIn);
+      await t.store.refresh();
+      expect(await t.store.loadPasskeys()).toBe(true);
+      expect(t.store.snapshot.passkeys).toEqual(PASSKEYS);
+      expect(t.phases.at(-1)).toBe("idle");
+      await t.store.signOut();
+      expect(t.store.snapshot.passkeys).toBeUndefined();
+    });
+
+    it("adding a passkey refreshes a list that is already loaded, and only then", async () => {
+      const t = setup(signedIn);
+      await t.store.refresh();
+      await t.store.addPasskey();
+      expect(t.api.listPasskeys).not.toHaveBeenCalled();
+      await t.store.loadPasskeys();
+      await t.store.addPasskey();
+      expect(t.api.listPasskeys).toHaveBeenCalledTimes(2);
+    });
+
+    it("renames, then reloads the list", async () => {
+      const t = setup(signedIn);
+      await t.store.refresh();
+      expect(await t.store.renamePasskey("b", "Phone")).toBe(true);
+      expect(t.api.renamePasskey).toHaveBeenCalledWith("b", "Phone");
+      expect(t.api.listPasskeys).toHaveBeenCalledOnce();
+    });
+
+    it("removes a passkey, updates the count and the list", async () => {
+      const t = setup(signedIn);
+      await t.store.refresh();
+      expect(await t.store.removePasskey("a")).toBe(true);
+      expect(t.api.removePasskey).toHaveBeenCalledWith("a");
+      expect(t.store.snapshot.account).toEqual({
+        kind: "signedIn",
+        userId: "u1",
+        passkeys: 1,
+        recoveryCodesLeft: 2,
+      });
+      expect(t.store.snapshot.passkeys).toEqual(PASSKEYS);
+    });
+
+    it("refusing to remove the last passkey shows the lastPasskey message and stays signed in", async () => {
+      const t = setup({
+        ...signedIn,
+        removePasskey: vi.fn(() => Promise.reject(new AccountError("lastPasskey", "x", 409))),
+      });
+      await t.store.refresh();
+      expect(await t.store.removePasskey("a")).toBe(false);
+      expect(t.store.snapshot.error?.kind).toBe("lastPasskey");
+      expect(t.store.snapshot.account.kind).toBe("signedIn");
+      expect(t.onSignedOut).not.toHaveBeenCalled();
+    });
+
+    it("regenerating shows the new codes once and resets the count to ten", async () => {
+      const t = setup(signedIn);
+      await t.store.refresh();
+      expect(await t.store.regenerateRecoveryCodes()).toBe(true);
+      expect(t.store.snapshot.recoveryCodes).toEqual(NEW_CODES);
+      expect(t.store.snapshot.account).toMatchObject({ recoveryCodesLeft: 10 });
+      t.store.acknowledgeRecoveryCodes();
+      expect(t.store.snapshot.recoveryCodes).toBeUndefined();
+    });
+
+    it("a 401 while managing means the session expired", async () => {
+      const t = setup({
+        ...signedIn,
+        listPasskeys: vi.fn(() => Promise.reject(new AccountError("unauthorized", "x", 401))),
+      });
+      await t.store.refresh();
+      expect(await t.store.loadPasskeys()).toBe(false);
+      expect(t.store.snapshot.account.kind).toBe("anonymous");
+      expect(t.onSessionExpired).toHaveBeenCalledOnce();
+    });
   });
 });

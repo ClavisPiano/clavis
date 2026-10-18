@@ -11,6 +11,15 @@
   let recoveryInput = $state("");
   let saved = $state(false);
   let copyStatus = $state("");
+  /** Which passkey row is being renamed or asked to confirm removal, and the pending name. */
+  let renamingId = $state<string | undefined>();
+  let renameValue = $state("");
+  let removingId = $state<string | undefined>();
+  let confirmRegenerate = $state(false);
+  let listRequested = false;
+
+  /** Recovery codes at or below this count get a warning. */
+  const LOW_CODES = 3;
 
   onMount(() => {
     account.init();
@@ -24,6 +33,35 @@
   const snap = $derived(account.snap);
   const busy = $derived(snap !== undefined && snap.phase !== "idle");
   const signedIn = $derived(snap?.account.kind === "signedIn" ? snap.account : undefined);
+
+  // Fetch the passkey list once per sign-in.
+  $effect(() => {
+    // Actions are ignored while another one runs, so wait for idle (sign-in finishes in "loading").
+    if (signedIn && !busy && snap?.passkeys === undefined && !listRequested) {
+      listRequested = true;
+      void account.store.loadPasskeys();
+    } else if (!signedIn) {
+      listRequested = false;
+    }
+  });
+
+  const formatDate = (ms: number): string =>
+    new Date(ms).toLocaleDateString(undefined, { dateStyle: "medium" });
+
+  async function saveName(event: SubmitEvent, id: string): Promise<void> {
+    event.preventDefault();
+    if (await account.store.renamePasskey(id, renameValue)) renamingId = undefined;
+  }
+
+  async function removePasskey(id: string): Promise<void> {
+    await account.store.removePasskey(id);
+    removingId = undefined;
+  }
+
+  async function regenerate(): Promise<void> {
+    await account.store.regenerateRecoveryCodes();
+    confirmRegenerate = false;
+  }
 
   async function recover(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -118,6 +156,14 @@
         {signedIn.passkeys === 1 ? "passkey" : "passkeys"}, {signedIn.recoveryCodesLeft} recovery
         {signedIn.recoveryCodesLeft === 1 ? "code" : "codes"} left.
       </p>
+      {#if signedIn.recoveryCodesLeft <= LOW_CODES}
+        <p class="card" role="status" data-testid="low-codes">
+          {signedIn.recoveryCodesLeft === 0
+            ? "You have no recovery codes left."
+            : `You have ${String(signedIn.recoveryCodesLeft)} recovery ${signedIn.recoveryCodesLeft === 1 ? "code" : "codes"} left.`}
+          If you lose your passkeys you could be locked out. Make new codes below.
+        </p>
+      {/if}
       <p role="status" data-testid="sync-status" data-sync-status={sync.state.status}>
         {syncStatusText(sync.state)}
       </p>
@@ -171,6 +217,143 @@
         </button>
       </div>
       <p class="muted">Signing out keeps your practice on this device. It just stops syncing.</p>
+
+      <h3 id="passkeys-heading">Passkeys</h3>
+      {#if snap.passkeys}
+        <ul class="passkeys" aria-labelledby="passkeys-heading" data-testid="passkey-list">
+          {#each snap.passkeys as passkey (passkey.id)}
+            <li data-testid="passkey-item">
+              {#if renamingId === passkey.id}
+                <form class="row" onsubmit={(e) => void saveName(e, passkey.id)}>
+                  <label>
+                    Name
+                    <input
+                      type="text"
+                      maxlength="60"
+                      data-testid="passkey-name"
+                      bind:value={renameValue}
+                    />
+                  </label>
+                  <button type="submit" class="button" data-testid="passkey-save" disabled={busy}>
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    class="button"
+                    onclick={() => {
+                      renamingId = undefined;
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              {:else}
+                <strong>{passkey.label ?? "Unnamed passkey"}</strong>
+                <span class="muted">
+                  Added {formatDate(passkey.createdAt)}{passkey.lastUsedAt === null
+                    ? ", not used to sign in yet"
+                    : `, last used ${formatDate(passkey.lastUsedAt)}`}
+                </span>
+                <div class="row">
+                  <button
+                    type="button"
+                    class="button"
+                    data-testid="passkey-rename"
+                    disabled={busy}
+                    onclick={() => {
+                      renamingId = passkey.id;
+                      renameValue = passkey.label ?? "";
+                      removingId = undefined;
+                    }}
+                  >
+                    Rename
+                  </button>
+                  {#if removingId === passkey.id}
+                    <span id={`remove-note-${passkey.id}`}>
+                      Remove this passkey? Other devices will be signed out.
+                    </span>
+                    <button
+                      type="button"
+                      class="button"
+                      data-testid="passkey-remove-confirm"
+                      aria-describedby={`remove-note-${passkey.id}`}
+                      disabled={busy}
+                      onclick={() => void removePasskey(passkey.id)}
+                    >
+                      Yes, remove
+                    </button>
+                    <button
+                      type="button"
+                      class="button"
+                      onclick={() => {
+                        removingId = undefined;
+                      }}
+                    >
+                      Keep
+                    </button>
+                  {:else}
+                    <button
+                      type="button"
+                      class="button"
+                      data-testid="passkey-remove"
+                      disabled={busy}
+                      onclick={() => {
+                        removingId = passkey.id;
+                        renamingId = undefined;
+                      }}
+                    >
+                      Remove
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      <h3>Recovery codes</h3>
+      <p class="muted">
+        {signedIn.recoveryCodesLeft}
+        {signedIn.recoveryCodesLeft === 1 ? "code" : "codes"} left. Making new codes replaces all the
+        old ones, used or not.
+      </p>
+      {#if confirmRegenerate}
+        <div class="row">
+          <span id="regenerate-note">The current codes will stop working.</span>
+          <button
+            type="button"
+            class="button"
+            data-testid="regenerate-confirm"
+            aria-describedby="regenerate-note"
+            disabled={busy}
+            onclick={() => void regenerate()}
+          >
+            Make new codes
+          </button>
+          <button
+            type="button"
+            class="button"
+            onclick={() => {
+              confirmRegenerate = false;
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      {:else}
+        <button
+          type="button"
+          class="button"
+          data-testid="regenerate-codes"
+          disabled={busy}
+          onclick={() => {
+            confirmRegenerate = true;
+          }}
+        >
+          Make new recovery codes
+        </button>
+      {/if}
     {:else if snap.account.kind === "anonymous"}
       <p>
         Your practice stays on this device. An account backs it up and syncs your devices. There is
@@ -327,6 +510,12 @@
     color: var(--color-danger);
   }
 
+  .passkeys {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
   .muted {
     color: var(--color-text-muted);
   }

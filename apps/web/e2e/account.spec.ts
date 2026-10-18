@@ -11,6 +11,11 @@ test.use({ serviceWorkers: "block" });
 
 const RECOVERY_CODES = Array.from({ length: 10 }, (_, i) => `ABCD-EFGH-JKLM-${String(2000 + i)}`);
 
+const NEW_RECOVERY_CODES = Array.from(
+  { length: 10 },
+  (_, i) => `WXYZ-EFGH-JKLM-${String(3000 + i)}`,
+);
+
 const b64url = (n: number): string =>
   Buffer.from(crypto.getRandomValues(new Uint8Array(n))).toString("base64url");
 
@@ -18,6 +23,7 @@ interface Fake {
   signedIn: boolean;
   codesLeft: number;
   credentialIds: Set<string>;
+  labels: Map<string, string>;
   pushes: { events: { type?: string }[] }[];
   requests: string[];
 }
@@ -27,6 +33,7 @@ async function installFakeBackend(page: Page): Promise<Fake> {
     signedIn: false,
     codesLeft: RECOVERY_CODES.length,
     credentialIds: new Set(),
+    labels: new Map(),
     pushes: [],
     requests: [],
   };
@@ -91,6 +98,35 @@ async function installFakeBackend(page: Page): Promise<Fake> {
         fake.signedIn = true;
         fake.codesLeft -= 1;
         return json(route, { userId: "user-1", recoveryCodesLeft: fake.codesLeft });
+      case "/api/auth/passkeys":
+        if (!fake.signedIn) return json(route, { error: "unauthorized" }, 401);
+        return json(route, {
+          passkeys: [...fake.credentialIds].map((id, i) => ({
+            id,
+            label: fake.labels.get(id) ?? null,
+            createdAt: Date.UTC(2026, 0, 1 + i),
+            lastUsedAt: null,
+          })),
+        });
+      case "/api/auth/passkeys/rename": {
+        if (!fake.signedIn) return json(route, { error: "unauthorized" }, 401);
+        const label = String(body.label).trim();
+        if (label === "") fake.labels.delete(String(body.id));
+        else fake.labels.set(String(body.id), label);
+        return json(route, { ok: true });
+      }
+      case "/api/auth/passkeys/remove": {
+        if (!fake.signedIn) return json(route, { error: "unauthorized" }, 401);
+        if (fake.credentialIds.size === 1 && fake.codesLeft === 0) {
+          return json(route, { error: "last_credential" }, 409);
+        }
+        fake.credentialIds.delete(String(body.id));
+        return json(route, { passkeys: fake.credentialIds.size });
+      }
+      case "/api/auth/recovery/regenerate":
+        if (!fake.signedIn) return json(route, { error: "unauthorized" }, 401);
+        fake.codesLeft = NEW_RECOVERY_CODES.length;
+        return json(route, { recoveryCodes: NEW_RECOVERY_CODES });
       case "/api/auth/logout":
       case "/api/auth/logout/all":
         fake.signedIn = false;
@@ -199,6 +235,76 @@ test("adding a passkey raises the count", async ({ page }) => {
   await expect(page.getByText(/add a passkey on another device/i)).toBeVisible();
   await page.getByTestId("add-passkey").click();
   await expect(page.getByTestId("account-summary")).toContainText("2 passkeys");
+});
+
+test("lists passkeys, renames one and removes another after a confirmation", async ({ page }) => {
+  await installFakeBackend(page);
+  await addVirtualAuthenticator(page);
+  await page.goto("/settings");
+  await page.getByTestId("create-account").click();
+  await page.getByTestId("codes-saved").check();
+  await page.getByTestId("codes-done").click();
+  await page.getByTestId("add-passkey").click();
+  const items = page.getByTestId("passkey-item");
+  await expect(items).toHaveCount(2);
+  await expect(items.first()).toContainText("Unnamed passkey");
+
+  await items.first().getByTestId("passkey-rename").click();
+  await page.getByTestId("passkey-name").fill("Work laptop");
+  await page.getByTestId("passkey-save").click();
+  await expect(items.first()).toContainText("Work laptop");
+
+  // Removing needs a confirmation, and Keep backs out.
+  await items.nth(1).getByTestId("passkey-remove").click();
+  await expect(items.nth(1)).toContainText("Other devices will be signed out");
+  await items.nth(1).getByRole("button", { name: "Keep" }).click();
+  await expect(items).toHaveCount(2);
+  await items.nth(1).getByTestId("passkey-remove").click();
+  await items.nth(1).getByTestId("passkey-remove-confirm").click();
+  await expect(items).toHaveCount(1);
+  await expect(page.getByTestId("account-summary")).toContainText("1 passkey");
+  await expect(page.getByTestId("account-error")).toHaveCount(0);
+});
+
+test("a low recovery code count warns, and making new codes shows them once", async ({ page }) => {
+  const fake = await installFakeBackend(page);
+  await addVirtualAuthenticator(page);
+  await page.goto("/settings");
+  await page.getByTestId("create-account").click();
+  await page.getByTestId("codes-saved").check();
+  await page.getByTestId("codes-done").click();
+  await expect(page.getByTestId("low-codes")).toHaveCount(0);
+
+  fake.codesLeft = 2;
+  await page.reload();
+  await expect(page.getByTestId("low-codes")).toContainText("2 recovery codes left");
+
+  await page.getByTestId("regenerate-codes").click();
+  await expect(page.getByText("The current codes will stop working")).toBeVisible();
+  await page.getByTestId("regenerate-confirm").click();
+  const codes = page.getByTestId("recovery-codes");
+  for (const code of NEW_RECOVERY_CODES) await expect(codes).toContainText(code);
+  await page.getByTestId("codes-saved").check();
+  await page.getByTestId("codes-done").click();
+  await expect(codes).toHaveCount(0);
+  await expect(page.getByTestId("account-summary")).toContainText("10 recovery codes");
+  await expect(page.getByTestId("low-codes")).toHaveCount(0);
+});
+
+test("the only passkey cannot be removed when no recovery codes are left", async ({ page }) => {
+  const fake = await installFakeBackend(page);
+  await addVirtualAuthenticator(page);
+  await page.goto("/settings");
+  await page.getByTestId("create-account").click();
+  await page.getByTestId("codes-saved").check();
+  await page.getByTestId("codes-done").click();
+  fake.codesLeft = 0;
+  await page.reload();
+  await expect(page.getByTestId("low-codes")).toContainText("no recovery codes left");
+  await page.getByTestId("passkey-remove").click();
+  await page.getByTestId("passkey-remove-confirm").click();
+  await expect(page.getByTestId("account-error")).toContainText("only passkey");
+  await expect(page.getByTestId("passkey-item")).toHaveCount(1);
 });
 
 test("recovery code sign in prompts to add a passkey on this device", async ({ page }) => {

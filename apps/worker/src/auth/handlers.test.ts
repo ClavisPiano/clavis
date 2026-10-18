@@ -642,3 +642,163 @@ describe("registration cap", () => {
     expect((await post(env, "/api/auth/login/options", {})).status).toBe(200);
   });
 });
+
+describe("passkey management and recovery code regeneration", () => {
+  async function addSecond(env: Env, cookie: string) {
+    const issued = await (
+      await post(env, "/api/auth/passkeys/options", {}, { cookie })
+    ).json<Issued>();
+    const second = new SoftwareAuthenticator(RP_ID, ORIGIN);
+    const response = await second.register({ challenge: issued.options.challenge });
+    const res = await post(
+      env,
+      "/api/auth/passkeys/verify",
+      { challengeId: issued.challengeId, response },
+      { cookie },
+    );
+    expect(res.status).toBe(200);
+    return second;
+  }
+
+  const list = async (env: Env, cookie: string) =>
+    (
+      await (
+        await get(env, "/api/auth/passkeys", cookie)
+      ).json<{
+        passkeys: {
+          id: string;
+          label: string | null;
+          createdAt: number;
+          lastUsedAt: number | null;
+        }[];
+      }>()
+    ).passkeys;
+
+  it("lists passkeys for the signed-in user only, without key material", async () => {
+    const { env, device } = setup();
+    expect((await get(env, "/api/auth/passkeys")).status).toBe(401);
+    const reg = await register(env, device);
+    const cookie = cookieOf(reg.res);
+    const other = await register(env, new SoftwareAuthenticator(RP_ID, ORIGIN));
+    const res = await get(env, "/api/auth/passkeys", cookie);
+    const body = await res.json<{ passkeys: Record<string, unknown>[] }>();
+    expect(body.passkeys).toHaveLength(1);
+    expect(body.passkeys[0]).toEqual({
+      id: device.id,
+      label: null,
+      createdAt: expect.any(Number) as number,
+      lastUsedAt: null,
+    });
+    expect((await list(env, cookieOf(other.res)))[0]?.id).not.toBe(device.id);
+  });
+
+  it("renames, trims, clears and validates labels, and not another user's passkey", async () => {
+    const { env, device } = setup();
+    const cookie = cookieOf((await register(env, device)).res);
+    const rename = (label: string, id = device.id, c = cookie) =>
+      post(env, "/api/auth/passkeys/rename", { id, label }, { cookie: c });
+    expect((await rename("  Work laptop ")).status).toBe(200);
+    expect((await list(env, cookie))[0]?.label).toBe("Work laptop");
+    expect((await rename("   ")).status).toBe(200);
+    expect((await list(env, cookie))[0]?.label).toBeNull();
+    expect((await rename("x".repeat(61))).status).toBe(400);
+    expect((await rename("ok", "nope")).status).toBe(404);
+    const otherDevice = new SoftwareAuthenticator(RP_ID, ORIGIN);
+    const otherCookie = cookieOf((await register(env, otherDevice)).res);
+    expect((await rename("mine", device.id, otherCookie)).status).toBe(404);
+    expect((await list(env, cookie))[0]?.label).toBeNull();
+    expect(
+      (await post(env, "/api/auth/passkeys/rename", { id: device.id, label: "a" })).status,
+    ).toBe(401);
+  });
+
+  it("removes one of two passkeys, ends other sessions and keeps this one signed in", async () => {
+    const { env, device } = setup();
+    const reg = await register(env, device);
+    const cookie = cookieOf(reg.res);
+    const second = await addSecond(env, cookie);
+    const stolen = cookieOf(await login(env, second, 5));
+    const res = await post(env, "/api/auth/passkeys/remove", { id: second.id }, { cookie });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ passkeys: 1 });
+    const fresh = cookieOf(res);
+    expect((await get(env, "/api/me", fresh)).status).toBe(200);
+    expect((await get(env, "/api/me", stolen)).status).toBe(401);
+    expect((await get(env, "/api/me", cookie)).status).toBe(401);
+    expect((await list(env, fresh)).map((p) => p.id)).toEqual([device.id]);
+    // The removed passkey can no longer sign in.
+    expect((await login(env, second, 9)).status).not.toBe(200);
+  });
+
+  it("refuses to remove the last passkey when no unused recovery codes remain", async () => {
+    const { env, device } = setup();
+    const cookie = cookieOf((await register(env, device)).res);
+    await env.DB.prepare("UPDATE recovery_codes SET used_at = ?").bind(1).run();
+    const res = await post(env, "/api/auth/passkeys/remove", { id: device.id }, { cookie });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "last_credential" });
+    expect(await list(env, cookie)).toHaveLength(1);
+  });
+
+  it("allows removing the last passkey while unused recovery codes exist", async () => {
+    const { env, device } = setup();
+    const cookie = cookieOf((await register(env, device)).res);
+    const res = await post(env, "/api/auth/passkeys/remove", { id: device.id }, { cookie });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ passkeys: 0 });
+  });
+
+  it("removing an unknown or foreign passkey is 404", async () => {
+    const { env, device } = setup();
+    const cookie = cookieOf((await register(env, device)).res);
+    const otherCookie = cookieOf(
+      (await register(env, new SoftwareAuthenticator(RP_ID, ORIGIN))).res,
+    );
+    for (const id of ["nope", device.id]) {
+      const c = id === "nope" ? cookie : otherCookie;
+      expect((await post(env, "/api/auth/passkeys/remove", { id }, { cookie: c })).status).toBe(
+        404,
+      );
+    }
+    expect((await list(env, cookie)).length).toBe(1);
+    expect((await post(env, "/api/auth/passkeys/remove", { id: device.id })).status).toBe(401);
+  });
+
+  it("regenerates ten new recovery codes, invalidating every old one", async () => {
+    const { env, device } = setup();
+    const reg = await register(env, device);
+    const cookie = cookieOf(reg.res);
+    const old = (await reg.res.json<{ recoveryCodes: string[] }>()).recoveryCodes;
+    // Use one so the old set is partly spent.
+    await post(env, "/api/auth/recovery", { code: old[0] });
+    const res = await post(
+      env,
+      "/api/auth/recovery/regenerate",
+      {},
+      { cookie: cookieOf(await post(env, "/api/auth/recovery", { code: old[1] })) },
+    );
+    expect(res.status).toBe(200);
+    const fresh = (await res.json<{ recoveryCodes: string[] }>()).recoveryCodes;
+    expect(fresh).toHaveLength(RECOVERY_CODE_COUNT);
+    expect(new Set(fresh).size).toBe(RECOVERY_CODE_COUNT);
+    expect(fresh.some((c) => old.includes(c))).toBe(false);
+    const me = await get(env, "/api/me", cookie);
+    // Old cookie was revoked by the recovery above; ask with a fresh login.
+    expect(me.status).toBe(401);
+    const again = cookieOf(await login(env, device, 7));
+    expect(await (await get(env, "/api/me", again)).json()).toMatchObject({
+      recoveryCodesLeft: 10,
+    });
+    expect((await post(env, "/api/auth/recovery", { code: old[2] })).status).toBe(401);
+    expect((await post(env, "/api/auth/recovery", { code: fresh[0] })).status).toBe(200);
+  });
+
+  it("regenerate needs a session and is rate limited like recovery", async () => {
+    const { env, device } = setup();
+    expect((await post(env, "/api/auth/recovery/regenerate", {})).status).toBe(401);
+    const cookie = cookieOf((await register(env, device)).res);
+    env.AUTH_RECOVERY_LIMITER = fakeLimiter(1);
+    expect((await post(env, "/api/auth/recovery/regenerate", {}, { cookie })).status).toBe(200);
+    expect((await post(env, "/api/auth/recovery/regenerate", {}, { cookie })).status).toBe(429);
+  });
+});
