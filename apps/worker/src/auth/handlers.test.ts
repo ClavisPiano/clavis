@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { EventLog, QuotaExceededError } from "../event-log";
 import worker from "../index";
 import type { Env } from "../env";
 import { ORIGIN, RP_ID, fakeLimiter, makeEnv } from "../test-support";
@@ -10,6 +11,15 @@ import {
   SESSION_TTL_SECONDS,
 } from "./handlers";
 import { SoftwareAuthenticator } from "./software-authenticator";
+
+const SAMPLE_EVENT = {
+  id: "01ARYZ6S41TSV4RRFFQ69G5FAV",
+  deviceId: "dev1",
+  at: 1_700_000_000_000,
+  type: "device.registered",
+  v: 1,
+  platform: "web",
+};
 
 interface Opts {
   origin?: string | null;
@@ -362,6 +372,40 @@ describe("session, me and logout", () => {
     expect(again).toMatch(/^__Host-clavis_session=/);
     clock.t += 20 * day;
     expect((await get(env, "/api/sync/pull?after=0", again.split(";")[0])).status).toBe(200);
+  });
+
+  it("renews on /api/sync/push too, but not when the push is refused", async () => {
+    const { env, clock, device } = setup();
+    const cookie = cookieOf((await register(env, device)).res);
+    clock.t += 20 * 24 * 3600 * 1000;
+    const send = (events: unknown[]) => post(env, "/api/sync/push", { events }, { cookie });
+    const ok = await send([]);
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("set-cookie")).toMatch(/^__Host-clavis_session=/);
+    // A body the server rejects gets no new cookie.
+    const bad = await post(env, "/api/sync/push", { nope: true }, { cookie });
+    expect(bad.status).toBe(400);
+    expect(bad.headers.get("set-cookie")).toBeNull();
+    // Nor does a push the event store answers with an error.
+    const spy = vi.spyOn(EventLog.prototype, "push").mockImplementation(() => {
+      throw new QuotaExceededError("over");
+    });
+    try {
+      const refused = await send([SAMPLE_EVENT]);
+      expect(refused.status).toBe(403);
+      expect(refused.headers.get("set-cookie")).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a client still using the legacy cookie name is renewed under the __Host- name", async () => {
+    const { env, clock, device } = setup();
+    const token = cookieOf((await register(env, device)).res).split("=")[1] ?? "";
+    clock.t += 20 * 24 * 3600 * 1000;
+    const res = await get(env, "/api/me", `clavis_session=${token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toMatch(/^__Host-clavis_session=/);
   });
 
   it("a renewed token is revoked by sign out everywhere", async () => {

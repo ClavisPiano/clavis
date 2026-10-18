@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isSessionExpired, isSignedInHint, setSessionExpired, setSignedInHint } from "./hint";
+import {
+  isSessionExpired,
+  isSignedInHint,
+  noteSyncSignedOut,
+  setSessionExpired,
+  setSignedInHint,
+} from "./hint";
 
 describe("signed-in and session-expired hints", () => {
   beforeEach(() => {
@@ -52,6 +58,20 @@ describe("signed-in and session-expired hints", () => {
   it("can be cleared explicitly", () => {
     setSessionExpired(true);
     setSessionExpired(false);
+    expect(isSessionExpired()).toBe(false);
+  });
+
+  it("a sync 401 while the hint is set marks the session expired and clears the hint", () => {
+    setSignedInHint(true);
+    noteSyncSignedOut();
+    expect(isSessionExpired()).toBe(true);
+    expect(isSignedInHint()).toBe(false);
+  });
+
+  it("a sync 401 after the person signed out themselves is not an expiry", () => {
+    setSignedInHint(true);
+    setSignedInHint(false); // the explicit sign out got there first
+    noteSyncSignedOut();
     expect(isSessionExpired()).toBe(false);
   });
 });

@@ -107,7 +107,7 @@ const eventBytes = (event: LearningEvent): number => utf8Length(JSON.stringify(e
 /**
  * Split events (in order) into chunks whose serialized JSON array stays within `maxBytes`. An event
  * larger than the cap on its own still gets a chunk of its own: the server decides whether it fits
- * (a 413 then makes `pushChunk` skip it). Keep in step with `MAX_IMPORT_EVENT_BYTES` in the web app.
+ * (a 413 then makes `pushChunk` skip it). The web app's `MAX_IMPORT_EVENT_BYTES` is this same constant.
  */
 export function chunkByBytes(
   events: readonly LearningEvent[],

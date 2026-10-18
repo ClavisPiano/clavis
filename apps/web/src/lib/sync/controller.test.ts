@@ -315,6 +315,29 @@ describe("fetch transport", () => {
     expect(seen).toEqual([date, date]);
   });
 
+  it("carries the count of events too large to push into the state, and drops it when none remain", async () => {
+    const t = setup(() => ok({ oversized: 2 }));
+    await t.controller.trigger("manual");
+    expect(t.controller.state).toMatchObject({ status: "idle", oversized: 2 });
+    t.setImpl(() => ok());
+    await t.controller.trigger("manual");
+    expect(t.controller.state.oversized).toBeUndefined();
+    t.setImpl(() => ok({ outcome: "error", detail: "rejected", oversized: 1 }));
+    await t.controller.trigger("manual");
+    expect(t.controller.state).toMatchObject({ status: "error", oversized: 1 });
+  });
+
+  it("a throwing Date callback does not fail the sync request", async () => {
+    const t = createFetchTransport(
+      () => Promise.resolve(json({ events: [], lastSeq: 0, hasMore: false })),
+      "/api/sync",
+      () => {
+        throw new Error("storage exploded");
+      },
+    );
+    await expect(t.pull({ after: 0 })).resolves.toEqual({ events: [], lastSeq: 0, hasMore: false });
+  });
+
   it("maps statuses to typed errors", async () => {
     const withStatus = (status: number) =>
       createFetchTransport(() => Promise.resolve(json({}, status)));

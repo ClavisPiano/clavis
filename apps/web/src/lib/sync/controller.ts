@@ -20,6 +20,8 @@ export interface SyncState {
   /** Epoch ms of the last run that finished `ok`. */
   lastSyncedAt?: number;
   detail?: string;
+  /** Events too large to push, left on this device only (from the last run). */
+  oversized?: number;
 }
 
 export const SYNC_INTERVAL_MS = 5 * 60_000;
@@ -99,10 +101,11 @@ export function createSyncController(deps: SyncControllerDeps): SyncController {
     signedOut = result.outcome === "signedOut";
     if (signedOut) deps.onSignedOut?.();
     const kept = state.lastSyncedAt === undefined ? {} : { lastSyncedAt: state.lastSyncedAt };
-    if (result.outcome === "ok") set({ status: "idle", lastSyncedAt: deps.now() });
+    const big = result.oversized ? { oversized: result.oversized } : {};
+    if (result.outcome === "ok") set({ status: "idle", lastSyncedAt: deps.now(), ...big });
     else {
       const detail = result.detail === undefined ? {} : { detail: result.detail };
-      set({ status: result.outcome, ...kept, ...detail });
+      set({ status: result.outcome, ...kept, ...detail, ...big });
     }
     if (result.outcome === "ok" && deps.afterSync) {
       const after = deps.afterSync;

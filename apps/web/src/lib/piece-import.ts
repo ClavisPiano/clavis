@@ -1,5 +1,6 @@
 import {
   ContentImportedV1,
+  MAX_PUSH_BYTES,
   UserPieceSchema,
   phraseScore,
   userPieceId,
@@ -60,11 +61,11 @@ export const PICKUP_MESSAGE =
   "This score has a pickup bar or incomplete measures; that is not supported yet.";
 
 /**
- * Largest serialized score and phrases (UTF-8 bytes) an import event may carry. Matches
- * `MAX_PUSH_BYTES` in core's sync engine. The event travels in a sync push
- * that the server limits to 2 MiB, so a bigger score would stop other events syncing.
+ * Largest serialized score and phrases (UTF-8 bytes) an import event may carry: the sync engine's
+ * own push cap, so an imported score always fits in a push (the server takes 2 MiB). A bigger one
+ * would be skipped by sync and never leave this device.
  */
-export const MAX_IMPORT_EVENT_BYTES = 1024 * 1024;
+export const MAX_IMPORT_EVENT_BYTES = MAX_PUSH_BYTES;
 
 const TOO_MANY_NOTES_MESSAGE =
   "This staff has too much music to import as one piece. Try a shorter score or split it first.";

@@ -321,6 +321,17 @@ describe("format", () => {
     expect(syncStatusText({ status: "idle", lastSyncedAt: 1_700_000_000_000 }, "en-US")).toMatch(
       /^Synced\. Last synced .*2023/,
     );
+    expect(
+      syncStatusText({ status: "idle", lastSyncedAt: 1_700_000_000_000, oversized: 1 }, "en-US"),
+    ).toMatch(
+      /Synced\. Last synced .*2023.*\. 1 item is too large to back up and stays on this device only\.$/,
+    );
+    expect(syncStatusText({ status: "error", oversized: 3 })).toMatch(
+      /3 items are too large to back up and stay on this device only\.$/,
+    );
+    // The note only goes with states that say how the backup went.
+    expect(syncStatusText({ status: "offline", oversized: 3 })).not.toMatch(/too large/);
+    expect(syncStatusText({ status: "idle", oversized: 0 })).toBe("Waiting to sync.");
     expect(syncStatusText({ status: "offline" })).toMatch(/^Offline/);
     expect(syncStatusText({ status: "signedOut" })).toMatch(/signed out/);
     expect(syncStatusText({ status: "syncing" })).toMatch(/^Syncing/);

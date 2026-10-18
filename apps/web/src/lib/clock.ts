@@ -8,6 +8,14 @@
  */
 
 export const SKEW_KEY = "clavis.clock-skew-ms";
+/** The device time when the skew was observed, to notice a clock that has since been changed. */
+export const SKEW_AT_KEY = "clavis.clock-skew-at";
+/**
+ * If the device clock now reads earlier than it did at the observation by more than this, the
+ * person changed it (for example fixed a clock that was days ahead), so the stored skew is stale.
+ * Small steps backward are normal clock adjustment and are tolerated.
+ */
+export const CLOCK_JUMP_BACK_MS = 5 * 60_000;
 /** Ahead of the server by more than this and the clock is corrected. */
 export const MAX_AHEAD_MS = 86_400_000;
 
@@ -25,12 +33,21 @@ function local(): Store | undefined {
   }
 }
 
-/** Server time minus device time in ms, as last observed. 0 when unknown. */
-export function readSkew(store: Store | undefined = local()): number {
+/**
+ * Server time minus device time in ms, as last observed. 0 when unknown, or when the device clock
+ * has been set back since the observation (the skew described a clock that no longer exists).
+ */
+export function readSkew(
+  store: Store | undefined = local(),
+  deviceNowMs: number = Date.now(),
+): number {
   try {
     const raw = store?.getItem(SKEW_KEY);
     const n = raw == null ? 0 : Number(raw);
-    return Number.isFinite(n) ? n : 0;
+    if (!Number.isFinite(n)) return 0;
+    const at = Number(store?.getItem(SKEW_AT_KEY));
+    if (Number.isFinite(at) && at > 0 && deviceNowMs < at - CLOCK_JUMP_BACK_MS) return 0;
+    return n;
   } catch {
     return 0;
   }
@@ -47,8 +64,15 @@ export function observeServerDate(
   if (Number.isNaN(serverMs)) return;
   try {
     store?.setItem(SKEW_KEY, String(serverMs - deviceNowMs));
+    store?.setItem(SKEW_AT_KEY, String(deviceNowMs));
   } catch {
-    // Storage blocked: stamping simply stays on the device clock.
+    // Storage blocked: stamping simply stays on the device clock. A skew with no observation time
+    // could never be told stale, so do not leave one behind if only the first write succeeded.
+    try {
+      store?.removeItem(SKEW_KEY);
+    } catch {
+      // Nothing more to do.
+    }
   }
 }
 
