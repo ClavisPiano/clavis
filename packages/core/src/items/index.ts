@@ -15,6 +15,7 @@ export * from "./chord-quality.js";
 export * from "./progression-id.js";
 export * from "./treble-note-read.js";
 export * from "./lh-pattern.js";
+export * from "./lh-pattern-variants.js";
 export * from "./by-ear-phrase.js";
 export * from "./piece-ear.js";
 export * from "./piece-line.js";

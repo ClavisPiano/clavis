@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.14",
+  "contentVersion": "2026.10.15",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -534,7 +534,8 @@
       "params": {
         "pattern": "block",
         "voiceLeading": "close",
-        "inversions": ["root", "first", "second"]
+        "inversions": ["root", "first", "second"],
+        "chords": ["I", "IV", "V", "vi"]
       },
       "mastery": {
         "minAccuracy": 0.8,
@@ -551,7 +552,8 @@
       "prerequisites": ["hands.lh.inversions"],
       "itemGenerators": ["lhPatternVariants"],
       "params": {
-        "patterns": ["broken", "alberti"]
+        "patterns": ["broken", "alberti"],
+        "chords": ["I", "IV", "V", "vi"]
       },
       "mastery": {
         "minAccuracy": 0.8,
@@ -568,7 +570,8 @@
       "prerequisites": ["hands.lh.broken"],
       "itemGenerators": ["lhPatternVariants"],
       "params": {
-        "patterns": ["root-5-8", "syncopated"]
+        "patterns": ["root-5-8", "syncopated"],
+        "chords": ["I", "IV", "V", "vi"]
       },
       "mastery": {
         "minAccuracy": 0.8,
@@ -619,7 +622,7 @@
       "title": "Minor leading tone",
       "description": "Left-hand patterns using the raised seventh of harmonic minor.",
       "prerequisites": ["hands.lh.triads.root", "ear.degrees.minor"],
-      "itemGenerators": ["lhPatternVariants"],
+      "itemGenerators": ["lhPatternMinor"],
       "params": {
         "mode": "harmonic-minor",
         "chords": ["i", "iv", "V"],
@@ -826,10 +829,17 @@
     },
     {
       "id": "lhPatternVariants",
-      "implemented": false,
-      "seedDurationSec": 90,
+      "implemented": true,
+      "seedDurationSec": 30,
       "awayEligible": false,
-      "requires": ["keys", "polyphonic"]
+      "requires": ["keys", "polyphonic", "notation"]
+    },
+    {
+      "id": "lhPatternMinor",
+      "implemented": false,
+      "seedDurationSec": 30,
+      "awayEligible": false,
+      "requires": ["keys", "polyphonic", "notation"]
     },
     {
       "id": "coordTask",

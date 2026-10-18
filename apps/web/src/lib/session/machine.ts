@@ -345,6 +345,31 @@ export function choiceQuestion(options: readonly ChoiceOption[]): string {
   return `${labels.slice(0, -1).join(", ")} or ${last}?`;
 }
 
+/** A single-line left-hand pattern (broken, Alberti, pop), T5.7. */
+function isLeftHandLine(instance: ItemInstance): boolean {
+  return instance.generator === "lhPatternVariants" && instance.expected.play?.kind === "line";
+}
+
+/**
+ * Chord labels shown beside the staff: each chord of a chord line (T5.3), unless reading the chord
+ * is the task (T5.10), or the chords a left-hand pattern line is built on, from its presentation
+ * (T5.7).
+ */
+function chordLabelsOf(instance: ItemInstance): { chords?: { roman: string; symbol: string }[] } {
+  const play = instance.expected.play;
+  if (play?.kind === "chordLine") {
+    if (play.showLabels === false) return {};
+    return { chords: play.chords.map((c) => ({ roman: c.roman, symbol: c.symbol })) };
+  }
+  const { prog, symbols } = instance.presentation;
+  const strings = (v: unknown): v is string[] =>
+    Array.isArray(v) && v.every((x) => typeof x === "string");
+  if (isLeftHandLine(instance) && strings(prog) && strings(symbols)) {
+    return { chords: prog.map((roman, i) => ({ roman, symbol: symbols[i] ?? "" })) };
+  }
+  return {};
+}
+
 export function promptFor(expected: ExpectedResponse, mode: SessionMode, display = false): string {
   const play = expected.play;
   if (play?.kind === "choice") return choiceQuestion(play.options);
@@ -1162,16 +1187,7 @@ export class SessionMachine {
       ...(cur.instance.expected.play?.kind === "choice"
         ? { choices: cur.instance.expected.play.options }
         : {}),
-      // Reading a chord is the task when its labels are hidden (T5.10); feedback still names it.
-      ...(cur.instance.expected.play?.kind === "chordLine" &&
-      cur.instance.expected.play.showLabels !== false
-        ? {
-            chords: cur.instance.expected.play.chords.map((c) => ({
-              roman: c.roman,
-              symbol: c.symbol,
-            })),
-          }
-        : {}),
+      ...chordLabelsOf(cur.instance),
     };
   }
 
@@ -1250,6 +1266,10 @@ export class SessionMachine {
   }
 
   #promptFor(cur: Current): string {
+    // Broken and pop left-hand patterns (T5.7) are lines, but the hand matters.
+    if (isLeftHandLine(cur.instance) && this.#d.mode === "instrument") {
+      return "Play this pattern with your left hand";
+    }
     return promptFor(cur.instance.expected, this.#d.mode, cur.instance.display !== undefined);
   }
 
