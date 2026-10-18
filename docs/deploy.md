@@ -42,11 +42,11 @@ Local preview of the full stack: `pnpm --filter @clavis/worker dev` (builds the 
 
   Rotating it signs every user out. For local `wrangler dev`, put `SESSION_SECRET=...` in `apps/worker/.dev.vars` (git-ignored).
 - Each user's events live in a `UserEvents` Durable Object with SQLite storage (binding `USER_EVENTS`). The first deploy applies the `v1` migration in `wrangler.jsonc` (`new_sqlite_classes`). Add new classes or renames as new migration tags, never edit a shipped one.
-- Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `clavis_session` cookie. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
+- Sync API: `POST /api/sync/push` (`{ events }`, max 500 per batch, 2 MiB body) and `GET /api/sync/pull?after=N&limit=M` (default 500, max 1000). Auth is `Authorization: Bearer <token>` or the `__Host-clavis_session` cookie (the older `clavis_session` name is still read). A cookie-authenticated push also needs an `Origin` equal to `EXPECTED_ORIGIN`; bearer callers do not. The server accepts any well-formed envelope, including unknown future event types, and rejects malformed events of types it knows.
 
 ## Passkey auth (D1)
 
-Passkeys (WebAuthn) are the only login method. Accounts, credentials, recovery code hashes and short-lived challenges live in a D1 database bound as `DB`. Session tokens are the HMAC tokens above, delivered in the `clavis_session` cookie (HttpOnly, Secure, SameSite=Lax, 30 days).
+Passkeys (WebAuthn) are the only login method. Accounts, credentials, recovery code hashes and short-lived challenges live in a D1 database bound as `DB`. Session tokens are the HMAC tokens above, delivered in the `__Host-clavis_session` cookie (HttpOnly, Secure, SameSite=Lax, Path=/, no Domain, 30 days). Sign out also clears the pre-prefix `clavis_session` cookie.
 
 One-time setup:
 
