@@ -57,4 +57,5 @@ warranty of any kind.
 
 You agree to this agreement by ticking the CLA box in the pull request template, or by commenting
 "I have read the CLA and I agree to it." on your pull request. Your agreement covers all your
-Contributions from then on.
+Contributions from then on. If the maintainer enables automated CLA checking (see
+`docs/cla-setup.md`), the comment is the method that counts.

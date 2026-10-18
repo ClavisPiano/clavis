@@ -36,7 +36,7 @@ https://github.com/contributor-assistant/github-action
        steps:
          - name: CLA Assistant
            if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA and I agree to it.') || github.event_name == 'pull_request_target'
-           uses: contributor-assistant/github-action@v2.6.1
+           uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
            env:
              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
            with:
@@ -47,7 +47,8 @@ https://github.com/contributor-assistant/github-action
              custom-pr-sign-comment: I have read the CLA and I agree to it.
    ```
 
-   Pin the action to a full commit SHA if you prefer, and check the README for current inputs.
+   The action is pinned to the commit behind `v2.6.1` (checked October 2026). Check the README for
+   current inputs before copying, and re-pin deliberately when you upgrade.
    The workflow uses `pull_request_target`, so it runs the base branch's workflow with write
    access. Never check out or run code from the pull request in this workflow.
 
@@ -57,6 +58,10 @@ https://github.com/contributor-assistant/github-action
    exact sentence. Replying with it records the signature and turns the check green.
 6. When `CLA.md` changes materially, bump the path to `signatures/version2/cla.json` so everyone
    re-signs. Keep the old file as the record of who agreed to which version.
+
+Once this workflow is enabled, signing by comment is the method that counts: the check only
+recognises the exact sentence above. The checkbox in the pull request template stays as a prompt
+to read the CLA, but it does not satisfy the check on its own.
 
 ## Option B: hosted CLA Assistant (cla-assistant.io)
 
