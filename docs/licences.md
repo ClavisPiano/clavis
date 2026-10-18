@@ -14,8 +14,15 @@
   include `lightningcss` (MPL-2.0) and `sharp-libvips` (LGPL-3.0); neither is shipped. There are no
   GPL or AGPL packages. Re-run the audit when adding a dependency, and keep new ones out of GPL and
   AGPL.
-- Keep the copyright notices of the MIT, BSD and Apache packages in the shipped app's About or
-  licences screen, along with the Verovio notice below.
+- The app shows these on Settings, "Licences and source code" (`/settings/about`): a link to the
+  source repository, the Clavis licences, every shipped library and asset with its licence and
+  source link, a Verovio LGPL callout, and the full licence texts (loaded on demand, cached for
+  offline use). The list is `apps/web/src/lib/about/third-party.json`. The texts are generated into
+  `apps/web/src/lib/about/third-party-notices.txt` from the installed packages, with committed
+  fallbacks in `apps/web/scripts/licence-texts/` for packages that ship no licence file (Verovio,
+  fft.js, smplr). When you add or upgrade a shipped dependency, edit the JSON and run
+  `pnpm --filter @clavis/web notices`, then commit both. A test fails if a shipped dependency is
+  missing from the JSON or the generated file is stale.
 
 # Third-party licences
 
@@ -72,8 +79,9 @@
   `docs/spikes/notation.md`.
 - Obligations: the LGPL applies to Verovio itself, not to Clavis. We ship the unmodified npm build
   as a separate, replaceable worker chunk (`verovio.worker-*.js`), which is loaded only on the
-  notation pages, and the source stays available upstream. Before release, show the licence and
-  a link to the Verovio source in the app's About or licences screen. If Verovio is dropped for
+  notation pages, and the source stays available upstream. The licence, the GPL it builds
+  on and a link to the Verovio source at the shipped version are on the About screen (above), as
+  LGPL-3.0 section 4 asks. If Verovio is dropped for
   the fallback renderer, this entry can go with it (or stay if M7 imports keep it).
 
 ## Piece library (MP, TP.3)

@@ -1,0 +1,210 @@
+[
+  {
+    "id": "verovio",
+    "name": "Verovio",
+    "kind": "library",
+    "license": "LGPL-3.0-or-later",
+    "use": "Music notation engraver (WebAssembly), loaded as a separate worker file",
+    "homepage": "https://www.verovio.org",
+    "source": "https://github.com/rism-digital/verovio/tree/version-6.3.0",
+    "packages": [
+      {
+        "name": "verovio",
+        "version": "6.3.0"
+      }
+    ],
+    "extraTexts": ["lgpl-3.0.txt", "gpl-3.0.txt"],
+    "fallback": {
+      "text": "Verovio is licensed under the GNU Lesser General Public License, version 3 or (at your option) any later version. The npm package declares this licence and names its authors as Laurent Pugin and others, but ships no licence file. The full text of the LGPL, and of the GPL it builds on, is at the end of this document. The source code of this exact version is at https://github.com/rism-digital/verovio/tree/version-6.3.0 ."
+    }
+  },
+  {
+    "id": "smplr",
+    "name": "smplr",
+    "kind": "library",
+    "license": "MIT",
+    "use": "Sampled instruments over Web Audio",
+    "homepage": "https://github.com/danigb/smplr",
+    "source": "https://github.com/danigb/smplr",
+    "packages": [
+      {
+        "name": "smplr",
+        "version": "1.1.0"
+      }
+    ],
+    "fallback": {
+      "mit": "danigb (the package declares MIT but names no copyright holder)"
+    }
+  },
+  {
+    "id": "tonal",
+    "name": "tonal",
+    "kind": "library",
+    "license": "MIT",
+    "use": "Music theory helpers (keys and notes)",
+    "homepage": "https://github.com/tonaljs/tonal",
+    "source": "https://github.com/tonaljs/tonal",
+    "packages": [
+      {
+        "name": "@tonaljs/key",
+        "version": "4.10.0"
+      },
+      {
+        "name": "@tonaljs/midi",
+        "version": "4.10.0"
+      },
+      {
+        "name": "@tonaljs/note",
+        "version": "4.11.0"
+      },
+      {
+        "name": "@tonaljs/pitch",
+        "version": "5.0.2"
+      },
+      {
+        "name": "@tonaljs/pitch-distance",
+        "version": "5.0.4"
+      },
+      {
+        "name": "@tonaljs/pitch-interval",
+        "version": "6.0.0"
+      },
+      {
+        "name": "@tonaljs/pitch-note",
+        "version": "6.0.0"
+      },
+      {
+        "name": "@tonaljs/roman-numeral",
+        "version": "4.9.0"
+      }
+    ]
+  },
+  {
+    "id": "ts-fsrs",
+    "name": "ts-fsrs",
+    "kind": "library",
+    "license": "MIT",
+    "use": "FSRS spaced repetition scheduling",
+    "homepage": "https://github.com/open-spaced-repetition/ts-fsrs",
+    "source": "https://github.com/open-spaced-repetition/ts-fsrs",
+    "packages": [
+      {
+        "name": "ts-fsrs",
+        "version": "5.4.2"
+      }
+    ]
+  },
+  {
+    "id": "zod",
+    "name": "Zod",
+    "kind": "library",
+    "license": "MIT",
+    "use": "Schema validation",
+    "homepage": "https://zod.dev",
+    "source": "https://github.com/colinhacks/zod",
+    "packages": [
+      {
+        "name": "zod",
+        "version": "4.6.5"
+      }
+    ]
+  },
+  {
+    "id": "dexie",
+    "name": "Dexie",
+    "kind": "library",
+    "license": "Apache-2.0",
+    "use": "IndexedDB storage",
+    "homepage": "https://dexie.org",
+    "source": "https://github.com/dexie/Dexie.js",
+    "packages": [
+      {
+        "name": "dexie",
+        "version": "4.4.6"
+      }
+    ]
+  },
+  {
+    "id": "pitchy",
+    "name": "Pitchy",
+    "kind": "library",
+    "license": "MIT",
+    "use": "Pitch detection",
+    "homepage": "https://github.com/ianprime0509/pitchy",
+    "source": "https://github.com/ianprime0509/pitchy",
+    "packages": [
+      {
+        "name": "pitchy",
+        "version": "4.1.0"
+      }
+    ]
+  },
+  {
+    "id": "fft.js",
+    "name": "fft.js",
+    "kind": "library",
+    "license": "MIT",
+    "use": "Fast Fourier transform (used by Pitchy)",
+    "homepage": "https://github.com/indutny/fft.js",
+    "source": "https://github.com/indutny/fft.js",
+    "packages": [
+      {
+        "name": "fft.js",
+        "version": "4.0.4"
+      }
+    ],
+    "fallback": {
+      "file": "fft.js-mit.txt"
+    }
+  },
+  {
+    "id": "fflate",
+    "name": "fflate",
+    "kind": "library",
+    "license": "MIT",
+    "use": "Unzipping compressed MusicXML",
+    "homepage": "https://101arrowz.github.io/fflate",
+    "source": "https://github.com/101arrowz/fflate",
+    "packages": [
+      {
+        "name": "fflate",
+        "version": "0.8.3"
+      }
+    ]
+  },
+  {
+    "id": "simplewebauthn-browser",
+    "name": "SimpleWebAuthn (browser)",
+    "kind": "library",
+    "license": "MIT",
+    "use": "Passkey sign-in",
+    "homepage": "https://simplewebauthn.dev",
+    "source": "https://github.com/MasterKale/SimpleWebAuthn",
+    "packages": [
+      {
+        "name": "@simplewebauthn/browser",
+        "version": "14.0.0"
+      }
+    ]
+  },
+  {
+    "id": "splendid-grand-piano",
+    "name": "Splendid Grand Piano samples",
+    "kind": "asset",
+    "license": "Public domain",
+    "use": "Piano sound. Recorded by Akai, mapped and cleaned by the SFZ Instruments project",
+    "homepage": "https://github.com/sfzinstruments/SplendidGrandPiano",
+    "source": "https://github.com/sfzinstruments/SplendidGrandPiano",
+    "packages": []
+  },
+  {
+    "id": "piece-library",
+    "name": "Practice tunes",
+    "kind": "asset",
+    "license": "Public domain",
+    "use": "Traditional tunes and Beethoven's Ode to Joy, typed in as bare melodies",
+    "homepage": null,
+    "source": null,
+    "packages": []
+  }
+]

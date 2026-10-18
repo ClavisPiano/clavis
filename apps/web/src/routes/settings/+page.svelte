@@ -616,6 +616,9 @@
     <br />Content version <span data-testid="content-version">{contentVersion}</span>
   {/if}
 </p>
+<p>
+  <a href={resolve("/settings/about")} data-testid="about-link">Licences and source code</a>
+</p>
 
 <style>
   .version,
