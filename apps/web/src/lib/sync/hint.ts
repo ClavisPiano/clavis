@@ -44,3 +44,13 @@ export function setSessionExpired(expired: boolean): void {
     // Storage blocked: no prompt, which only loses a reminder.
   }
 }
+
+/**
+ * Sync got a 401. If the signed-in hint is still set the session really ended, so leave the "sign
+ * in to resume sync" mark. If the hint is already gone the person signed out themselves while this
+ * request was in flight, and that is not an expiry.
+ */
+export function noteSyncSignedOut(): void {
+  if (isSignedInHint()) setSessionExpired(true);
+  setSignedInHint(false);
+}

@@ -19,7 +19,11 @@ export function createFetchTransport(
 ): SyncTransport {
   async function call(url: string, init: RequestInit): Promise<unknown> {
     const res = await fetchFn(url, { ...init, credentials: "include" });
-    onServerDate?.(res.headers.get("date"));
+    try {
+      onServerDate?.(res.headers.get("date"));
+    } catch {
+      // Learning the clock offset is a side benefit: it must never turn a good response into a failed sync.
+    }
     if (res.status === 401) throw new SyncAuthError("not signed in");
     // 408 and 429 are "try again later", not a verdict on the batch.
     const retryable = res.status === 408 || res.status === 429;

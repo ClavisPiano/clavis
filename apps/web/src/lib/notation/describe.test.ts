@@ -55,6 +55,16 @@ describe("describeScore with pitches (examples and previews)", () => {
     expect(text).toContain("Left hand. Bar 1:");
   });
 
+  it("does not call two treble staves right and left hand", () => {
+    const treble = FIXTURE_GRAND_STAFF.staves[0];
+    if (!treble) throw new Error("fixture has no staves");
+    const score: ScoreSpec = { ...FIXTURE_GRAND_STAFF, staves: [treble, treble] };
+    const text = describeScore(score, { pitches: true });
+    expect(text).toContain("Staff 1. Bar 1:");
+    expect(text).toContain("Staff 2. Bar 1:");
+    expect(text).not.toMatch(/hand/i);
+  });
+
   it("handles rests, dots, ties, chords and empty bars", () => {
     const score: ScoreSpec = {
       key: null,

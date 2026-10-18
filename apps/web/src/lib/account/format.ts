@@ -2,6 +2,13 @@ import type { SyncState } from "../sync/controller";
 
 /** One line for the Settings sync status. `locale` is injectable for tests. */
 export function syncStatusText(state: SyncState, locale?: string): string {
+  const base = baseSyncText(state, locale);
+  const n = state.oversized ?? 0;
+  if (n === 0 || (state.status !== "idle" && state.status !== "error")) return base;
+  return `${base} ${String(n)} ${n === 1 ? "item is" : "items are"} too large to back up and ${n === 1 ? "stays" : "stay"} on this device only.`;
+}
+
+function baseSyncText(state: SyncState, locale?: string): string {
   const last =
     state.lastSyncedAt === undefined
       ? ""

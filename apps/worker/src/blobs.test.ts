@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { signSession } from "./auth/session";
 import { MAX_BLOB_BYTES } from "@clavis/core";
-import { MAX_USER_BLOBS } from "./blobs";
+import { MAX_USER_BLOBS, MAX_USER_BLOB_BYTES } from "./blobs";
 import worker, { type Env } from "./index";
 import { ORIGIN, fakeBucket, makeEnv } from "./test-support";
 
@@ -233,5 +233,38 @@ describe("blob quotas", () => {
     expect((await put(env, "u1", "take-0.webm")).status).toBe(200);
     // Another user is unaffected.
     expect((await put(env, "u2", "mine.webm")).status).toBe(200);
+  });
+
+  it("counts every page of the R2 listing, not just the first", async () => {
+    // 200 objects over pages of 50: a check that stopped after one page would let a 201st through.
+    const bucket = fakeBucket(50);
+    const { env } = makeEnv({ BLOBS: bucket });
+    for (let i = 0; i < MAX_USER_BLOBS; i++) {
+      expect((await put(env, "u1", `take-${String(i)}.webm`)).status).toBe(200);
+    }
+    expect((await put(env, "u1", "one-too-many.webm")).status).toBe(403);
+    expect(bucket.keys().filter((k) => k.startsWith("u1/"))).toHaveLength(MAX_USER_BLOBS);
+  });
+
+  it("refuses a blob that would pass the byte ceiling, and allows replacing the big one", async () => {
+    const bucket = fakeBucket();
+    // Report one huge existing object instead of uploading 500 MB.
+    const listing = (size: number) => ({
+      ...bucket,
+      put: bucket.put.bind(bucket),
+      get: bucket.get.bind(bucket),
+      delete: bucket.delete.bind(bucket),
+      list: () => Promise.resolve({ objects: [{ key: "u1/big.webm", size }], truncated: false }),
+    });
+    const nearly = makeEnv({
+      BLOBS: listing(MAX_USER_BLOB_BYTES - 1) as unknown as R2Bucket,
+    }).env;
+    // One byte more is exactly the ceiling; two bytes pass it.
+    expect((await put(nearly, "u1", "ok.webm", new Uint8Array([1]))).status).toBe(200);
+    const over = await put(nearly, "u1", "over.webm", new Uint8Array([1, 2]));
+    expect(over.status).toBe(403);
+    expect(await over.json()).toEqual({ error: "quota_exceeded" });
+    // Replacing the big object frees its bytes, so a small one fits in its place.
+    expect((await put(nearly, "u1", "big.webm", new Uint8Array([1, 2, 3]))).status).toBe(200);
   });
 });

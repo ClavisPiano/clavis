@@ -69,8 +69,12 @@ export function describeScore(score: ScoreSpec, options: { pitches: boolean }): 
     );
     return `${head} ${plural(notes, "note")}.`;
   }
+  // Hands are only named for a real grand staff; any other pair of staves is just "Staff 1", "Staff 2".
+  const grandStaff =
+    staves.length === 2 && staves[0]?.clef === "treble" && staves[1]?.clef === "bass";
   const lines = staves.map((staff, i) => {
-    const label = staves.length === 1 ? "" : `${i === 0 ? "Right hand" : "Left hand"}. `;
+    const name = grandStaff ? (i === 0 ? "Right hand" : "Left hand") : `Staff ${String(i + 1)}`;
+    const label = staves.length === 1 ? "" : `${name}. `;
     const body = staff.measures
       .map(
         (m, b) =>

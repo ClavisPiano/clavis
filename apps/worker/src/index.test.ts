@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { signSession, toBase64Url } from "./auth/session";
+import { EventLog, QuotaExceededError } from "./event-log";
 import worker, { MAX_BODY_BYTES, type Env } from "./index";
 import { SECRET, makeEnv } from "./test-support";
 
@@ -172,6 +173,25 @@ describe("sync routes", () => {
     expect((await send({ cookie, origin: "https://evil.example" })).status).toBe(403);
     expect((await send({ cookie, origin: env.EXPECTED_ORIGIN })).status).toBe(200);
     expect((await send(await bearer("u1"))).status).toBe(200);
+  });
+
+  it("maps a quota refusal to 403 quota_exceeded, and pulling still works", async () => {
+    const { env } = makeEnv();
+    await push(env, "u1", [ev(1)]);
+    const spy = vi.spyOn(EventLog.prototype, "push").mockImplementation(() => {
+      throw new QuotaExceededError("over");
+    });
+    try {
+      const refused = await push(env, "u1", [ev(2)]);
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toEqual({ error: "quota_exceeded" });
+      expect(refused.headers.get("cache-control")).toBe("no-store");
+    } finally {
+      spy.mockRestore();
+    }
+    const pulled = await pull(env, "u1", "after=0");
+    expect(pulled.status).toBe(200);
+    expect((await pulled.json<{ events: unknown[] }>()).events).toHaveLength(1);
   });
 
   it("duplicate push is idempotent", async () => {

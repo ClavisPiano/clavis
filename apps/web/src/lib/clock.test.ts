@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MAX_AHEAD_MS, SKEW_KEY, correctedNow, observeServerDate, readSkew } from "./clock";
+import {
+  CLOCK_JUMP_BACK_MS,
+  MAX_AHEAD_MS,
+  SKEW_KEY,
+  correctedNow,
+  observeServerDate,
+  readSkew,
+} from "./clock";
 
 function memory(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
@@ -39,6 +46,26 @@ describe("observeServerDate", () => {
     const store = memory();
     observeServerDate(new Date(SERVER).toUTCString(), SERVER + 5000, store);
     expect(readSkew(store)).toBe(-5000);
+  });
+
+  it("drops a stored skew once the device clock has been set back past the observation", () => {
+    const store = memory();
+    const ahead = SERVER + 2 * MAX_AHEAD_MS;
+    observeServerDate(new Date(SERVER).toUTCString(), ahead, store);
+    expect(readSkew(store, ahead + 1000)).toBe(SERVER - ahead);
+    // The person fixes the clock: it now reads the real time, days before the observation.
+    expect(readSkew(store, SERVER)).toBe(0);
+    expect(correctedNow(SERVER, readSkew(store, SERVER))).toBe(SERVER);
+  });
+
+  it("tolerates a small step back, and keeps a skew with no recorded observation time", () => {
+    const store = memory();
+    observeServerDate(new Date(SERVER).toUTCString(), SERVER + 3 * MAX_AHEAD_MS, store);
+    const at = SERVER + 3 * MAX_AHEAD_MS;
+    expect(readSkew(store, at - CLOCK_JUMP_BACK_MS + 1)).toBe(-3 * MAX_AHEAD_MS);
+    expect(readSkew(store, at - CLOCK_JUMP_BACK_MS - 1)).toBe(0);
+    const old = memory({ [SKEW_KEY]: "-99" });
+    expect(readSkew(old, 0)).toBe(-99);
   });
 
   it("ignores a missing or unparseable header", () => {
