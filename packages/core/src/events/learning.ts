@@ -7,6 +7,7 @@ import {
 } from "../blobs/index.js";
 import { GeneratorIdSchema } from "../graph/schema.js";
 import { InputSourceSchema } from "../input/types.js";
+import { MAX_DRILLS_PER_NODE, drillParamsOf, isDrillItemId } from "../items/drill.js";
 import { JsonObjectSchema } from "../json.js";
 import {
   IMPORTED_PIECE_SOURCE,
@@ -250,3 +251,43 @@ export const BenchmarkRecordedV1 = z
     path: ["blobKey"],
   });
 export type BenchmarkRecorded = z.infer<typeof BenchmarkRecordedV1>;
+
+/**
+ * A failed attempt spawned error micro-drills (spec 5.4, R27, T5.8): items of the same node, each
+ * the source item's first erring chord change played twice (`node|drill=IV-V|fam=A`). The session
+ * writes it alongside the failed attempt, one drill per attempt today; the list leaves room for
+ * more. Replay gives each drill a card that is due at once; it is an ordinary FSRS card after that.
+ * A node keeps at most `MAX_DRILLS_PER_NODE` drills, see the reducer.
+ */
+export const DrillSpawnedV1 = z
+  .strictObject({
+    ...envelopeShape,
+    type: z.literal("drill.spawned"),
+    v: z.literal(1),
+    sessionId: ulid,
+    sourceItemId: z.string().min(1),
+    nodeId: z.string().min(1),
+    itemIds: z.array(z.string().min(1)).min(1).max(MAX_DRILLS_PER_NODE),
+  })
+  .superRefine((e, ctx) => {
+    if (!e.sourceItemId.startsWith(`${e.nodeId}|`) || isDrillItemId(e.sourceItemId)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "sourceItemId must be an item of nodeId that is not itself a drill",
+        path: ["sourceItemId"],
+      });
+    }
+    e.itemIds.forEach((id, i) => {
+      if (drillParamsOf(e.nodeId, id) === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "must be a drill item of nodeId",
+          path: ["itemIds", i],
+        });
+      }
+    });
+    if (new Set(e.itemIds).size !== e.itemIds.length) {
+      ctx.addIssue({ code: "custom", message: "itemIds must be distinct", path: ["itemIds"] });
+    }
+  });
+export type DrillSpawned = z.infer<typeof DrillSpawnedV1>;

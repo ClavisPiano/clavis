@@ -393,6 +393,7 @@
       "params": {
         "staves": "grand",
         "bars": [2, 4],
+        "style": "lines",
         "keyOfDay": true
       },
       "mastery": {
@@ -412,6 +413,7 @@
       "params": {
         "staves": "grand",
         "bars": [4, 8],
+        "style": "sight",
         "graded": true
       },
       "mastery": {
@@ -838,7 +840,7 @@
     },
     {
       "id": "sightLine",
-      "implemented": false,
+      "implemented": true,
       "seedDurationSec": 60,
       "awayEligible": false,
       "requires": ["keys", "polyphonic", "notation"]

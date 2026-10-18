@@ -5,6 +5,7 @@ import { compareEvents } from "../events/validate.js";
 import { combineFamilyStates } from "../grading/families.js";
 import { evaluateNodeState, median, type GradedAttempt } from "../grading/mastery.js";
 import { rate } from "../grading/rate.js";
+import { MAX_DRILLS_PER_NODE, isDrillItemId } from "../items/drill.js";
 import type { GeneratorId, NodeState, SkillGraph, SkillNode } from "../graph/schema.js";
 import { isNodeEnabled } from "../graph/validate.js";
 import type { JsonObject } from "../json.js";
@@ -20,7 +21,13 @@ import type {
 } from "./types.js";
 
 /** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
-export const REDUCER_VERSION = 6;
+export const REDUCER_VERSION = 7;
+
+/** Weight of the newest attempt in a task's rolling score (spec 5.4, R27). */
+export const TASK_ROLLING_ALPHA = 0.3;
+
+/** Strands whose nodes are tasks, scheduled by task priority in Apply (spec 5.4, R27). */
+export const TASK_STRANDS: readonly string[] = ["HANDS", "BYEAR"];
 
 export const DURATION_WINDOW = 20;
 /** Fewer samples than this and the graph seed is used instead of the median. */
@@ -53,6 +60,8 @@ export function initialState(ctx: FoldContext): LearnerState {
     pieces: {},
     imported: {},
     benchmarks: {},
+    tasks: {},
+    drills: {},
     sessions: {},
     presented: {},
     durations: {},
@@ -293,6 +302,9 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
       }
       return;
     }
+    case "drill.spawned":
+      reduceDrill(state, event, ctx);
+      return;
     case "device.registered":
       return;
     default:
@@ -318,8 +330,12 @@ function reduceAttempt(
     mode: session.mode,
     ...(node.targetLatencyMs !== undefined ? { targetLatencyMs: node.targetLatencyMs } : {}),
   });
+  // A drill item is a card only while it is live (T5.8): one pushed out by a newer drill, or
+  // never spawned, still counts as evidence but gets no card back.
+  const drill = isDrillItemId(event.itemId);
+  const liveDrill = drill && (state.drills[event.nodeId] ?? []).includes(event.itemId);
   // Practice sessions (T2.15) count as evidence but never move the review schedule.
-  if (!session.practice) {
+  if (!session.practice && (!drill || liveDrill)) {
     const existing = state.cards[event.itemId];
     const base = existing ? existing.card : ctx.scheduler.newCard(event.at);
     state.cards[event.itemId] = {
@@ -347,6 +363,17 @@ function reduceAttempt(
   }
   (state.attempts[event.nodeId] ??= []).push(attempt);
 
+  // Task priority (spec 5.4, R27): a HANDS or BYEAR node's own items, not its drills.
+  if (TASK_STRANDS.includes(node.strand) && !drill) {
+    const score = event.outcome.partial ?? (event.outcome.correct ? 1 : 0);
+    const prev = state.tasks[event.nodeId];
+    state.tasks[event.nodeId] = {
+      lastPracticedAt: Math.max(prev?.lastPracticedAt ?? event.at, event.at),
+      rolling:
+        prev === undefined ? score : prev.rolling + TASK_ROLLING_ALPHA * (score - prev.rolling),
+    };
+  }
+
   if (pres.piece) {
     const piece = (state.pieces[pres.piece.id] ??= { phrases: {}, runs: 0 });
     const key = String(pres.piece.phrase);
@@ -369,6 +396,55 @@ function reduceAttempt(
 
   reevaluate(state, node, event.at, attempt.day);
   recomputeAvailability(state, ctx.graph);
+}
+
+/**
+ * Micro-drills (T5.8, R27). Each drill gets a fresh card due at the event's time, so the next
+ * session plans it first. Choices beyond the spec:
+ *
+ * - At the cap (`MAX_DRILLS_PER_NODE` per node) a new drill retires the oldest one: its card is
+ *   removed and it leaves `drills`, so the drills a node keeps are always its latest errors. Its
+ *   attempts stay as evidence for the node.
+ * - Spawning a drill that is already live keeps its card (memory state and history) but makes it
+ *   due now if it was due later: the same change went wrong again.
+ * - Drills in a practice session (T2.15) are ignored, as practice never moves a card. The session
+ *   does not spawn them there anyway.
+ */
+function reduceDrill(
+  state: LearnerState,
+  event: Extract<LearningEvent, { type: "drill.spawned" }>,
+  ctx: FoldContext,
+): void {
+  const node = nodeIndex(ctx.graph).get(event.nodeId);
+  if (!node) {
+    state.warnings++;
+    return;
+  }
+  if (state.sessions[event.sessionId]?.practice) return;
+  const live = (state.drills[event.nodeId] ??= []);
+  for (const id of event.itemIds) {
+    const existing = state.cards[id];
+    if (live.includes(id) && existing) {
+      if (existing.card.due > event.at) existing.card = { ...existing.card, due: event.at };
+      continue;
+    }
+    if (!live.includes(id)) live.push(id);
+    while (live.length > MAX_DRILLS_PER_NODE) {
+      const retired = live.shift();
+      if (retired !== undefined) {
+        state.cards = Object.fromEntries(
+          Object.entries(state.cards).filter(([k]) => k !== retired),
+        );
+      }
+    }
+    state.cards[id] = {
+      nodeId: event.nodeId,
+      card: ctx.scheduler.newCard(event.at),
+      // No attempt yet: the spawn time stands in until the first one.
+      lastAttemptAt: event.at,
+      reps: 0,
+    };
+  }
 }
 
 /**

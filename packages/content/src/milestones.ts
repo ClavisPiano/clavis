@@ -122,6 +122,15 @@ const MILESTONES_V1: unknown[] = [
     statement: "You can read the treble clef from middle C up to the A above high C.",
   },
   {
+    nodeId: "read.grand.2line",
+    statement:
+      "You can read a short line on both staves in the key of the day and play it hands together.",
+  },
+  {
+    nodeId: "read.grand.sight",
+    statement: "You can sight-read a short passage for both hands at a steady pulse.",
+  },
+  {
     nodeId: "apply.pieces",
     statement: "You can read a short piece from the staff and play its phrases.",
   },
