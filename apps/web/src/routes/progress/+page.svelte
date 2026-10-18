@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../../lib/clock";
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { loadMilestones } from "@clavis/content";
@@ -29,12 +30,12 @@
 
   const learner = useLearner();
   let events = $state.raw<LearningEvent[] | undefined>(undefined);
-  let now = $state(Date.now());
+  let now = $state(wallNow());
 
   onMount(async () => {
     await learner.init();
     if (learner.status !== "ready") return;
-    now = Date.now();
+    now = wallNow();
     try {
       events = await learner.ctx.store.list();
     } catch {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../../../lib/clock";
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -165,7 +166,7 @@
     if (tap?.ok) update.tapMs = Math.round(tap.offsetMs * 10) / 10;
     if (mic?.ok) update.micMs = Math.round(mic.offsetMs * 10) / 10;
     saved = await saveLatency(store, update, {
-      now: () => Date.now(),
+      now: () => wallNow(),
       userAgent: navigator.userAgent,
     });
     message = "Saved.";

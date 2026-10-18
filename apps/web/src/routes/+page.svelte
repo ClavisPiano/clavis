@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../lib/clock";
   import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import { readInstallEnv, shouldShowIosInstallHint } from "../lib/pwa/ios";
@@ -31,7 +32,7 @@
   import { isSessionExpired, isSignedInHint } from "../lib/sync/hint";
 
   const learner = useLearner();
-  let now = $state(Date.now());
+  let now = $state(wallNow());
 
   const HINT_DISMISSED_KEY = "clavis.install-hint-dismissed";
   let showHint = $state(false);
@@ -74,7 +75,7 @@
     showHint = !dismissed && shouldShowIosInstallHint(readInstallEnv());
     sessionExpired = isSessionExpired();
     void learner.init().then(async () => {
-      now = Date.now();
+      now = wallNow();
       try {
         placementSkipped = (await learner.ctx.store.getMeta(PLACEMENT_SKIPPED_META_KEY)) === true;
       } catch {
@@ -162,7 +163,7 @@
         contentVersion: graph.contentVersion,
       });
       saveFile(file);
-      const at = Date.now();
+      const at = wallNow();
       recordBackup(localStore(), at);
       if (backupInputs) backupInputs = { ...backupInputs, lastBackupAt: at };
       now = at;
@@ -172,7 +173,7 @@
   }
 
   function snoozeBackup() {
-    const at = Date.now();
+    const at = wallNow();
     recordNudgeDismissed(localStore(), at);
     if (backupInputs) backupInputs = { ...backupInputs, dismissedAt: at };
     now = at;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../../lib/clock";
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { keyOfDay, type Key } from "@clavis/core";
@@ -31,7 +32,7 @@
     void learner.init().then(() => {
       if (learner.status !== "ready" || !learner.state || heardKey) return;
       try {
-        key = keyOfDay(learner.state, learner.ctx.graph, Date.now(), deviceTzOffsetMin());
+        key = keyOfDay(learner.state, learner.ctx.graph, wallNow(), deviceTzOffsetMin());
       } catch {
         // Keep C major.
       }
