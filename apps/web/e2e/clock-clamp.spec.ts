@@ -1,11 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 // T8.4: events are stamped with a corrected time when this device's clock is more than a day ahead
 // of the server's. The skew is learned from sync responses; here it is planted directly.
 
 const DAY = 86_400_000;
 
-async function registeredAt(page: import("@playwright/test").Page): Promise<number> {
+async function registeredAt(page: Page): Promise<number> {
   await page.goto("/dev/events");
   const row = page.getByTestId("event").filter({ hasText: "device.registered" });
   await expect(row).toBeVisible();
