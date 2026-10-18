@@ -1,6 +1,8 @@
 import {
   composeSession,
   hasNewMaterial,
+  missedDays,
+  shouldWelcomeBack,
   type LearnerState,
   type SessionMode,
   type SkillGraph,
@@ -82,6 +84,37 @@ export function startWouldBeEmpty(opts: {
   return plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0) === 0;
 }
 
+export interface WelcomeBackOffer {
+  /** Whole days missed before today. */
+  missed: number;
+  /** Seconds the shorter session is planned for. */
+  sec: number;
+}
+
+/**
+ * The "welcome back" offer for Home (R30): present after enough missed days, and only when the
+ * shorter session would have something to review. It composes the same plan the session would.
+ */
+export function welcomeBackOffer(opts: {
+  state: LearnerState;
+  graph: SkillGraph;
+  now: number;
+  tzOffsetMin: number;
+  budgetSec: number;
+}): WelcomeBackOffer | undefined {
+  if (!shouldWelcomeBack(opts.state, opts.now, opts.tzOffsetMin)) return undefined;
+  const plan = composeSession({
+    ...opts,
+    ...pieceInputs(opts.state),
+    mode: "instrument",
+    recovery: true,
+    seed: 0,
+  });
+  const count = plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0);
+  if (count === 0) return undefined;
+  return { missed: missedDays(opts.state, opts.now, opts.tzOffsetMin), sec: plan.budgetSec };
+}
+
 /**
  * Query string for a follow-up session, keeping the other params (input, audio, mode) of the
  * current one. Keep going sets its own budget; Learn keeps the current budget unless the current
@@ -96,6 +129,8 @@ export function followUpSearch(
   const wasPractice = q.get("practice") === "1";
   q.delete("practice");
   q.delete("learn");
+  // A follow-up is its own session, not another welcome-back review.
+  q.delete("welcome");
   // The chosen skills belong to a practice round: a follow-up practice keeps them, learning does not.
   if (kind === "learn") q.delete("skills");
   if (budgetSec !== undefined) q.set("budget", String(budgetSec));

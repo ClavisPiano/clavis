@@ -13,7 +13,24 @@ describe("parseSessionParams", () => {
       headphones: undefined,
       practice: false,
       learn: false,
+      recovery: false,
     });
+  });
+
+  it("?welcome=1 sets recovery for an instrument session, and the other kinds win over it", () => {
+    expect(parseSessionParams(q("welcome=1")).recovery).toBe(true);
+    for (const raw of [
+      "welcome=0",
+      "welcome=true",
+      "welcome=",
+      "",
+      "welcome=1&mode=away",
+      "welcome=1&practice=1",
+      "welcome=1&learn=1",
+      "welcome=1&run=piece.hot-cross-buns",
+    ]) {
+      expect(parseSessionParams(q(raw)).recovery, raw).toBe(false);
+    }
   });
 
   it("?run=piece.<id> plays that piece through, in instrument mode only", () => {

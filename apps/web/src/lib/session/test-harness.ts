@@ -144,6 +144,8 @@ export interface HarnessOptions {
   skills?: readonly string[];
   /** Learn something new: extra new items for this session. */
   extraNewItems?: number;
+  /** Welcome back (R30): the shorter, review-only session. */
+  recovery?: boolean;
   inputSource?: "mic" | "tap" | "midi";
   /** Offer HANDS items (chords): the input can capture them, as MIDI does. */
   polyphonic?: boolean;
@@ -203,6 +205,7 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     ...(opts.practice ? { practice: true } : {}),
     ...(opts.practice && opts.skills ? { skills: opts.skills } : {}),
     ...(opts.extraNewItems ? { extraNewItems: opts.extraNewItems } : {}),
+    ...(opts.recovery ? { recovery: true } : {}),
     graph,
     milestones: opts.milestones ?? loadMilestones(),
     ...(opts.placement
