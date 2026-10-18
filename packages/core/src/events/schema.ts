@@ -5,6 +5,7 @@ import {
   AttemptCompletedV2,
   BenchmarkRecordedV1,
   ContentImportedV1,
+  DrillSpawnedV1,
   ItemPresentedV1,
   NodeIntroducedV1,
   PieceCompletedV1,
@@ -80,6 +81,7 @@ export const learningEventSchema = z.discriminatedUnion("type", [
   PlacementCompletedV1,
   PieceCompletedV1,
   ContentImportedV1,
+  DrillSpawnedV1,
   SessionEndedV1,
   BenchmarkRecordedV1,
 ]);
@@ -122,6 +124,7 @@ export const eventRegistry: Readonly<Record<LearningEventType, EventRegistryEntr
   "content.imported": { versions: { 1: ContentImportedV1 }, upcast: identity },
   "session.ended": { versions: { 1: SessionEndedV1 }, upcast: identity },
   "benchmark.recorded": { versions: { 1: BenchmarkRecordedV1 }, upcast: identity },
+  "drill.spawned": { versions: { 1: DrillSpawnedV1 }, upcast: identity },
 };
 
 export type ParseEventError =

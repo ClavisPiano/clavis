@@ -22,6 +22,7 @@ import {
   LhItemParams,
   checkProgression,
   chordLineItem,
+  lhItemOf,
   chordSymbol,
   lhChords,
   lhCountIn,
@@ -294,20 +295,15 @@ export const lhPatternVariants: Generator = {
     const np = NodeParams.parse(node.params);
     const { rng } = ctx;
     if ("inversions" in np) {
-      const ip = LhItemParams.strict().parse(params);
+      // A micro-drill (T5.8, `fam|drill=IV-V`) is accepted too: the change voiced twice over.
+      const ip = lhItemOf(params, { strict: true });
       checkProgression(node, np.chords, ip.prog);
       const key = keyForFamily(ip.fam, "major", ctx.preferredKey, rng);
       const seed = rng.int(0, 0x7fffffff);
       const chords = closeVoicings(key, ip.prog, np.inversions);
-      return chordLineItem(
-        node,
-        "lhPatternVariants",
-        { fam: ip.fam, prog: ip.prog },
-        key,
-        chords,
-        seed,
-        { inversions: chords.map((c) => c.inversion) },
-      );
+      return chordLineItem(node, "lhPatternVariants", ip.idParams, key, chords, seed, {
+        inversions: chords.map((c) => c.inversion),
+      });
     }
     const ip = PatternItemParams.parse(params);
     checkProgression(node, np.chords, ip.prog);

@@ -21,6 +21,7 @@ import { at } from "../theory/util.js";
 import { enumerateBassMotions } from "./bass-motion.js";
 import { keyToJson, latencyField } from "./build.js";
 import type { ChordLineTarget } from "./expected.js";
+import { DRILL_PARAM, DrillItemParams, drillProgression } from "./drill.js";
 import { keyForFamily } from "./family.js";
 import { itemId } from "./ids.js";
 import { COUNT_IN_PITCH, COUNT_IN_VELOCITY } from "./rhythm.js";
@@ -74,6 +75,22 @@ export const LhItemParams = z.object({
   fam: z.enum(["A", "B", "C"]),
   prog: z.array(z.string()).length(4),
 });
+
+/**
+ * An item's identity and the chords it plays: a listed progression, or a micro-drill (T5.8,
+ * `fam|drill=IV-V`) that plays its two chords twice. Drills are never listed but always accepted.
+ */
+export function lhItemOf(
+  params: ItemParams,
+  opts: { strict?: boolean } = {},
+): { fam: KeyFamily; prog: string[]; idParams: ItemParams } {
+  if (DRILL_PARAM in params) {
+    const { fam, drill } = DrillItemParams.parse(params);
+    return { fam, prog: drillProgression(drill), idParams: { fam, drill } };
+  }
+  const ip = (opts.strict === true ? LhItemParams.strict() : LhItemParams).parse(params);
+  return { fam: ip.fam, prog: ip.prog, idParams: { fam: ip.fam, prog: ip.prog } };
+}
 
 /** Throws when an item's progression uses a chord its node does not list. */
 export function checkProgression(
@@ -287,18 +304,11 @@ export const lhPattern: Generator = {
   },
   generate(node: SkillNode, params: ItemParams, ctx: GenerateContext): ItemInstance {
     const np = LhNodeParams.parse(node.params);
-    const ip = LhItemParams.parse(params);
+    const ip = lhItemOf(params);
     checkProgression(node, np.chords, ip.prog);
     const { rng } = ctx;
     const key = keyForFamily(ip.fam, "major", ctx.preferredKey, rng);
     const seed = rng.int(0, 0x7fffffff);
-    return chordLineItem(
-      node,
-      "lhPattern",
-      { fam: ip.fam, prog: ip.prog },
-      key,
-      lhChords(key, ip.prog),
-      seed,
-    );
+    return chordLineItem(node, "lhPattern", ip.idParams, key, lhChords(key, ip.prog), seed);
   },
 };

@@ -15,6 +15,8 @@ function state(over: Partial<LearnerState> = {}): LearnerState {
     pieces: {},
     imported: {},
     benchmarks: {},
+    tasks: {},
+    drills: {},
     settings: {},
     eventCount: 1,
     warnings: 0,

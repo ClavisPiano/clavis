@@ -4,6 +4,7 @@ import {
   nextPlacementStep,
   placementResults,
   scoreNoteIds,
+  spawnDrill,
   type AttemptError,
   type AttemptOutcome,
   type ChoiceOption,
@@ -1533,6 +1534,28 @@ export class SessionMachine {
         inputSource: source,
         ...(errors.length > 0 ? { errors } : {}),
       };
+      // A failed chord line or performance spawns at most one micro-drill (T5.8, R27), written
+      // with the attempt so Try again drops both. Practice never moves a card, so it spawns none.
+      const drill = this.#plan?.practice
+        ? undefined
+        : spawnDrill({
+            nodeId,
+            params: cur.instance.params,
+            expected,
+            correct: outcome.correct,
+            errors,
+          });
+      const events: LearningEvent[] = [attemptEvent];
+      if (drill) {
+        events.push({
+          ...this.#base(),
+          type: "drill.spawned" as const,
+          sessionId: this.#sessionId,
+          sourceItemId: cur.instance.itemId,
+          nodeId,
+          itemIds: [drill.itemId],
+        });
+      }
       // Piece runs and revealed scores write at once; everything else waits so it can be retried.
       // Placement returned above, so it never gets here: Try again cannot reach its attempts.
       const retryable = !this.#plan?.run && !reveal;
@@ -1540,9 +1563,9 @@ export class SessionMachine {
       const ask = eligible && this.#assessable % SELF_ASSESS_EVERY === 0;
       if (eligible) this.#assessable++;
       if (retryable) {
-        this.#pending = { events: [attemptEvent], correct: outcome.correct, nodeId, eligible };
+        this.#pending = { events, correct: outcome.correct, nodeId, eligible };
       } else {
-        await d.append([attemptEvent]);
+        await d.append(events);
       }
       this.#attempts++;
       if (outcome.correct) this.#correct++;

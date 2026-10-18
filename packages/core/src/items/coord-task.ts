@@ -16,6 +16,7 @@ import { at } from "../theory/util.js";
 import { enumerateBassMotions } from "./bass-motion.js";
 import { keyToJson, latencyField } from "./build.js";
 import type { PerformanceTarget } from "./expected.js";
+import { DRILL_PARAM, DrillItemParams, drillProgression } from "./drill.js";
 import { keyForFamily } from "./family.js";
 import { itemId } from "./ids.js";
 import {
@@ -40,6 +41,9 @@ import type { GenerateContext, Generator, ItemInstance, ItemParams } from "./typ
  * `bassMotion` one; each progression has `COORD_MELODIES` melodies. A melody is a pure function of
  * the progression and its number, written in scale degrees, so the same item has the same tune in
  * every key. The key is presentation.
+ *
+ * Micro-drills (T5.8): `nodeId|drill=IV-V|fam=A` plays the two chords twice (IV, V, IV, V, one per
+ * bar) under that progression's first melody. Drills are never listed, but `generate` accepts them.
  */
 
 /** Melodies per progression. */
@@ -268,7 +272,11 @@ export const coordTask: Generator = {
   },
   generate(node: SkillNode, params: ItemParams, ctx: GenerateContext): ItemInstance {
     const np = CoordNodeParams.parse(node.params);
-    const ip = CoordItemParams.parse(params);
+    const drill = DRILL_PARAM in params ? DrillItemParams.parse(params) : undefined;
+    const ip =
+      drill === undefined
+        ? CoordItemParams.parse(params)
+        : { fam: drill.fam, prog: drillProgression(drill.drill), mel: 1 };
     if (ip.prog.some((c) => !np.chords.includes(c))) {
       throw new RangeError(`progression ${ip.prog.join("-")} uses a chord not in node ${node.id}`);
     }
@@ -289,7 +297,10 @@ export const coordTask: Generator = {
       role: "count-in" as const,
     }));
     const all = target.notes.map((n) => n.midi);
-    const idParams: ItemParams = { fam: ip.fam, prog: ip.prog, mel: ip.mel };
+    const idParams: ItemParams =
+      drill === undefined
+        ? { fam: ip.fam, prog: ip.prog, mel: ip.mel }
+        : { fam: drill.fam, drill: drill.drill };
     return {
       itemId: itemId(node.id, idParams),
       nodeId: node.id,
