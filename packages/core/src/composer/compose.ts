@@ -59,6 +59,12 @@ export const APPLY_NEW_EAR_PHRASES_PER_SESSION = 1;
 /** New left-hand chord items (HANDS, T5.3) offered in one session. Each takes a while to play. */
 export const HANDS_NEW_ITEMS_PER_SESSION = 2;
 
+/**
+ * Generators whose items close the Read block (spec 6.2, R18): a short grand-staff line, last in
+ * the block, at most one a session, in the key of the day when the learner has it open.
+ */
+const CLOSING_GENERATORS: readonly GeneratorId[] = ["sightLine"];
+
 /** The READ node whose fluency ends the C-major-first rule (R15). */
 const LANDMARKS_NODE = "read.bass.landmarks";
 const FAMILY_ORDER: readonly KeyFamily[] = ["A", "B", "C"];
@@ -437,6 +443,11 @@ export function composePieceRun(input: {
  * - Away has no Orient, uses only Away-eligible generators, and splits the budget 60/40 between
  *   Ear and Read when Read has content, else all Ear.
  * - Generators come from `input.generators` (default `GENERATORS`).
+ * - The Read block ends with one closing line (spec 6.2, R18): a `sightLine` item of a grand-staff
+ *   reading node at `learning` or beyond (or being introduced), due ones first (in the key of the
+ *   day's family first), else a new one. It needs polyphonic input (MIDI) and is never in Away.
+ *   It takes its time from the Read block and is planned only when it fits there; line items
+ *   never appear elsewhere in the block.
  * - Apply (MP) holds piece phrases: due ones, then up to `APPLY_NEW_PHRASES_PER_SESSION` new
  *   phrases of the current piece (the first unlocked piece not yet played through, see
  *   `listPieces`), when `input.pieces` and an enabled `pieceLine` generator are present. It is null
@@ -616,8 +627,25 @@ export function composeSession(input: ComposeInput): SessionPlan {
   };
 
   const ear = candidates("EAR");
-  const read = candidates("READ");
-  const readHasContent = read.due.length > 0 || (read.fresh.length > 0 && newAllowance > 0);
+  const readAll = candidates("READ");
+  // The Read block's closing line (spec 6.2, R18) is planned on its own, so line items never fill
+  // the rest of the block. Due lines come first, those in the key of the day's family ahead of the
+  // rest (spec 6.3), then new ones, already in that order.
+  const isClosing = (c: Candidate): boolean => {
+    const g = infos.get(c.nodeId)?.gens[0];
+    return g !== undefined && CLOSING_GENERATORS.includes(g);
+  };
+  const read = {
+    due: readAll.due.filter((c) => !isClosing(c)),
+    fresh: readAll.fresh.filter((c) => !isClosing(c)),
+  };
+  const closingOrder = [
+    ...readAll.due
+      .filter(isClosing)
+      .sort((a, b) => Number(a.fam !== dayFamily) - Number(b.fam !== dayFamily)),
+    ...readAll.fresh.filter(isClosing),
+  ];
+  const readHasContent = readAll.due.length > 0 || (readAll.fresh.length > 0 && newAllowance > 0);
 
   // Apply: piece phrases (MP), read and played by ear. Due phrases first, then the next new ones.
   const applyOpen = mode === "instrument" && !input.practice;
@@ -668,7 +696,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
   });
   notes.push(...alloc.notes);
 
-  const readReserve = read.fresh.length > 0 ? Math.floor(newAllowance / 2) : 0;
+  const readReserve = readAll.fresh.length > 0 ? Math.floor(newAllowance / 2) : 0;
   // New piece phrases get a small share of the daily allowance too, or the many new reading items
   // would always use it up first: about a third, and never more than the phrases on offer.
   const applyReserve = Math.min(
@@ -688,11 +716,32 @@ export function composeSession(input: ComposeInput): SessionPlan {
     state,
     graph,
   });
+  // The closing line takes its time from the end of the Read block, when it fits there.
+  let closing: Fill | undefined;
+  for (const c of closingOrder) {
+    const f = fillBlock({
+      blockSec: alloc.readSec,
+      due: c.isNew ? [] : [c],
+      fresh: c.isNew ? [c] : [],
+      allowance: newAllowance - applyReserve - earFill.newCount,
+      forceFirst: false,
+      infos,
+      taken,
+      state,
+      graph,
+    });
+    if (f.items.length > 0) {
+      closing = f;
+      notes.push(`closing line: ${at(f.items, 0).itemId}`);
+      break;
+    }
+  }
+  const closingNew = closing?.newCount ?? 0;
   const readFill = fillBlock({
-    blockSec: alloc.readSec,
+    blockSec: alloc.readSec - (closing?.usedSec ?? 0),
     due: read.due,
     fresh: read.fresh,
-    allowance: newAllowance - applyReserve - earFill.newCount,
+    allowance: newAllowance - applyReserve - earFill.newCount - closingNew,
     forceFirst: false,
     cycle: input.practice === true,
     infos,
@@ -705,7 +754,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     blockSec: alloc.applySec,
     due: apply.due,
     fresh: apply.fresh,
-    allowance: newAllowance - earFill.newCount - readFill.newCount,
+    allowance: newAllowance - earFill.newCount - readFill.newCount - closingNew,
     forceFirst: false,
     infos,
     taken,
@@ -715,7 +764,9 @@ export function composeSession(input: ComposeInput): SessionPlan {
 
   const introduced =
     intro !== undefined &&
-    [...earFill.items, ...readFill.items, ...applyFill.items].some((i) => i.nodeId === intro.id);
+    [...earFill.items, ...readFill.items, ...(closing?.items ?? []), ...applyFill.items].some(
+      (i) => i.nodeId === intro.id,
+    );
   const introductions = intro && introduced ? [intro.id] : [];
   const introductionKeyFamilies: Record<string, KeyFamily> =
     intro && introduced && intro.keyDependent ? { [intro.id]: "A" } : {};
@@ -734,9 +785,10 @@ export function composeSession(input: ComposeInput): SessionPlan {
 
   const practice = input.practice === true;
   const earItems = withKey(arrange(earFill, createRng(input.seed), practice));
-  const readItems = withKey(
-    arrange(readFill, createRng((input.seed ^ 0x5bd1e995) >>> 0), practice),
-  );
+  const readItems = [
+    ...withKey(arrange(readFill, createRng((input.seed ^ 0x5bd1e995) >>> 0), practice)),
+    ...withKey(closing?.items ?? []),
+  ];
   // Chord items carry a family like reading items; piece phrases have none and pass through.
   const applyItems = withKey(applyFill.items);
 
@@ -748,7 +800,11 @@ export function composeSession(input: ComposeInput): SessionPlan {
           includeScale: alloc.orientSec >= SCALE_ORIENT_SEC,
         };
   const estimatedSec =
-    (orient?.estimatedSec ?? 0) + earFill.usedSec + readFill.usedSec + applyFill.usedSec;
+    (orient?.estimatedSec ?? 0) +
+    earFill.usedSec +
+    readFill.usedSec +
+    (closing?.usedSec ?? 0) +
+    applyFill.usedSec;
 
   return {
     key,
@@ -766,7 +822,7 @@ export function composeSession(input: ComposeInput): SessionPlan {
     introductionKeyFamilies,
     ...(input.practice ? { practice: true as const } : {}),
     diagnostics: {
-      dueCount: ear.due.length + read.due.length + apply.due.length,
+      dueCount: ear.due.length + readAll.due.length + apply.due.length,
       newAllowance,
       reallocatedSec: alloc.reallocatedSec,
       notes,

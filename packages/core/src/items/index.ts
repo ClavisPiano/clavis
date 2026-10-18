@@ -17,6 +17,7 @@ export * from "./treble-note-read.js";
 export * from "./lh-pattern.js";
 export * from "./coord-task.js";
 export * from "./lh-pattern-variants.js";
+export * from "./sight-line.js";
 export * from "./by-ear-phrase.js";
 export * from "./piece-ear.js";
 export * from "./piece-line.js";

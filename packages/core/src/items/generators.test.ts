@@ -112,6 +112,7 @@ describe("registry and universes", () => {
         "progressionId",
         "rhythmEcho",
         "rhythmRead",
+        "sightLine",
         "trebleNoteRead",
       ].sort(),
     );
