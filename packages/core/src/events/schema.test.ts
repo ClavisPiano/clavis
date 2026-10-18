@@ -114,6 +114,32 @@ describe("parseEvent", () => {
     expect(code({ ...started, practice: true })).toBe("invalid");
   });
 
+  it("attempt.completed v2 adds optional selfAssessment and v1 upcasts to v2", () => {
+    const attempt = {
+      ...base,
+      type: "attempt.completed",
+      v: 1,
+      sessionId: "01ARYZ6S410000000000000001",
+      itemId: "item-1",
+      nodeId: "degree.1-5",
+      outcome: { correct: true, latencyMs: 900, retries: 0 },
+      inputSource: "tap",
+    };
+    expect(parseEvent(attempt)).toEqual({ ok: true, event: { ...attempt, v: 2 } });
+    expect(parseEvent({ ...attempt, v: 2 }).ok).toBe(true);
+    for (const selfAssessment of ["right", "wrong"]) {
+      expect(parseEvent({ ...attempt, v: 2, selfAssessment })).toEqual({
+        ok: true,
+        event: { ...attempt, v: 2, selfAssessment },
+      });
+    }
+    expect(code({ ...attempt, v: 2, selfAssessment: "unsure" })).toBe("invalid");
+    expect(code({ ...attempt, v: 2, selfAssessment: true })).toBe("invalid");
+    // A shipped v1 event cannot carry the v2 key.
+    expect(code({ ...attempt, selfAssessment: "right" })).toBe("invalid");
+    expect(code({ ...attempt, v: 3 })).toBe("unknown_version");
+  });
+
   it("rejects extra keys in the settings patch", () => {
     expect(code({ ...settings, patch: { budgetSec: 600, volume: 3 } })).toBe("invalid");
   });

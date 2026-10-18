@@ -78,7 +78,7 @@ function stream(): LearningEvent[] {
         {
           ...base(at + 1500),
           type: "attempt.completed",
-          v: 1,
+          v: 2,
           sessionId: s,
           itemId,
           nodeId: NODE,

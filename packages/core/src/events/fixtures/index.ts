@@ -5,6 +5,7 @@ import sessionStarted from "./session.started.json";
 import sessionStartedV1 from "./session.started.v1.json";
 import itemPresented from "./item.presented.json";
 import attemptCompleted from "./attempt.completed.json";
+import attemptCompletedV1 from "./attempt.completed.v1.json";
 import nodeIntroduced from "./node.introduced.json";
 import placementCompleted from "./placement.completed.json";
 import contentImported from "./content.imported.json";
@@ -28,4 +29,8 @@ export const eventFixtures: Readonly<Record<string, unknown>> = {
 };
 
 /** Shipped v1 events that must keep parsing and upcasting to the latest version. */
-export const legacyEventFixtures: readonly unknown[] = [settingsChangedV1, sessionStartedV1];
+export const legacyEventFixtures: readonly unknown[] = [
+  settingsChangedV1,
+  sessionStartedV1,
+  attemptCompletedV1,
+];
