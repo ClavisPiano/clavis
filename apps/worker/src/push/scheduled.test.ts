@@ -1,10 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import worker from "../index";
 import { d1Sql } from "../auth/sql";
 import { toBase64Url } from "../auth/session";
 import { fakeD1, makeEnv } from "../test-support";
-import { weekdaysToMask } from "./due";
+import { CUE_WINDOW_MIN, cueUtcMinute, isDue, weekdaysToMask } from "./due";
 import { ecKeyPair } from "./test-keys";
 import { createPushRepo, type NewPushSubscription } from "./repo";
 import { CUE_DEFAULT_BODY, CUE_TITLE, MAX_SENDS_PER_RUN, runPracticeCues } from "./scheduled";
@@ -182,6 +183,19 @@ describe("runPracticeCues", () => {
     expect(result).toMatchObject({ due: MAX_SENDS_PER_RUN + 5, sent: MAX_SENDS_PER_RUN });
   });
 
+  it("reports cues left over by the cap, and those whose window closes before the next run", async () => {
+    const { env, addForUser } = await setup();
+    for (let i = 0; i < MAX_SENDS_PER_RUN + 5; i++) await addForUser(`s${String(i)}`);
+    const first = await runPracticeCues(env, { nowMs: NOW, fetch: fakeFetch().fn });
+    // 5 minutes after the cue: the next run (15 minutes later) is still inside the window.
+    expect(first).toMatchObject({ deferred: 5, dropped: 0 });
+    const { env: env2, addForUser: add2 } = await setup();
+    for (let i = 0; i < MAX_SENDS_PER_RUN + 5; i++) await add2(`t${String(i)}`);
+    // 20 minutes after the cue: the next run would be past the 30 minute window.
+    const late = await runPracticeCues(env2, { nowMs: NOW + 15 * 60_000, fetch: fakeFetch().fn });
+    expect(late).toMatchObject({ due: MAX_SENDS_PER_RUN + 5, deferred: 5, dropped: 5 });
+  });
+
   it("sends cues left over by the cap on the next run, before newly due ones, and only once", async () => {
     const { env, addForUser, state } = await setup();
     for (let i = 0; i < MAX_SENDS_PER_RUN + 5; i++) await addForUser(`early${String(i)}`);
@@ -254,5 +268,90 @@ describe("worker scheduled handler", () => {
     }
     expect(urls).toEqual(["https://fcm.googleapis.com/fcm/send/a"]);
     expect(state()).toEqual({ a: "2026-10-12" });
+  });
+});
+
+describe("cueUtcMinute", () => {
+  it.each([
+    ["08:00", 600, 1320], // Sydney 08:00 is 22:00 UTC the day before
+    ["08:00", -300, 780], // New York 08:00 is 13:00 UTC
+    ["00:30", 600, 870], // wraps below midnight
+    ["23:30", -300, 270], // wraps above midnight
+    ["12:00", 0, 720],
+  ])("%s at offset %i is UTC minute %i", (time, offset, expected) => {
+    expect(cueUtcMinute(time, offset)).toBe(expected);
+  });
+
+  it("is null for a malformed time", () => {
+    expect(cueUtcMinute("8am", 0)).toBeNull();
+    expect(cueUtcMinute("24:00", 0)).toBeNull();
+  });
+});
+
+describe("listNearDue", () => {
+  it("returns only rows near their cue time, and fixes rows stored without a UTC minute", async () => {
+    const { env, add, sqlite } = await setup();
+    await add("now"); // Sydney 08:00 is due at NOW
+    await add("hours-later", { timeLocal: "14:00" });
+    await add("new-york", { tzOffsetMin: -300 }); // 17:05 there: past the window
+    sqlite
+      .prepare(
+        `INSERT INTO push_subscriptions
+           (endpoint, user_id, p256dh, auth, time_local, weekdays, tz_offset_min, habit, created_at)
+         SELECT 'https://fcm.googleapis.com/fcm/send/legacy', user_id, p256dh, auth, '08:00', weekdays,
+                600, habit, created_at FROM push_subscriptions WHERE endpoint LIKE '%/now'`,
+      )
+      .run();
+    const repo = createPushRepo(d1Sql(env.DB));
+    const names = (await repo.listNearDue(NOW)).map((r) => r.endpoint.split("/").pop()).sort();
+    expect(names).toEqual(["legacy", "now"]);
+    const stored = sqlite
+      .prepare("SELECT cue_utc_min FROM push_subscriptions WHERE endpoint LIKE '%/legacy'")
+      .all() as unknown as { cue_utc_min: number | null }[];
+    expect(stored[0]?.cue_utc_min).toBe(1320);
+  });
+
+  it("never misses a cue that isDue accepts (property)", async () => {
+    const { env, sqlite } = await setup();
+    const repo = createPushRepo(d1Sql(env.DB));
+    let n = 0;
+    await fc.assert(
+      fc.asyncProperty(
+        fc.integer({ min: 0, max: 23 }),
+        fc.integer({ min: 0, max: 59 }),
+        fc.integer({ min: -720, max: 840 }),
+        fc.integer({ min: 0, max: 7 * 1440 }),
+        async (hh, mm, tz, minutesIntoWeek) => {
+          const time = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+          const endpoint = `https://fcm.googleapis.com/fcm/send/p${String(n++)}`;
+          const row = {
+            endpoint,
+            userId: "u1",
+            p256dh: "x",
+            auth: "y",
+            timeLocal: time,
+            weekdays: 127,
+            tzOffsetMin: tz,
+            habit: "",
+            lastSentDay: null,
+            lastPractisedDay: null,
+          };
+          sqlite
+            .prepare(
+              `INSERT INTO push_subscriptions
+                 (endpoint, user_id, p256dh, auth, time_local, weekdays, tz_offset_min, habit,
+                  created_at, cue_utc_min)
+               VALUES (?, 'u1', 'x', 'y', ?, 127, ?, '', 0, ?)`,
+            )
+            .run(endpoint, time, tz, cueUtcMinute(time, tz));
+          const now = Date.UTC(2026, 9, 11) + minutesIntoWeek * 60_000;
+          const near = (await repo.listNearDue(now)).some((r) => r.endpoint === endpoint);
+          if (isDue(row, now)) expect(near).toBe(true);
+          sqlite.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(endpoint);
+        },
+      ),
+      { numRuns: 200 },
+    );
+    expect(CUE_WINDOW_MIN).toBe(30);
   });
 });

@@ -92,6 +92,7 @@ async function installFakeBackend(page: Page): Promise<Fake> {
         fake.codesLeft -= 1;
         return json(route, { userId: "user-1", recoveryCodesLeft: fake.codesLeft });
       case "/api/auth/logout":
+      case "/api/auth/logout/all":
         fake.signedIn = false;
         return json(route, { ok: true });
       case "/api/sync/push": {

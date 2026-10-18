@@ -63,17 +63,17 @@ describe("blob routes", () => {
 
   it("prefixes keys with the token user, so users cannot read each other's blobs", async () => {
     const { env, bucket } = setup();
-    expect((await put(env, "alice", "secret.webm")).status).toBe(200);
-    expect(bucket.keys()).toEqual(["alice/secret.webm"]);
-    expect((await get(env, "bob", "secret.webm")).status).toBe(404);
-    expect((await get(env, "alice", "secret.webm")).status).toBe(200);
+    expect((await put(env, "u1", "secret.webm")).status).toBe(200);
+    expect(bucket.keys()).toEqual(["u1/secret.webm"]);
+    expect((await get(env, "u2", "secret.webm")).status).toBe(404);
+    expect((await get(env, "u1", "secret.webm")).status).toBe(200);
     // Bob deleting the same name touches only his own (absent) object.
     const del = await call("/api/blobs/secret.webm", env, {
       method: "DELETE",
-      headers: await auth("bob", { origin: ORIGIN }),
+      headers: await auth("u2", { origin: ORIGIN }),
     });
     expect(del.status).toBe(204);
-    expect(bucket.keys()).toEqual(["alice/secret.webm"]);
+    expect(bucket.keys()).toEqual(["u1/secret.webm"]);
   });
 
   it.each([

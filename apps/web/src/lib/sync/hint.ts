@@ -5,6 +5,8 @@
  */
 
 const KEY = "clavis.signedIn";
+/** Set when a signed-in device lost its session (401), so Home can offer "sign in to resume sync". */
+const EXPIRED_KEY = "clavis.sessionExpired";
 
 export function isSignedInHint(): boolean {
   try {
@@ -16,9 +18,29 @@ export function isSignedInHint(): boolean {
 
 export function setSignedInHint(signedIn: boolean): void {
   try {
-    if (signedIn) localStorage.setItem(KEY, "1");
-    else localStorage.removeItem(KEY);
+    if (signedIn) {
+      localStorage.setItem(KEY, "1");
+      localStorage.removeItem(EXPIRED_KEY);
+    } else localStorage.removeItem(KEY);
   } catch {
     // Storage blocked: sync stays off, which is the safe default.
+  }
+}
+
+export function isSessionExpired(): boolean {
+  try {
+    return localStorage.getItem(EXPIRED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Mark the session as expired (true) or clear the mark (false, on an explicit sign out). */
+export function setSessionExpired(expired: boolean): void {
+  try {
+    if (expired) localStorage.setItem(EXPIRED_KEY, "1");
+    else localStorage.removeItem(EXPIRED_KEY);
+  } catch {
+    // Storage blocked: no prompt, which only loses a reminder.
   }
 }
