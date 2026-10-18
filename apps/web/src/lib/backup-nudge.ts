@@ -1,4 +1,5 @@
 import { PERSIST_KEY, type KeyValueStoreLike } from "./pwa/persist";
+import { wallNow } from "./clock";
 
 /*
  * T8.1: a nudge to back up, for learners whose practice lives only in this browser. IndexedDB can
@@ -84,7 +85,7 @@ export const recordNudgeDismissed = (local: KeyValueStoreLike | undefined, at: n
 /** Record a backup made now, for pages that save a backup file without the Home card. */
 export function recordBackupNow(): void {
   try {
-    recordBackup(localStorage, Date.now());
+    recordBackup(localStorage, wallNow());
   } catch {
     // Storage blocked: nothing to record.
   }

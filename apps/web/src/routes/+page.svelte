@@ -163,7 +163,7 @@
         contentVersion: graph.contentVersion,
       });
       saveFile(file);
-      const at = Date.now();
+      const at = wallNow();
       recordBackup(localStore(), at);
       if (backupInputs) backupInputs = { ...backupInputs, lastBackupAt: at };
       now = at;
@@ -173,7 +173,7 @@
   }
 
   function snoozeBackup() {
-    const at = Date.now();
+    const at = wallNow();
     recordNudgeDismissed(localStore(), at);
     if (backupInputs) backupInputs = { ...backupInputs, dismissedAt: at };
     now = at;
