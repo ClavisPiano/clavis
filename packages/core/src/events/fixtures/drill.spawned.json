@@ -1,0 +1,11 @@
+{
+  "id": "01JBX00000000000000000A013",
+  "deviceId": "dev-laptop",
+  "at": 1760000004100,
+  "type": "drill.spawned",
+  "v": 1,
+  "sessionId": "01JBX00000000000000000S001",
+  "sourceItemId": "hands.lh.triads.root|fam=A|prog=I-IV-V-I",
+  "nodeId": "hands.lh.triads.root",
+  "itemIds": ["hands.lh.triads.root|drill=IV-V|fam=A"]
+}
