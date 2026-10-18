@@ -1,3 +1,4 @@
+import { wallNow } from "./clock";
 import type { EventStore, LearnerState } from "@clavis/core";
 import { deviceTzOffsetMin } from "./home";
 import { readInstallEnv } from "./pwa/ios";
@@ -50,7 +51,7 @@ export function createPractisedReporter(store: EventStore): (state: LearnerState
   let running = false;
   return (state) => {
     const tz = deviceTzOffsetMin();
-    const day = practisedDay(state, Date.now(), tz);
+    const day = practisedDay(state, wallNow(), tz);
     if (day === undefined || day === reportedDay || running) return;
     running = true;
     void reportPractisedIfNeeded(
@@ -61,7 +62,7 @@ export function createPractisedReporter(store: EventStore): (state: LearnerState
         tzOffsetMin: () => tz,
       },
       state,
-      Date.now(),
+      wallNow(),
     )
       .then((outcome) => {
         if (outcome === "reported") reportedDay = day;

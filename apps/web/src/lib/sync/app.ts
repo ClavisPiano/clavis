@@ -1,3 +1,4 @@
+import { observeServerDate, wallNow } from "../clock";
 import { metaCursorStore, syncOnce, type SyncResult } from "@clavis/core";
 import { uploadPendingBlobs } from "../blobs/app";
 import { getLearnerState } from "../learner";
@@ -24,7 +25,9 @@ export function getSyncController(): SyncController {
       return syncOnce({
         store: r.store,
         learner: r.service,
-        transport: createFetchTransport(),
+        transport: createFetchTransport(undefined, undefined, (date) => {
+          observeServerDate(date);
+        }),
         cursorStore: metaCursorStore(r.store),
         onOversized: (event) => {
           console.warn(`Event ${event.id} (${event.type}) is too large to sync and was skipped`);
@@ -35,7 +38,7 @@ export function getSyncController(): SyncController {
       });
     },
     afterSync: uploadPendingBlobs,
-    now: () => Date.now(),
+    now: () => wallNow(),
     isVisible: () => document.visibilityState === "visible",
     isOnline: () => navigator.onLine,
     doc: document,

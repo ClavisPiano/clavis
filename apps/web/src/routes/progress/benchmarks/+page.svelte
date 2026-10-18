@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../../../lib/clock";
   import { onMount, untrack } from "svelte";
   import { resolve } from "$app/paths";
   import {
@@ -25,7 +26,7 @@
   const learner = useLearner();
   const port = createNotationViewPort(getNotationClient());
   const library = appPieces();
-  let now = $state(Date.now());
+  let now = $state(wallNow());
   let chosenPiece = $state<string | undefined>();
   let chosenEarlier = $state<string | undefined>();
 
@@ -39,7 +40,7 @@
 
   onMount(() => {
     void learner.init().then(() => {
-      now = Date.now();
+      now = wallNow();
       if (learner.state) void sweepOrphanBenchmarks(learner.state, now);
     });
     return () => {

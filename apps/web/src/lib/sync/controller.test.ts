@@ -292,6 +292,29 @@ describe("fetch transport", () => {
     expect(calls[0]?.init.headers).toEqual({ "content-type": "application/json" });
   });
 
+  it("reports each response's Date header, even for an error status", async () => {
+    const seen: (string | null)[] = [];
+    const date = "Sun, 18 Oct 2026 10:00:00 GMT";
+    const t = createFetchTransport(
+      () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ events: [], lastSeq: 0, hasMore: false }), {
+            headers: { date },
+          }),
+        ),
+      "/api/sync",
+      (d) => seen.push(d),
+    );
+    await t.pull({ after: 0 });
+    const failing = createFetchTransport(
+      () => Promise.resolve(new Response("{}", { status: 503, headers: { date } })),
+      "/api/sync",
+      (d) => seen.push(d),
+    );
+    await expect(failing.pull({ after: 0 })).rejects.toThrow();
+    expect(seen).toEqual([date, date]);
+  });
+
   it("maps statuses to typed errors", async () => {
     const withStatus = (status: number) =>
       createFetchTransport(() => Promise.resolve(json({}, status)));

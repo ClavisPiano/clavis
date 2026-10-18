@@ -1,3 +1,4 @@
+import { wallNow } from "../clock";
 import { asset } from "$app/paths";
 import {
   CompositeInputAdapter,
@@ -136,7 +137,7 @@ export async function createSessionRuntime(
   const tap = handle.tap ?? keys;
 
   const newId = createUlidGenerator({
-    now: () => Date.now(),
+    now: () => wallNow(),
     randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
   });
 
@@ -216,7 +217,7 @@ export async function createSessionRuntime(
       reportPractised(await service.append(events));
     },
     getState: () => service.state,
-    clock: { contextNowMs, wallNow: () => Date.now(), schedule },
+    clock: { contextNowMs, wallNow: () => wallNow(), schedule },
     newId,
     seed,
     // R6: minutes east of UTC, the opposite sign of getTimezoneOffset (`|| 0` turns -0 into 0).
@@ -232,7 +233,7 @@ export async function createSessionRuntime(
         {
           id: newId(),
           deviceId,
-          at: Date.now(),
+          at: wallNow(),
           type: "settings.changed",
           v: 2,
           patch: { headphones: value },
@@ -267,7 +268,7 @@ export async function createSessionRuntime(
         return computeNextSteps({
           state: service.state,
           graph,
-          now: Date.now(),
+          now: wallNow(),
           tzOffsetMin: deps.tzOffsetMin,
           mode: params.mode,
           budgetSec: machine.budgetSec,

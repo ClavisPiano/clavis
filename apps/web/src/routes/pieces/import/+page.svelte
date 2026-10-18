@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../../../lib/clock";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -122,14 +123,14 @@
     saveError = "";
     try {
       const newId = createUlidGenerator({
-        now: () => Date.now(),
+        now: () => wallNow(),
         randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
       });
       const event = buildImportEvent({
         eventId: newId(),
         pieceUlid: newId(),
         deviceId: learner.ctx.deviceId,
-        at: Date.now(),
+        at: wallNow(),
         title: cleaned,
         kind,
         partIndex,

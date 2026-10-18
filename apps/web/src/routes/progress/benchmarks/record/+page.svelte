@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../../../../lib/clock";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -44,13 +45,13 @@
   let ticker: number | undefined;
   let error = $state("");
   let scoreFailed = $state(false);
-  let now = $state(Date.now());
+  let now = $state(wallNow());
 
   const supported = typeof window !== "undefined" && browserRecorderEnv() !== undefined;
 
   onMount(() => {
     void learner.init().then(() => {
-      now = Date.now();
+      now = wallNow();
       const state = learner.state;
       if (state) pieceId ??= defaultBenchmarkPiece(options, state.benchmarks);
     });
@@ -140,7 +141,7 @@
       const blobs = await getBlobStore();
       if (!blobs) throw new Error("storage is unavailable");
       const newId = createUlidGenerator({
-        now: () => Date.now(),
+        now: () => wallNow(),
         randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
       });
       await saveBenchmark(
@@ -150,7 +151,7 @@
           deleteRemote: remoteDeleter(),
           deviceId: learner.ctx.deviceId,
           newId,
-          now: () => Date.now(),
+          now: () => wallNow(),
           tzOffsetMin: deviceTzOffsetMin(),
         },
         learner.state,

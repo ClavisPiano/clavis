@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../../lib/clock";
   import { onDestroy, onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { MidiAdapter, isMidiSupported, type MidiDeviceInfo } from "@clavis/audio";
@@ -248,11 +249,11 @@
       if (patch) {
         const { deviceId, store } = learner.ctx;
         const newId = createUlidGenerator({
-          now: () => Date.now(),
+          now: () => wallNow(),
           randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
         });
         await learner.append([
-          { id: newId(), deviceId, at: Date.now(), type: "settings.changed", v: 2, patch },
+          { id: newId(), deviceId, at: wallNow(), type: "settings.changed", v: 2, patch },
         ]);
         // The session runner reads headphones from device meta first.
         if (patch.headphones !== undefined) {

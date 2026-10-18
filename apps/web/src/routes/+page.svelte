@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wallNow } from "../lib/clock";
   import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import { readInstallEnv, shouldShowIosInstallHint } from "../lib/pwa/ios";
@@ -20,7 +21,7 @@
   import { benchmarkMonth, needsBenchmark } from "@clavis/core";
 
   const learner = useLearner();
-  let now = $state(Date.now());
+  let now = $state(wallNow());
 
   const HINT_DISMISSED_KEY = "clavis.install-hint-dismissed";
   let showHint = $state(false);
@@ -36,7 +37,7 @@
     }
     showHint = !dismissed && shouldShowIosInstallHint(readInstallEnv());
     void learner.init().then(async () => {
-      now = Date.now();
+      now = wallNow();
       try {
         placementSkipped = (await learner.ctx.store.getMeta(PLACEMENT_SKIPPED_META_KEY)) === true;
       } catch {

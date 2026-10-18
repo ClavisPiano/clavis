@@ -14,9 +14,12 @@ import {
 export function createFetchTransport(
   fetchFn: typeof fetch = (input, init) => fetch(input, init),
   base = "/api/sync",
+  /** Called with each response's `Date` header, to learn how far this device's clock is off (T8.4). */
+  onServerDate?: (dateHeader: string | null) => void,
 ): SyncTransport {
   async function call(url: string, init: RequestInit): Promise<unknown> {
     const res = await fetchFn(url, { ...init, credentials: "include" });
+    onServerDate?.(res.headers.get("date"));
     if (res.status === 401) throw new SyncAuthError("not signed in");
     // 408 and 429 are "try again later", not a verdict on the batch.
     const retryable = res.status === 408 || res.status === 429;

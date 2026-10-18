@@ -1,3 +1,4 @@
+import { wallNow } from "./clock";
 import { createUlidGenerator, getOrCreateDevice, type EventStore } from "@clavis/core";
 import { DexieEventStore } from "@clavis/store";
 
@@ -57,7 +58,7 @@ let singleton: (() => Promise<AppStoreResult>) | undefined;
 export function initAppStore(): Promise<AppStoreResult> {
   singleton ??= createAppStoreInitializer({
     createStore: () => new DexieEventStore({ name: "clavis" }),
-    now: () => Date.now(),
+    now: () => wallNow(),
     randomBytes: (length) => crypto.getRandomValues(new Uint8Array(length)),
     platform: detectPlatform(navigator),
     userAgent: navigator.userAgent,
