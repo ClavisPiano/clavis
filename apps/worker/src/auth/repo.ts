@@ -20,6 +20,18 @@ export interface CredentialRecord {
   transports: string[];
 }
 
+/** A passkey as shown in the list. The public key and counter never leave the server. */
+export interface PasskeySummary {
+  id: string;
+  label: string | null;
+  /** Unix ms. */
+  createdAt: number;
+  /** Unix ms, or null when it was never used to sign in. */
+  lastUsedAt: number | null;
+}
+
+export type RemovePasskeyResult = "removed" | "not_found" | "last_credential";
+
 /** Data access for auth. Times are unix ms and always passed in (inject the clock). */
 export interface AuthRepo {
   putChallenge(challenge: StoredChallenge, nowMs: number): Promise<void>;
@@ -42,6 +54,16 @@ export interface AuthRepo {
   addCredential(credential: CredentialRecord, nowMs: number): Promise<void>;
   getCredential(id: string): Promise<CredentialRecord | null>;
   listCredentials(userId: string): Promise<CredentialRecord[]>;
+  listPasskeys(userId: string): Promise<PasskeySummary[]>;
+  /** Set (or with null clear) the label. False when the user has no such passkey. */
+  renamePasskey(userId: string, id: string, label: string | null): Promise<boolean>;
+  /**
+   * Delete a passkey. The last one is kept unless unused recovery codes exist, so the account can
+   * never be left with no way in. The check and the delete are one statement.
+   */
+  removePasskey(userId: string, id: string): Promise<RemovePasskeyResult>;
+  /** Replace all of the user's recovery codes (used and unused) with new ones, atomically. */
+  replaceRecoveryCodes(userId: string, hashes: string[]): Promise<void>;
   /** Record a successful assertion. */
   touchCredential(id: string, counter: number, nowMs: number): Promise<void>;
   /** How many accounts were created at or after `sinceMs`. */
@@ -151,6 +173,64 @@ export function createAuthRepo(sql: AsyncSql): AuthRepo {
         userId,
       );
       return rows.map(toCredential);
+    },
+
+    async listPasskeys(userId) {
+      const rows = await sql.all<{
+        id: string;
+        label: string | null;
+        created_at: number;
+        last_used_at: number | null;
+      }>(
+        "SELECT id, label, created_at, last_used_at FROM credentials WHERE user_id = ? ORDER BY created_at, id",
+        userId,
+      );
+      return rows.map((r) => ({
+        id: r.id,
+        label: r.label,
+        createdAt: r.created_at,
+        lastUsedAt: r.last_used_at,
+      }));
+    },
+
+    async renamePasskey(userId, id, label) {
+      const rows = await sql.all(
+        "UPDATE credentials SET label = ? WHERE id = ? AND user_id = ? RETURNING id",
+        label,
+        id,
+        userId,
+      );
+      return rows.length > 0;
+    },
+
+    async removePasskey(userId, id) {
+      const removed = await sql.all(
+        `DELETE FROM credentials WHERE id = ? AND user_id = ?
+           AND ((SELECT COUNT(*) FROM credentials WHERE user_id = ?) > 1
+                OR (SELECT COUNT(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL) > 0)
+         RETURNING id`,
+        id,
+        userId,
+        userId,
+        userId,
+      );
+      if (removed.length > 0) return "removed";
+      const exists = await sql.all(
+        "SELECT 1 AS one FROM credentials WHERE id = ? AND user_id = ?",
+        id,
+        userId,
+      );
+      return exists.length > 0 ? "last_credential" : "not_found";
+    },
+
+    async replaceRecoveryCodes(userId, hashes) {
+      await sql.batch([
+        { query: "DELETE FROM recovery_codes WHERE user_id = ?", bindings: [userId] },
+        ...hashes.map((hash): Statement => ({
+          query: "INSERT INTO recovery_codes (user_id, code_hash) VALUES (?, ?)",
+          bindings: [userId, hash],
+        })),
+      ]);
     },
 
     async touchCredential(id, counter, nowMs) {

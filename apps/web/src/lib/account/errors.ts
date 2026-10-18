@@ -19,7 +19,9 @@ export type AccountErrorKind =
   /** The browser or device cannot do passkeys. */
   | "unsupported"
   /** Too many attempts from this network (HTTP 429). */
-  | "rateLimited";
+  | "rateLimited"
+  /** The only passkey cannot be removed while no unused recovery code exists (HTTP 409). */
+  | "lastPasskey";
 
 export class AccountError extends Error {
   readonly kind: AccountErrorKind;
@@ -41,6 +43,8 @@ const MESSAGES: Record<AccountErrorKind, string> = {
   server: "Something went wrong on the server. Try again in a moment.",
   unsupported: "Passkeys are not supported on this browser.",
   rateLimited: "Too many attempts. Wait a minute and try again.",
+  lastPasskey:
+    "That is your only passkey and you have no unused recovery codes. Make new recovery codes or add another passkey first.",
 };
 
 /** Plain-language text for any thrown value. */

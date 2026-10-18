@@ -1,4 +1,4 @@
-import type { AuthApi } from "./api";
+import type { AuthApi, PasskeyInfo } from "./api";
 import { AccountError, describeAccountError, type AccountErrorKind } from "./errors";
 import type { Ceremonies } from "./webauthn";
 
@@ -22,7 +22,14 @@ export type AccountState =
   | { kind: "signedIn"; userId: string; passkeys: number; recoveryCodesLeft: number };
 
 export type AccountPhase =
-  "idle" | "loading" | "signingUp" | "signingIn" | "recovering" | "addingPasskey" | "signingOut";
+  | "idle"
+  | "loading"
+  | "signingUp"
+  | "signingIn"
+  | "recovering"
+  | "addingPasskey"
+  | "managing"
+  | "signingOut";
 
 export interface AccountSnapshot {
   account: AccountState;
@@ -31,7 +38,9 @@ export interface AccountSnapshot {
   offline: boolean;
   /** WebAuthn is available in this browser. */
   supported: boolean;
-  /** Recovery codes from sign-up, shown once until the person confirms they saved them. */
+  /** The signed-in user's passkeys, once `loadPasskeys` has run. */
+  passkeys: readonly PasskeyInfo[] | undefined;
+  /** Recovery codes from sign-up or regeneration, shown once until the person confirms they saved them. */
   recoveryCodes: readonly string[] | undefined;
   /** After a recovery code sign-in: ask the person to add a passkey on this device. */
   suggestPasskey: boolean;
@@ -64,6 +73,14 @@ export interface AccountStore {
   signIn(): Promise<boolean>;
   recover(code: string): Promise<boolean>;
   addPasskey(): Promise<boolean>;
+  /** Fetch the passkey list into `snapshot.passkeys`. */
+  loadPasskeys(): Promise<boolean>;
+  /** Name a passkey; an empty name clears it. */
+  renamePasskey(id: string, label: string): Promise<boolean>;
+  /** Remove a passkey (a lost device). Ends the other sessions. */
+  removePasskey(id: string): Promise<boolean>;
+  /** Replace the recovery codes; the new ones appear in `recoveryCodes` once. */
+  regenerateRecoveryCodes(): Promise<boolean>;
   dismissPasskeySuggestion(): void;
   signOut(): Promise<boolean>;
   /** Sign out on every device, for example after losing one. */
@@ -78,6 +95,7 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
     phase: "idle",
     offline: false,
     supported: ceremonies.supported(),
+    passkeys: undefined,
     recoveryCodes: undefined,
     suggestPasskey: false,
     error: undefined,
@@ -151,6 +169,7 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
   function signedOutState(): void {
     set({
       account: { kind: "anonymous" },
+      passkeys: undefined,
       recoveryCodes: undefined,
       suggestPasskey: false,
       offline: false,
@@ -251,6 +270,35 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
           await load(true);
           set({ suggestPasskey: false });
         }
+        // Keep a list that is already on screen current.
+        if (snap.passkeys) set({ passkeys: await api.listPasskeys() });
+      }),
+    loadPasskeys: () =>
+      action("managing", async () => {
+        set({ passkeys: await api.listPasskeys() });
+      }),
+    renamePasskey: (id, label) =>
+      action("managing", async () => {
+        await api.renamePasskey(id, label);
+        set({ passkeys: await api.listPasskeys() });
+      }),
+    removePasskey: (id) =>
+      action("managing", async () => {
+        const done = await api.removePasskey(id);
+        const account = snap.account;
+        if (account.kind === "signedIn") {
+          set({ account: { ...account, passkeys: done.passkeys } });
+        }
+        set({ passkeys: await api.listPasskeys() });
+      }),
+    regenerateRecoveryCodes: () =>
+      action("managing", async () => {
+        const codes = await api.regenerateRecoveryCodes();
+        const account = snap.account;
+        if (account.kind === "signedIn") {
+          set({ account: { ...account, recoveryCodesLeft: codes.length } });
+        }
+        set({ recoveryCodes: codes });
       }),
     dismissPasskeySuggestion() {
       set({ suggestPasskey: false });
