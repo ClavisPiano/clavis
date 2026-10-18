@@ -324,8 +324,8 @@ Work from the October 2026 review of security, reliability and usability. Each t
 | T8.5 | **Session expiry.** Sliding renewal when under half the lifetime remains (cookie-authenticated `/api/me` and sync); a visible "sign in to resume sync" prompt on Home when a 401 clears the signed-in hint | #204 | Done (#233) |
 | T8.6 | **Registration abuse cap.** A global hourly cap on `register/verify` kept in D1, and a log line when a rate limiter errors | #209 | Done (#234) |
 | T8.7 | **Recovery codes and passkeys.** Regenerate recovery codes; list, rename and remove passkeys (never the last credential unless codes exist); a low-codes warning | #212 | Done (#235) |
-| T8.8 | **Account deletion and export.** `DELETE /api/me` removes D1 rows, the Durable Object data and R2 objects; a server-side export; `docs/privacy.md` and a Settings link | #213 | In review |
-| T8.9 | **Review follow-ups.** Share the 1 MiB push cap between core and the web app; surface skipped oversized events in the UI; tests for the blob byte ceiling, the 403 mapping and a paged R2 list; reviewer follow-ups from M8 (stale clock skew, throwing Date callback, sign-out race on the expired mark, grand-staff-only hand labels, push renewal tests) | #201, #207 | In review |
+| T8.8 | **Account deletion and export.** `DELETE /api/me` removes D1 rows, the Durable Object data and R2 objects; a server-side export; `docs/privacy.md` and a Settings link | #213 | Done (#236) |
+| T8.9 | **Review follow-ups.** Share the 1 MiB push cap between core and the web app; surface skipped oversized events in the UI; tests for the blob byte ceiling, the 403 mapping and a paged R2 list; reviewer follow-ups from M8 (stale clock skew, throwing Date callback, sign-out race on the expired mark, grand-staff-only hand labels, push renewal tests) | #201, #207 | Done (#237) |
 | T8.10 | Byte-bounded sync pushes and skipping oversized events | #201 | Done (#218) |
 | T8.11 | Service worker navigation timeout | #203 | Done (#219) |
 | T8.12 | Worker hardening: `__Host-` cookie, Origin on cookie push, bounded body reads | #210 | Done (#220) |
