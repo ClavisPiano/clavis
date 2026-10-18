@@ -29,12 +29,19 @@ function setup(overrides: Partial<AuthApi> = {}, ceremonies: Partial<Ceremonies>
   };
   const onSignedIn = vi.fn();
   const onSignedOut = vi.fn();
-  const store = createAccountStore({ api, ceremonies: cer, onSignedIn, onSignedOut });
+  const onSessionExpired = vi.fn();
+  const store = createAccountStore({
+    api,
+    ceremonies: cer,
+    onSignedIn,
+    onSignedOut,
+    onSessionExpired,
+  });
   const phases: string[] = [];
   store.subscribe((s: AccountSnapshot) => {
     if (phases.at(-1) !== s.phase) phases.push(s.phase);
   });
-  return { api, cer, store, onSignedIn, onSignedOut, phases };
+  return { api, cer, store, onSignedIn, onSignedOut, onSessionExpired, phases };
 }
 
 const me = { userId: "u1", passkeys: 1, recoveryCodesLeft: 10 };
@@ -203,6 +210,7 @@ describe("account store", () => {
     expect(t.api.logout).toHaveBeenCalledOnce();
     expect(t.store.snapshot.account).toEqual({ kind: "anonymous" });
     expect(t.onSignedOut).toHaveBeenCalledOnce();
+    expect(t.onSessionExpired).not.toHaveBeenCalled();
   });
 
   it("signs out everywhere through the logoutAll call", async () => {
@@ -236,6 +244,7 @@ describe("account store", () => {
     await t.store.refresh();
     expect(t.store.snapshot.account).toEqual({ kind: "anonymous" });
     expect(t.onSignedOut).toHaveBeenCalledOnce();
+    expect(t.onSessionExpired).toHaveBeenCalledOnce();
   });
 
   it("a 401 during add passkey means the session expired", async () => {
@@ -247,6 +256,7 @@ describe("account store", () => {
     expect(await t.store.addPasskey()).toBe(false);
     expect(t.store.snapshot.account.kind).toBe("anonymous");
     expect(t.onSignedOut).toHaveBeenCalledOnce();
+    expect(t.onSessionExpired).toHaveBeenCalledOnce();
   });
 
   it("offline: keeps the last known state and sets offline, then recovers", async () => {

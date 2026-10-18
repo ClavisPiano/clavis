@@ -18,12 +18,15 @@
   import { pieceCard } from "../lib/piece-card";
   import { PLACEMENT_SKIPPED_META_KEY, shouldOfferPlacement } from "../lib/placement";
   import { benchmarkMonth, needsBenchmark } from "@clavis/core";
+  import { isSessionExpired } from "../lib/sync/hint";
 
   const learner = useLearner();
   let now = $state(Date.now());
 
   const HINT_DISMISSED_KEY = "clavis.install-hint-dismissed";
   let showHint = $state(false);
+  /** The signed-in session ended (401), so sync is paused until the person signs in again. */
+  let sessionExpired = $state(false);
   /** Undefined until the skip flag has been read, so the offer never flashes and vanishes. */
   let placementSkipped = $state<boolean | undefined>();
 
@@ -35,6 +38,7 @@
       // Storage unavailable: show the hint every time.
     }
     showHint = !dismissed && shouldShowIosInstallHint(readInstallEnv());
+    sessionExpired = isSessionExpired();
     void learner.init().then(async () => {
       now = Date.now();
       try {
@@ -123,6 +127,16 @@
 {/if}
 
 <h1>Clavis</h1>
+
+{#if sessionExpired}
+  <section class="card" data-testid="session-expired" aria-labelledby="expired-h">
+    <h2 id="expired-h">Sync is paused</h2>
+    <p>
+      Your sign-in has expired, so practice is no longer being backed up. It is still saved on this
+      device. <a href={resolve("/settings")}>Sign in to resume sync</a>.
+    </p>
+  </section>
+{/if}
 
 {#if firstRun}
   <section class="card" data-testid="welcome" aria-labelledby="welcome-h">

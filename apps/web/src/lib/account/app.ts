@@ -1,5 +1,5 @@
 import { getSyncController } from "../sync/app";
-import { isSignedInHint, setSignedInHint } from "../sync/hint";
+import { isSignedInHint, setSessionExpired, setSignedInHint } from "../sync/hint";
 import { createAuthApi } from "./api";
 import { createAccountStore, type AccountStore } from "./store";
 import { createCeremonies } from "./webauthn";
@@ -16,8 +16,12 @@ export function getAccountStore(): AccountStore {
       setSignedInHint(true);
       void getSyncController().notifySignedIn();
     },
+    onSessionExpired: () => {
+      setSessionExpired(true);
+    },
     onSignedOut: () => {
       setSignedInHint(false);
+      setSessionExpired(false);
       getSyncController().notifySignedOut();
     },
   });

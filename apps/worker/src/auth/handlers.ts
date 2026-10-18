@@ -9,12 +9,13 @@ import {
 import { z } from "zod";
 import { nowMs, type Env } from "../env";
 import { API_HEADERS, csrfFailure, json, methodNotAllowed, readLimited } from "../http";
-import { authenticate } from "./guard";
+import { authenticate, authenticateSession } from "./guard";
 import { createAuthRepo, type AuthRepo, type ChallengeKind } from "./repo";
 import {
   COOKIE_NAME,
   LEGACY_COOKIE_NAME,
   fromBase64Url,
+  type SessionClaims,
   signSession,
   toBase64Url,
 } from "./session";
@@ -63,6 +64,26 @@ async function withSession(
   const exp = Math.floor(nowMs(env) / 1000) + SESSION_TTL_SECONDS;
   const token = await signSession({ sub: userId, exp, ep: epoch }, env.SESSION_SECRET);
   return json(body, status, { "set-cookie": sessionCookie(token, SESSION_TTL_SECONDS) });
+}
+
+/**
+ * Sliding renewal: a fresh `Set-Cookie` value when a cookie-authenticated request arrives with
+ * under half the lifetime left, otherwise null. Bearer callers manage their own tokens. The new
+ * token keeps the epoch, so "sign out everywhere" still revokes it.
+ */
+export async function renewalCookie(
+  request: Request,
+  env: Env,
+  claims: SessionClaims,
+): Promise<string | null> {
+  if (request.headers.has("authorization")) return null;
+  const nowS = Math.floor(nowMs(env) / 1000);
+  if (claims.exp - nowS >= SESSION_TTL_SECONDS / 2) return null;
+  const token = await signSession(
+    { sub: claims.sub, exp: nowS + SESSION_TTL_SECONDS, ep: claims.ep ?? 0 },
+    env.SESSION_SECRET,
+  );
+  return sessionCookie(token, SESSION_TTL_SECONDS);
 }
 
 /** Parse the JSON body against a schema; null on any failure. Empty bodies count as `{}`. */
@@ -298,13 +319,19 @@ async function logoutAll(request: Request, env: Env, repo: AuthRepo): Promise<Re
 }
 
 async function me(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
-  const userId = await authenticate(request, env);
-  if (userId === null) return json({ error: "unauthorized" }, 401);
-  const [passkeys, recoveryCodesLeft] = await Promise.all([
+  const claims = await authenticateSession(request, env);
+  if (claims === null) return json({ error: "unauthorized" }, 401);
+  const userId = claims.sub;
+  const [passkeys, recoveryCodesLeft, renewed] = await Promise.all([
     repo.listCredentials(userId),
     repo.recoveryCodesLeft(userId),
+    renewalCookie(request, env, claims),
   ]);
-  return json({ userId, passkeys: passkeys.length, recoveryCodesLeft });
+  return json(
+    { userId, passkeys: passkeys.length, recoveryCodesLeft },
+    200,
+    renewed ? { "set-cookie": renewed } : undefined,
+  );
 }
 
 type PostHandler = (request: Request, env: Env, repo: AuthRepo) => Promise<Response>;
