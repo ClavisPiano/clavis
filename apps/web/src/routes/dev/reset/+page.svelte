@@ -3,6 +3,8 @@
   import { resolve } from "$app/paths";
   import { makeBackupFile, saveFile } from "../../../lib/backup-file";
   import { useLearner } from "../../../lib/learner.svelte";
+  import { isSignedInHint } from "../../../lib/sync/hint";
+  import { SYNCED_NOTICE } from "../../../lib/sync/notice";
   import { resetEverything, resetProgress } from "../../../lib/reset";
 
   type Kind = "progress" | "everything";
@@ -12,8 +14,10 @@
   let backupFirst = $state(true);
   let busy = $state(false);
   let status = $state("");
+  let signedIn = $state(false);
 
   onMount(async () => {
+    signedIn = isSignedInHint();
     await learner.init();
   });
 
@@ -50,6 +54,11 @@
 </script>
 
 <h1>Reset</h1>
+{#if signedIn}
+  <p role="note" class="notice" data-testid="synced-notice">
+    You are signed in. {SYNCED_NOTICE}
+  </p>
+{/if}
 <p>
   For testing. Neither reset can be undone except by importing a backup on the Learner state page.
 </p>
