@@ -72,6 +72,10 @@ const MILESTONES_V1: unknown[] = [
       "You can play root, fifth and octave patterns, straight and syncopated, with your left hand.",
   },
   {
+    nodeId: "hands.coord.basic",
+    statement: "You can play a simple tune with your right hand over block chords in your left.",
+  },
+  {
     nodeId: "ear.degrees.minor",
     statement: "You can hear the degrees of a minor scale in any key and play them.",
   },

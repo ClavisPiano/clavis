@@ -5,6 +5,7 @@ import { bassNoteRead } from "./bass-note-read.js";
 import { byEarPhrase } from "./by-ear-phrase.js";
 import { cellEcho } from "./cell.js";
 import { chordQuality } from "./chord-quality.js";
+import { coordTask } from "./coord-task.js";
 import { degreeId, degreeSing } from "./degree.js";
 import { lhPattern } from "./lh-pattern.js";
 import { lhPatternVariants } from "./lh-pattern-variants.js";
@@ -27,6 +28,7 @@ export const GENERATORS: Partial<Record<GeneratorId, Generator>> = {
   chordQuality,
   trebleNoteRead,
   lhPattern,
+  coordTask,
   lhPatternVariants,
   progressionId,
   byEarPhrase,

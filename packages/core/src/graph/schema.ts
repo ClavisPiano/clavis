@@ -40,6 +40,7 @@ export const GENERATOR_IDS = [
   "lhPatternVariants",
   "lhPatternMinor",
   "coordTask",
+  "coordTaskMoving",
   "byEarPhrase",
   "byEarHarmonise",
   "byEarRecording",

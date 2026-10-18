@@ -457,6 +457,11 @@
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
           {@render chordLabels(view.item.chords)}
         {/if}
+        {#if view.item.bothHands}
+          <p class="hint" data-testid="hands-hint">
+            Right hand: top staff. Left hand: bottom staff.
+          </p>
+        {/if}
         {#if view.item.keyNotes}
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
           {@render keyNotesLine(view.item.keyNotes)}
@@ -484,6 +489,11 @@
         {#if view.item.chords}
           <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
           {@render chordLabels(view.item.chords)}
+        {/if}
+        {#if view.item.bothHands}
+          <p class="hint" data-testid="hands-hint">
+            Right hand: top staff. Left hand: bottom staff.
+          </p>
         {/if}
         {#if showPad}
           <button

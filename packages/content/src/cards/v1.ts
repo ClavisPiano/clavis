@@ -530,6 +530,37 @@ export const CARDS_V1: unknown[] = [
     links: [],
   },
   {
+    id: "concept.hands.coord.basic",
+    nodeIds: ["hands.coord.basic"],
+    title: "Hands together",
+    body: [
+      "Now both hands play at once, on a grand staff: the top (treble) staff is your right hand and the bottom (bass) staff your left. A brace joins the two staves, and notes lined up one above the other are played together.",
+      "Your left hand holds one block chord through each bar, the root-position triads you already know. Your right hand plays a tune in steady quarter notes over it, in a five-finger position on the home note, so it never has to move. The tune lands on a note of the chord on beats 1 and 3, which is why it fits the harmony.",
+      "Start each bar with both hands together, then keep the left hand still while the right hand moves. If it falls apart, play slowly in your head first: the count-in sets the pace, and you only need one beat per second.",
+    ],
+    howTo: [
+      "This skill needs a MIDI keyboard. Choose it in Settings.",
+      "Four bars are written on the grand staff, with the chord of each bar named, and a count-in of four clicks comes before the first bar.",
+      "Strike each chord with your left hand on beat 1 and hold it for the whole bar, while your right hand plays the four quarter notes of the tune.",
+      "Every note of both hands must be right. Feedback names the bar and the hand, for example Bar 3: LH late.",
+    ],
+    examples: [
+      {
+        kind: "progression",
+        label: "The left hand: I IV V I as block chords",
+        romans: ["I", "IV", "V", "I"],
+        afterCadence: false,
+      },
+      {
+        kind: "staff",
+        label: "The right hand's five notes: C D E F G",
+        clef: "treble",
+        positions: ["C4", "D4", "E4", "F4", "G4"],
+      },
+    ],
+    links: [{ label: "The staff, clefs and ledger lines (musictheory.net)", url: `${MT}/10` }],
+  },
+  {
     id: "concept.byear.melody.simple",
     nodeIds: ["byear.melody.simple"],
     title: "Playing a heard melody",

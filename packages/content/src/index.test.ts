@@ -6,6 +6,7 @@ import {
   getGenerator,
   isNodeEnabled,
   validateGraph,
+  type GeneratorId,
 } from "@clavis/core";
 import { loadGraph, parseGraph } from "./index";
 
@@ -94,7 +95,7 @@ describe("v1 skill graph", () => {
   });
 
   it("lists every generator once and implements exactly the core registry", () => {
-    expect(graph.generators).toHaveLength(22);
+    expect(graph.generators).toHaveLength(23);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
     // `pieceLine` and `pieceEar` are built over the piece library, so the app injects them; the
     // core registry has the rest.
@@ -136,13 +137,14 @@ describe("v1 skill graph", () => {
       "apply.piece-ear",
     ]);
     // T5.3: lhPattern enables the root-position chord node. T5.7: lhPatternVariants enables
-    // inversions, broken and pop. The minor leading-tone node has its own unimplemented generator,
-    // and coordination waits for coordTask.
+    // inversions, broken and pop. The minor leading-tone node has its own unimplemented generator.
+    // T5.5: coordTask enables hands.coord.basic; hands.coord.moving moved to coordTaskMoving.
     expect(enabled.filter((id) => id.startsWith("hands."))).toEqual([
       "hands.lh.triads.root",
       "hands.lh.inversions",
       "hands.lh.broken",
       "hands.lh.pop",
+      "hands.coord.basic",
     ]);
     expect(enabled).not.toContain("hands.minor.leadingTone");
     // T7.2: the melody stage is the only by-ear task that exists. Harmonising and real recordings
@@ -184,6 +186,22 @@ describe("v1 skill graph", () => {
     for (const id of ["lhPattern", "lhPatternVariants"]) {
       expect(graph.generators.find((g) => g.id === id)?.requires).toContain("notation");
     }
+  });
+
+  it("serves hands together over block chords only, MIDI only and never Away (T5.5)", () => {
+    const users = (id: GeneratorId) =>
+      graph.nodes.filter((n) => n.itemGenerators.includes(id)).map((n) => n.id);
+    expect(users("coordTask")).toEqual(["hands.coord.basic"]);
+    expect(users("coordTaskMoving")).toEqual(["hands.coord.moving"]);
+    const coord = graph.generators.find((g) => g.id === "coordTask");
+    expect(coord?.implemented).toBe(true);
+    expect(coord?.awayEligible).toBe(false);
+    expect(coord?.requires).toEqual(expect.arrayContaining(["polyphonic", "notation"]));
+    expect(graph.generators.find((g) => g.id === "coordTaskMoving")?.implemented).toBe(false);
+    const basic = graph.nodes.find((n) => n.id === "hands.coord.basic");
+    if (basic === undefined) throw new Error("no hands.coord.basic");
+    // 3 families x 27 progressions x 3 melodies.
+    expect(getGenerator("coordTask").listItems(basic)).toHaveLength(243);
   });
 
   it("every enabled node's generators can enumerate and generate items", () => {

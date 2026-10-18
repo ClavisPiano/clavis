@@ -40,6 +40,7 @@ import { AUTO_ADVANCE_MS, buildFeedback, type FeedbackView } from "./feedback";
 import type { NotationMark, NotationPort } from "../notation/port";
 import {
   answerLine,
+  chordLabels,
   keyboardGuide,
   keyNotes,
   targetPitchClasses,
@@ -190,8 +191,13 @@ export interface ItemView {
   revealed?: true;
   /** Buttons to answer with, for choice items (R21). They replace the keyboard. */
   choices?: ChoiceOption[];
-  /** Chord lines (T5.3): each chord's numeral and symbol, shown as text beside the staff. */
+  /**
+   * Chord lines (T5.3) and hands-together items (T5.5): each chord's numeral and symbol, one per
+   * bar for the latter, shown as text beside the staff.
+   */
   chords?: { roman: string; symbol: string }[];
+  /** Two-hand items (T5.5): the staff says which hand plays what (treble right, bass left). */
+  bothHands?: true;
 }
 
 export interface NodeChange {
@@ -352,8 +358,8 @@ function isLeftHandLine(instance: ItemInstance): boolean {
 
 /**
  * Chord labels shown beside the staff: each chord of a chord line (T5.3), unless reading the chord
- * is the task (T5.10), or the chords a left-hand pattern line is built on, from its presentation
- * (T5.7).
+ * is the task (T5.10), or the chords a left-hand pattern line (T5.7) or a hands-together item
+ * (T5.5) is built on, from its presentation.
  */
 function chordLabelsOf(instance: ItemInstance): { chords?: { roman: string; symbol: string }[] } {
   const play = instance.expected.play;
@@ -367,7 +373,9 @@ function chordLabelsOf(instance: ItemInstance): { chords?: { roman: string; symb
   if (isLeftHandLine(instance) && strings(prog) && strings(symbols)) {
     return { chords: prog.map((roman, i) => ({ roman, symbol: symbols[i] ?? "" })) };
   }
-  return {};
+  // Hands together (T5.5): one chord per bar, from the presentation.
+  const chords = play?.kind === "performance" ? chordLabels(instance) : undefined;
+  return chords ? { chords } : {};
 }
 
 export function promptFor(expected: ExpectedResponse, mode: SessionMode, display = false): string {
@@ -1170,6 +1178,9 @@ export class SessionMachine {
     const early = isEarly(stage);
     const notes = early ? keyNotes(cur.instance, node) : undefined;
     const guide = early ? keyboardGuide(cur.instance) : undefined;
+    const play = cur.instance.expected.play;
+    const bothHands =
+      play?.kind === "performance" && new Set(play.notes.map((n) => n.hand)).size > 1;
     return {
       position: cur.index + 1,
       // Placement stops early, so it has no fixed total.
@@ -1188,6 +1199,7 @@ export class SessionMachine {
         ? { choices: cur.instance.expected.play.options }
         : {}),
       ...chordLabelsOf(cur.instance),
+      ...(bothHands ? { bothHands: true as const } : {}),
     };
   }
 

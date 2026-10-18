@@ -107,6 +107,7 @@ describe("registry and universes", () => {
         "degreeId",
         "degreeSing",
         "lhPattern",
+        "coordTask",
         "lhPatternVariants",
         "progressionId",
         "rhythmEcho",
