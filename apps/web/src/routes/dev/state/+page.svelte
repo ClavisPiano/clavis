@@ -10,6 +10,8 @@
     type ValidatedImport,
   } from "../../../lib/backup";
   import { useLearner } from "../../../lib/learner.svelte";
+  import { isSignedInHint } from "../../../lib/sync/hint";
+  import { SYNCED_NOTICE } from "../../../lib/sync/notice";
   import { ReactiveSyncStatus } from "../../../lib/sync/status.svelte";
   import { dueRows, durationRows, nodeRows, recentDays } from "../../../lib/state-view";
 
@@ -17,6 +19,7 @@
   const sync = new ReactiveSyncStatus();
   let now = $state(Date.now());
   let exportStatus = $state("");
+  let signedIn = $state(false);
   let canShareFiles = $state(false);
   let importStatus = $state("");
   let importErrors = $state<ImportError[]>([]);
@@ -27,6 +30,7 @@
 
   onMount(async () => {
     sync.init();
+    signedIn = isSignedInHint();
     await learner.init();
     now = Date.now();
     canShareFiles =
@@ -165,6 +169,9 @@
       </label>
     </p>
     {#if pending}
+      {#if signedIn}
+        <p role="note" data-testid="synced-notice">You are signed in. {SYNCED_NOTICE}</p>
+      {/if}
       <fieldset>
         <legend>Import mode for {pendingName}</legend>
         <label
