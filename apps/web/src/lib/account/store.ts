@@ -64,6 +64,8 @@ export interface AccountStore {
   addPasskey(): Promise<boolean>;
   dismissPasskeySuggestion(): void;
   signOut(): Promise<boolean>;
+  /** Sign out on every device, for example after losing one. */
+  signOutEverywhere(): Promise<boolean>;
   clearError(): void;
 }
 
@@ -141,6 +143,16 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
   }
 
   /** Runs one action in `phase`, ignoring the call if another action is in flight. */
+  function signedOutState(): void {
+    set({
+      account: { kind: "anonymous" },
+      recoveryCodes: undefined,
+      suggestPasskey: false,
+      offline: false,
+    });
+    deps.onSignedOut();
+  }
+
   async function action(phase: AccountPhase, body: () => Promise<void>): Promise<boolean> {
     if (snap.phase !== "idle") return false;
     set({ phase, error: undefined });
@@ -240,13 +252,12 @@ export function createAccountStore(deps: AccountStoreDeps): AccountStore {
     signOut: () =>
       action("signingOut", async () => {
         await api.logout();
-        set({
-          account: { kind: "anonymous" },
-          recoveryCodes: undefined,
-          suggestPasskey: false,
-          offline: false,
-        });
-        deps.onSignedOut();
+        signedOutState();
+      }),
+    signOutEverywhere: () =>
+      action("signingOut", async () => {
+        await api.logoutAll();
+        signedOutState();
       }),
     clearError() {
       set({ error: undefined });

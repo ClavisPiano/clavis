@@ -337,6 +337,28 @@ describe("session, me and logout", () => {
     expect((await get(env, "/api/me", cookie)).status).toBe(401);
   });
 
+  it("sign out everywhere ends all sessions, including a later passkey login's older ones", async () => {
+    const { env, device } = setup();
+    const reg = await register(env, device);
+    const first = cookieOf(reg.res);
+    const second = cookieOf(await login(env, device, 5));
+    expect((await get(env, "/api/me", first)).status).toBe(200);
+    expect((await get(env, "/api/me", second)).status).toBe(200);
+    const res = await post(env, "/api/auth/logout/all", {}, { cookie: first });
+    expect(res.status).toBe(200);
+    expect((await get(env, "/api/me", first)).status).toBe(401);
+    expect((await get(env, "/api/me", second)).status).toBe(401);
+    // A fresh passkey login after that works.
+    const again = await login(env, device, 6);
+    expect(again.status).toBe(200);
+    expect((await get(env, "/api/me", cookieOf(again))).status).toBe(200);
+  });
+
+  it("sign out everywhere needs a session", async () => {
+    const { env } = setup();
+    expect((await post(env, "/api/auth/logout/all", {})).status).toBe(401);
+  });
+
   it("logout clears the cookie", async () => {
     const { env, device } = setup();
     const reg = await register(env, device);
@@ -374,6 +396,17 @@ describe("recovery codes", () => {
     expect(again.headers.get("set-cookie")).toBeNull();
     const me = await (await get(env, "/api/me", cookie)).json<{ recoveryCodesLeft: number }>();
     expect(me.recoveryCodesLeft).toBe(9);
+  });
+
+  it("ends every other session, so a stolen cookie stops working", async () => {
+    const { env, device } = setup();
+    const reg = await register(env, device);
+    const oldCookie = cookieOf(reg.res);
+    const { recoveryCodes } = await reg.res.json<{ recoveryCodes: string[] }>();
+    expect((await get(env, "/api/me", oldCookie)).status).toBe(200);
+    const ok = await post(env, "/api/auth/recovery", { code: recoveryCodes[0] ?? "" });
+    expect((await get(env, "/api/me", oldCookie)).status).toBe(401);
+    expect((await get(env, "/api/me", cookieOf(ok))).status).toBe(200);
   });
 
   it("rejects unknown codes", async () => {
