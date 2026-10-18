@@ -8,6 +8,7 @@ import { degreeId, degreeSing } from "./degree.js";
 import { lhPattern } from "./lh-pattern.js";
 import { progressionId } from "./progression-id.js";
 import { rhythmRead } from "./rhythm-read.js";
+import { sightLine } from "./sight-line.js";
 import { trebleNoteRead } from "./treble-note-read.js";
 import { rhythmEcho } from "./rhythm.js";
 import type { Generator } from "./types.js";
@@ -24,6 +25,7 @@ export const GENERATORS: Partial<Record<GeneratorId, Generator>> = {
   chordQuality,
   trebleNoteRead,
   lhPattern,
+  sightLine,
   progressionId,
   byEarPhrase,
 };
