@@ -214,11 +214,9 @@ describe("scoreAttempt with a chordLine target", () => {
       notes,
       stimulusEndMs: 0,
       source: "midi",
-      part: "play",
     });
     expect(r.outcome.correct).toBe(true);
     expect(r.subScores.play).toBeGreaterThan(0.95);
-    expect(r.subScores.sing).toBeUndefined();
 
     const wrong = scoreAttempt({
       expected: {
@@ -230,7 +228,7 @@ describe("scoreAttempt with a chordLine target", () => {
       source: "midi",
     });
     expect(wrong.outcome.correct).toBe(false);
-    expect(wrong.errors[0]).toMatchObject({ code: "chord.wrong-tone", detail: { part: "play" } });
+    expect(wrong.errors[0]?.code).toBe("chord.wrong-tone");
   });
 });
 

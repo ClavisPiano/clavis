@@ -184,10 +184,25 @@ describe("v1 skill graph", () => {
         if (item === undefined) throw new Error(`no items for ${node.id}`);
         const inst = gen.generate(node, item, {
           rng: createRng(1),
-          voiceRange: { low: 48, high: 72 },
           mode: "instrument",
         });
         expect(inst.nodeId).toBe(node.id);
+      }
+    }
+  });
+
+  it("no item of any enabled generator has a sing target, and every item has a play target (R29)", () => {
+    for (const node of graph.nodes) {
+      for (const g of node.itemGenerators) {
+        const gen = GENERATORS[g];
+        if (gen === undefined) continue;
+        for (const params of gen.listItems(node)) {
+          for (const mode of ["instrument", "away"] as const) {
+            const inst = gen.generate(node, params, { rng: createRng(3), mode });
+            expect(inst.expected.sing, `${node.id} ${g}`).toBeUndefined();
+            expect(inst.expected.play, `${node.id} ${g}`).toBeDefined();
+          }
+        }
       }
     }
   });

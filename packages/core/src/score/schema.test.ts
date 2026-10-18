@@ -27,7 +27,7 @@ describe("ScoreSpecSchema", () => {
   const rejections: [string, unknown][] = [
     ["duration value 3", variant([{ ...first, duration: { value: 3, dots: 0 } }, second])],
     ["dots 2", variant([{ ...first, duration: { value: 4, dots: 2 } }, second])],
-    ["two staves", variant([first, second], {}, 1)],
+    ["two bass staves", variant([first, second], {}, 1)],
     ["duplicate note ids", variant([first, { ...second, id: "n1" }])],
     ["percussion with 5 lines", variant([first, second], { clef: "percussion" })],
     ["bass with 1 line", variant([first, second], { lines: 1 })],
@@ -37,6 +37,74 @@ describe("ScoreSpecSchema", () => {
   ];
   it.each(rejections)("rejects %s", (_name, input) => {
     expect(ScoreSpecSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe("ScoreSpecSchema grand staff (R27)", () => {
+  const grand = SCORE_FIXTURES.grandStaff;
+  const [treble, bass] = grand.staves;
+  if (treble === undefined || bass === undefined) throw new Error("fixture needs two staves");
+  const parse = (staves: unknown[]) => ScoreSpecSchema.safeParse({ ...grand, staves });
+  const messages = (staves: unknown[]): string[] => {
+    const r = parse(staves);
+    return r.success ? [] : r.error.issues.map((i) => i.message);
+  };
+
+  it("accepts treble over bass", () => {
+    expect(parse([treble, bass]).success).toBe(true);
+  });
+
+  it("still accepts one staff of either clef", () => {
+    expect(parse([treble]).success).toBe(true);
+    expect(parse([bass]).success).toBe(true);
+  });
+
+  it("rejects no staff and three staves", () => {
+    expect(parse([]).success).toBe(false);
+    const third = { clef: "bass", lines: 5, measures: [[], []] };
+    expect(parse([treble, bass, third]).success).toBe(false);
+  });
+
+  it("rejects bass over treble and two treble staves", () => {
+    expect(messages([bass, treble])).toContain(
+      "a grand staff is a treble staff above a bass staff",
+    );
+    const trebleOnly = { ...bass, clef: "treble" };
+    expect(messages([treble, trebleOnly])).toContain(
+      "a grand staff is a treble staff above a bass staff",
+    );
+  });
+
+  it("rejects staves with different numbers of measures", () => {
+    const short = { ...bass, measures: bass.measures.slice(0, 1) };
+    expect(messages([treble, short])).toContain(
+      "both staves of a grand staff need the same number of measures",
+    );
+  });
+
+  it("rejects a measure that is longer on one staff", () => {
+    const [m1, m2] = bass.measures;
+    const longer = {
+      ...bass,
+      measures: [m1, [...(m2 ?? []), { kind: "rest", duration: { value: 4, dots: 0 } }]],
+    };
+    expect(messages([treble, longer])).toContain("measure 2 has a different length on each staff");
+  });
+
+  it("needs note ids unique across the staves", () => {
+    const [m1, m2] = bass.measures;
+    const clash = {
+      ...bass,
+      measures: [
+        m1,
+        (m2 ?? []).map((e) => (e.kind === "note" && e.id === "n7" ? { ...e, id: "n1" } : e)),
+      ],
+    };
+    expect(messages([treble, clash])).toContain("note ids must be unique across the score");
+  });
+
+  it("lists ids staff by staff", () => {
+    expect(scoreNoteIds(grand)).toEqual(["n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8"]);
   });
 });
 

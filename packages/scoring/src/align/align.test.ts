@@ -255,6 +255,40 @@ describe("tolerances by source", () => {
   });
 });
 
+describe("strayWindowBeats", () => {
+  // Two hands on every beat; the left hand comes in 40% of a beat early on beat 2.
+  const hands: ExpectedNote[] = [0, 1, 2, 3, 4].flatMap((b) => [
+    { id: `r${String(b)}`, midi: 72 + b, onsetBeats: b, durationBeats: 1 },
+    { id: `l${String(b)}`, midi: 48 + b, onsetBeats: b, durationBeats: 1 },
+  ]);
+  const performed: PerformedNote[] = hands.map((n) => ({
+    midi: n.midi,
+    onsetMs: 1000 + n.onsetBeats * BEAT_MS - (n.id === "l2" ? 0.4 * BEAT_MS : 0),
+  }));
+  const run = (strayWindowBeats?: number) =>
+    alignPerformance({
+      expected: hands,
+      tempoBpm: BPM,
+      performed,
+      options: { source: "midi", ...(strayWindowBeats === undefined ? {} : { strayWindowBeats }) },
+    });
+
+  it("is off by default: the split onset leaves a missed note and an extra", () => {
+    const r = run();
+    expect(r.notes.filter((n) => n.cls === "missed")).toHaveLength(1);
+    expect(r.extras).toHaveLength(1);
+  });
+
+  it("pairs the stray note of the right pitch as early", () => {
+    const r = run(0.5);
+    expect(r.extras).toEqual([]);
+    expect(r.notes.find((n) => n.id === "l2")?.cls).toBe("early");
+    expect(r.notes.filter((n) => n.id !== "l2").every((n) => n.cls === "correct")).toBe(true);
+    expect(r.summary.completeness).toBe(1);
+    expect(r.summary.overall).toBeGreaterThan(run().summary.overall);
+  });
+});
+
 describe("expectedFromScore", () => {
   const spelled = (step: "C" | "D" | "E" | "G", octave = 4) => ({ step, alter: 0, octave });
   const score: ScoreSpec = {
@@ -303,11 +337,11 @@ describe("expectedFromScore", () => {
 
   it("handles a dotted note, a tie, a rest and a chord", () => {
     expect(expectedFromScore(score)).toEqual([
-      { id: "n1", midi: 60, onsetBeats: 0, durationBeats: 1.5 },
-      { id: "n2", midi: 62, onsetBeats: 1.5, durationBeats: 0.5 },
-      { id: "n3", midi: 64, onsetBeats: 2, durationBeats: 3 },
-      { id: "n5.0", midi: 60, onsetBeats: 6, durationBeats: 1 },
-      { id: "n5.1", midi: 67, onsetBeats: 6, durationBeats: 1 },
+      { id: "n1", midi: 60, onsetBeats: 0, durationBeats: 1.5, hand: "rh" },
+      { id: "n2", midi: 62, onsetBeats: 1.5, durationBeats: 0.5, hand: "rh" },
+      { id: "n3", midi: 64, onsetBeats: 2, durationBeats: 3, hand: "rh" },
+      { id: "n5.0", midi: 60, onsetBeats: 6, durationBeats: 1, hand: "rh" },
+      { id: "n5.1", midi: 67, onsetBeats: 6, durationBeats: 1, hand: "rh" },
     ]);
   });
 

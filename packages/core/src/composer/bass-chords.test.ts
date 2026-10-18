@@ -115,7 +115,6 @@ describe("bass chord reading in the composer (MIDI only)", () => {
       // The planned item generates a one-chord, tones-only line in the planned key.
       const inst = GENERATORS.bassChordRead?.generate(chordsNode, item.params, {
         rng: createRng(1),
-        voiceRange: { low: 48, high: 72 },
         mode: "instrument",
         ...(item.key === undefined ? {} : { preferredKey: item.key }),
       });

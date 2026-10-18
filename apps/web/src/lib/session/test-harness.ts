@@ -14,7 +14,6 @@ import {
   type LearningEvent,
   type Milestone,
   type NoteEvent,
-  type PitchFrame,
   type ScoreSpec,
   type SkillGraph,
   type StimulusSpec,
@@ -125,7 +124,6 @@ export interface Harness {
   clock: TestClock;
   player: FakePlayer;
   input: FakeInputAdapter;
-  singInput: FakeInputAdapter;
   store: MemoryEventStore;
   service: LearnerStateService;
   graph: SkillGraph;
@@ -155,7 +153,6 @@ export interface HarnessOptions {
   openSessions?: () => Promise<string[]>;
   /** Events to fold before the session starts (earlier history). */
   history?: LearningEvent[];
-  withSingInput?: boolean;
   seed?: number;
   saveHeadphones?: (v: boolean) => Promise<void>;
   /** Placement mode (T3.16): present the placement plan instead of a composed session. */
@@ -190,7 +187,6 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     source: opts.inputSource ?? (mode === "away" ? "tap" : "mic"),
     clock,
   });
-  const singInput = new FakeInputAdapter({ source: "mic", clock });
   let counter = opts.idSalt ?? 0;
   const newId = createUlidGenerator({
     now: () => T0 + clock.ctxMs,
@@ -224,7 +220,6 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     },
     player,
     input,
-    ...(opts.withSingInput ? { createSingInput: () => singInput } : {}),
     score: scoreAttempt,
     append: async (events) => {
       await service.append(events);
@@ -255,7 +250,6 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     clock,
     player,
     input,
-    singInput,
     store,
     service,
     graph,
@@ -276,31 +270,6 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
 
 export function noteAt(pitch: number, onsetMs: number, source: NoteEvent["source"]): NoteEvent {
   return { pitch, onsetMs, confidence: 1, source };
-}
-
-/** Frames of a steady sung pitch (hz from MIDI), every 20 ms for `ms`. */
-export function sungFrames(midi: number, startMs: number, ms = 300): PitchFrame[] {
-  const hz = 440 * 2 ** ((midi - 69) / 12);
-  const out: PitchFrame[] = [];
-  for (let t = 0; t <= ms; t += 20) out.push({ hz, confidence: 1, atMs: startMs + t });
-  return out;
-}
-
-/** Emit a correct answer for `expected`'s sung part through `adapter`. Returns the end time. */
-export function singCorrect(
-  adapter: FakeInputAdapter,
-  expected: ExpectedResponse,
-  startMs: number,
-): number {
-  const sing = expected.sing;
-  if (!sing) return startMs;
-  const midis = sing.kind === "sungPitch" ? [sing.targetMidi] : sing.midi;
-  let t = startMs;
-  for (const m of midis) {
-    for (const f of sungFrames(m, t)) adapter.emitFrame(f);
-    t += 400;
-  }
-  return t;
 }
 
 /** Emit a correct answer for `expected`'s played part. Returns the time of the last onset. */
@@ -337,6 +306,15 @@ export function playCorrect(
       for (const c of play.chords) {
         last = startMs + c.onsetBeats * beatMs;
         for (const m of c.midi) adapter.emitNote(noteAt(m, last, source));
+      }
+      break;
+    }
+    case "performance": {
+      const beatMs = 60000 / play.tempoBpm;
+      for (const n of play.notes) {
+        const at = startMs + n.onsetBeats * beatMs;
+        last = Math.max(last, at);
+        adapter.emitNote(noteAt(n.midi, at, source));
       }
       break;
     }

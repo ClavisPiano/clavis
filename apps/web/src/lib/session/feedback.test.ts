@@ -9,12 +9,7 @@ describe("describeError", () => {
       { code: "degree.confusion.b3-3", detail: { part: "play" } },
       "You played 3; the target was b3",
     ],
-    [{ code: "degree.confusion.1-5", detail: { part: "sing" } }, "You sang 5; the target was 1"],
     [{ code: "degree.confusion." }, "That was a different note from the target"],
-    [
-      { code: "degree.confusion.", detail: { part: "sing" } },
-      "You sang a different note from the target",
-    ],
     [
       {
         code: "choice.wrong",
@@ -41,9 +36,6 @@ describe("describeError", () => {
     [{ code: "pitch.octave" }, "Right note, wrong octave"],
     [{ code: "response.timeout" }, "No answer was heard in time"],
     [{ code: "response.skipped" }, "Skipped"],
-    [{ code: "sing.flat", detail: { cents: -30 } }, "A little flat"],
-    [{ code: "sing.sharp" }, "A little sharp"],
-    [{ code: "sing.none" }, "No steady sung note was heard"],
     [{ code: "rhythm.late", detail: { index: 2 } }, "Note 3 was late"],
     [{ code: "rhythm.early", detail: { index: 0 } }, "Note 1 was early"],
     [{ code: "rhythm.missed", detail: { index: 4 } }, "Note 5 was missed"],
@@ -60,18 +52,24 @@ describe("describeError", () => {
       },
       "Note 1: you played 4; the target was 5",
     ],
-    [
-      {
-        code: "sequence.wrong-note",
-        detail: { index: 2, expectedDegree: "3", playedDegree: "2", part: "sing" },
-      },
-      "Note 3: you sang 2; the target was 3",
-    ],
     [{ code: "sequence.wrong-note", detail: { index: 1 } }, "Note 2 was not the target"],
     [{ code: "something.new" }, "Something was off"],
   ];
   it.each(table)("%j", (error, text) => {
     expect(describeError(error)).toBe(text);
+  });
+});
+
+describe("no sung wording (R29)", () => {
+  it.each([
+    { code: "degree.confusion.1-5", detail: { part: "sing" } },
+    { code: "degree.confusion.", detail: { part: "sing" } },
+    { code: "sequence.wrong-note", detail: { index: 2, expected: 43, played: 40, part: "sing" } },
+    { code: "pitch.wrong", detail: { expected: 43, played: 40, part: "sing" } },
+  ])("%j never says sang or sung", (error) => {
+    const names = (m: number): string => `n${String(m)}`;
+    expect(describeError(error)).not.toMatch(/sang|sung|sing/i);
+    expect(describeError(error, names)).not.toMatch(/sang|sung|sing/i);
   });
 });
 
@@ -164,7 +162,7 @@ describe("concept tips in feedback", () => {
     ["fluent, wrong, detail shown", "fluent", 2, false, tip],
     ["fluent, wrong, odd attempt", "fluent", 1, false, tip],
     ["mastered, wrong", "mastered", 5, false, undefined],
-    ["learning, right overall with a wrong sung part", "learning", 0, true, tip],
+    ["learning, right overall with an issue noted", "learning", 0, true, tip],
   ] as const)("%s", (_name, nodeState, attemptIndex, correct, expected) => {
     const fb = buildFeedback({ nodeState, attemptIndex, correct, errors: confusion });
     expect(fb.tip).toBe(expected);
@@ -202,11 +200,6 @@ describe("describeError on reading items (named notes)", () => {
     [
       { code: "sequence.wrong-note", detail: { index: 1, expected: 43, played: 40 } },
       "Note 2: you played E2; the target was G2",
-    ],
-    // A sung note (play it by ear) is named as sung.
-    [
-      { code: "sequence.wrong-note", detail: { index: 2, expected: 43, played: 40, part: "sing" } },
-      "Note 3: you sang E2; the target was G2",
     ],
     // Without numeric notes, or for other codes, the ear wording stands.
     [{ code: "pitch.wrong" }, "That was not the target note"],
@@ -269,5 +262,42 @@ describe("chord line errors", () => {
     expect(describeError({ code: "chord.missing-tone", detail: chord })).toBe(
       "A note of the IV chord was missing",
     );
+  });
+});
+
+describe("performance errors (R27)", () => {
+  const NAMES = new Map([
+    [48, "C3"],
+    [50, "D3"],
+    [72, "C5"],
+  ]);
+  const names = (midi: number): string => NAMES.get(midi) ?? `n${String(midi)}`;
+  const at = (measure: number, hand: string) => ({ id: "n7", measure, beat: 1, hand });
+  const table: [AttemptError, string][] = [
+    [
+      { code: "note.wrong", detail: { ...at(2, "lh"), expected: 50, played: 48, part: "play" } },
+      "Bar 2: LH played C3 instead of D3",
+    ],
+    [{ code: "note.missed", detail: { ...at(3, "rh"), expected: 72 } }, "Bar 3: RH missed C5"],
+    [
+      { code: "note.extra", detail: { measure: 1, beat: 2, hand: "rh", played: 72 } },
+      "Bar 1: RH extra note",
+    ],
+    [{ code: "note.early", detail: { ...at(4, "rh"), ms: 300 } }, "Bar 4: RH early"],
+    [{ code: "note.late", detail: { ...at(3, "lh"), ms: 300 } }, "Bar 3: LH late"],
+  ];
+
+  it.each(table)("%j", (error, line) => {
+    expect(describeError(error, names)).toBe(line);
+  });
+
+  it("falls back to the bar and hand alone when notes cannot be named", () => {
+    expect(
+      describeError({ code: "note.wrong", detail: { ...at(2, "lh"), expected: 50, played: 48 } }),
+    ).toBe("Bar 2: LH wrong note");
+    expect(describeError({ code: "note.missed", detail: at(2, "rh") })).toBe(
+      "Bar 2: RH missed a note",
+    );
+    expect(describeError({ code: "note.late" })).toBe("A note late");
   });
 });

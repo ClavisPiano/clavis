@@ -1,0 +1,14 @@
+{
+  "id": "01JBX00000000000000000A012",
+  "deviceId": "dev-laptop",
+  "at": 1760000009000,
+  "type": "benchmark.recorded",
+  "v": 1,
+  "benchmarkId": "01JBX00000000000000000BM01",
+  "pieceId": "piece.ode-to-joy",
+  "month": "2025-10",
+  "blobKey": "benchmark-01JBX00000000000000000BM01.webm",
+  "contentType": "audio/webm",
+  "durationMs": 42500,
+  "sizeBytes": 183406
+}

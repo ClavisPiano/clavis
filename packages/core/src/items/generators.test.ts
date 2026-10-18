@@ -70,11 +70,9 @@ const nodeFor = (id: string): SkillNode => {
   return n;
 };
 
-const VOICE: VoiceRange = { low: 48, high: 72 };
 const KEYBOARD: VoiceRange = { low: 48, high: 84 };
 const ctx = (seed: number, extra: Partial<GenerateContext> = {}): GenerateContext => ({
   rng: createRng(seed),
-  voiceRange: VOICE,
   mode: "instrument",
   ...extra,
 });
