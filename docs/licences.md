@@ -1,3 +1,22 @@
+# Licences
+
+## Clavis
+
+- Code: PolyForm Noncommercial License 1.0.0 (`LICENSE`, SPDX `PolyForm-Noncommercial-1.0.0`). The
+  copyright holder keeps the right to use and sell the software commercially, which the licence
+  does not restrict because the holder is the licensor.
+- Learning content: CC BY-NC 4.0 (`LICENSE-CONTENT`, SPDX `CC-BY-NC-4.0`). The files it covers are
+  listed at the top of that file. `packages/content/package.json` declares both.
+- Contributions: assigned or licensed to the holder under `CLA.md`, so the holder can relicense.
+  Enforcement options are in `docs/cla-setup.md`.
+- Dependency audit (October 2026, `pnpm licenses list`): every production dependency is MIT,
+  BSD-3-Clause, Apache-2.0 or 0BSD, except Verovio (LGPL-3.0-or-later, see below). Dev-only tools
+  include `lightningcss` (MPL-2.0) and `sharp-libvips` (LGPL-3.0); neither is shipped. There are no
+  GPL or AGPL packages. Re-run the audit when adding a dependency, and keep new ones out of GPL and
+  AGPL.
+- Keep the copyright notices of the MIT, BSD and Apache packages in the shipped app's About or
+  licences screen, along with the Verovio notice below.
+
 # Third-party licences
 
 ## Piano samples
