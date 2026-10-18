@@ -1,6 +1,7 @@
 import type { NodeState, SkillGraph } from "../graph/schema.js";
 import { isNodeEnabled } from "../graph/validate.js";
 import type { LearnerState } from "../state/types.js";
+import { handsFitErrors } from "./hands.js";
 import type { Piece } from "./schema.js";
 
 /**
@@ -22,22 +23,38 @@ export interface PieceStatus {
   unlocked: boolean;
   /** Required nodes still below `PIECE_UNLOCK_STATE`, in the piece's order. What unlocks the piece. */
   missingNodeIds: string[];
+  /**
+   * Pieces still to be played through first: for a hands-together piece (T5.6), its one-hand
+   * piece until that has a `completedAt`. Empty for every other piece.
+   */
+  missingPieceIds: string[];
 }
 
 /**
  * Every piece with whether the learner can play it yet. Pure: keeps the library's order (easiest
- * first) and reads only node states, so a refolded learner state gives the same list.
+ * first) and reads only node states and which pieces were played through, so a refolded learner
+ * state gives the same list. A hands-together piece also waits for its one-hand piece (`handsOf`)
+ * to be played through.
  */
 export function listPieces(
   pieces: readonly Piece[],
-  learner: Pick<LearnerState, "nodes">,
+  learner: Pick<LearnerState, "nodes" | "pieces">,
 ): PieceStatus[] {
   const need = STATE_RANK[PIECE_UNLOCK_STATE];
   return pieces.map((piece) => {
     const missingNodeIds = piece.requiredNodeIds.filter(
       (id) => STATE_RANK[learner.nodes[id]?.state ?? "locked"] < need,
     );
-    return { piece, unlocked: missingNodeIds.length === 0, missingNodeIds };
+    const missingPieceIds =
+      piece.handsOf !== undefined && learner.pieces[piece.handsOf]?.completedAt === undefined
+        ? [piece.handsOf]
+        : [];
+    return {
+      piece,
+      unlocked: missingNodeIds.length === 0 && missingPieceIds.length === 0,
+      missingNodeIds,
+      missingPieceIds,
+    };
   });
 }
 
@@ -75,6 +92,23 @@ export function validatePieces(
       }
     }
   }
+  pieces.forEach((piece, index) => {
+    if (piece.handsOf === undefined) return;
+    // A hands-together piece (T5.6) is the melody of an earlier one-hand piece, phrase for phrase,
+    // with chords that fit it.
+    const base = pieces.slice(0, index).find((p) => p.id === piece.handsOf);
+    if (base === undefined || base.handsOf !== undefined) {
+      errors.push(`${piece.id}: handsOf ${piece.handsOf} is not an earlier one-hand piece`);
+    } else {
+      if (JSON.stringify(base.score.staves[0]) !== JSON.stringify(piece.score.staves[0])) {
+        errors.push(`${piece.id}: the treble staff is not the melody of ${base.id}`);
+      }
+      if (JSON.stringify(base.phrases) !== JSON.stringify(piece.phrases)) {
+        errors.push(`${piece.id}: the phrases are not those of ${base.id}`);
+      }
+    }
+    errors.push(...handsFitErrors(piece));
+  });
   for (let i = 1; i < pieces.length; i++) {
     const prev = pieces[i - 1];
     const cur = pieces[i];

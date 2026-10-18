@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GENERATORS,
+  createPieceHands,
   createRng,
   describeGraphError,
   getGenerator,
@@ -8,7 +9,7 @@ import {
   validateGraph,
   type GeneratorId,
 } from "@clavis/core";
-import { loadGraph, parseGraph } from "./index";
+import { loadGraph, loadPieces, parseGraph } from "./index";
 
 const SPEC_IDS = [
   // EAR
@@ -52,6 +53,8 @@ const SPEC_IDS = [
   // APPLY (MP)
   "apply.pieces",
   "apply.piece-ear",
+  // APPLY (T5.6)
+  "apply.pieces-hands",
 ];
 
 describe("v1 skill graph", () => {
@@ -63,15 +66,15 @@ describe("v1 skill graph", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("has 36 nodes with exactly the spec ids, the treble nodes and the pieces node", () => {
-    expect(graph.nodes).toHaveLength(36);
+  it("has 37 nodes with exactly the spec ids, the treble nodes and the pieces nodes", () => {
+    expect(graph.nodes).toHaveLength(37);
     expect(graph.nodes.map((n) => n.id).sort()).toEqual([...SPEC_IDS].sort());
   });
 
   it("has the expected strand counts", () => {
     const count = (s: string) => graph.nodes.filter((n) => n.strand === s).length;
     expect([count("EAR"), count("READ"), count("HANDS"), count("BYEAR"), count("APPLY")]).toEqual([
-      12, 12, 7, 3, 2,
+      12, 12, 7, 3, 3,
     ]);
   });
 
@@ -95,11 +98,11 @@ describe("v1 skill graph", () => {
   });
 
   it("lists every generator once and implements exactly the core registry", () => {
-    expect(graph.generators).toHaveLength(23);
+    expect(graph.generators).toHaveLength(24);
     const implemented = graph.generators.filter((g) => g.implemented).map((g) => g.id);
-    // `pieceLine` and `pieceEar` are built over the piece library, so the app injects them; the
-    // core registry has the rest.
-    const injected = ["pieceLine", "pieceEar"];
+    // `pieceLine`, `pieceEar` and `pieceHands` are built over the piece library, so the app
+    // injects them; the core registry has the rest.
+    const injected = ["pieceLine", "pieceEar", "pieceHands"];
     expect(implemented.sort()).toEqual([...Object.keys(GENERATORS), ...injected].sort());
     for (const id of implemented.filter((i) => !injected.includes(i))) {
       expect(getGenerator(id)).toBeDefined();
@@ -131,10 +134,11 @@ describe("v1 skill graph", () => {
       "read.treble.skips",
       "read.treble.steps",
     ]);
-    // MP: pieces, read and by ear, are the APPLY nodes.
+    // MP: pieces, read and by ear, are the APPLY nodes. T5.6: and pieces for both hands.
     expect(enabled.filter((id) => id.startsWith("apply."))).toEqual([
       "apply.pieces",
       "apply.piece-ear",
+      "apply.pieces-hands",
     ]);
     // T5.3: lhPattern enables the root-position chord node. T5.7: lhPatternVariants enables
     // inversions, broken and pop. The minor leading-tone node has its own unimplemented generator.
@@ -202,6 +206,28 @@ describe("v1 skill graph", () => {
     if (basic === undefined) throw new Error("no hands.coord.basic");
     // 3 families x 27 progressions x 3 melodies.
     expect(getGenerator("coordTask").listItems(basic)).toHaveLength(243);
+  });
+
+  it("serves hands-together pieces from their own node, MIDI only and never Away (T5.6)", () => {
+    const users = graph.nodes.filter((n) => n.itemGenerators.includes("pieceHands"));
+    expect(users.map((n) => [n.id, n.strand])).toEqual([["apply.pieces-hands", "APPLY"]]);
+    const hands = graph.generators.find((g) => g.id === "pieceHands");
+    expect(hands?.implemented).toBe(true);
+    expect(hands?.awayEligible).toBe(false);
+    expect(hands?.requires).toEqual(expect.arrayContaining(["polyphonic", "notation"]));
+    // Every phrase of the five hands pieces is an item, played as a two-hand performance.
+    const node = users[0];
+    if (node === undefined) throw new Error("no apply.pieces-hands");
+    const gen = createPieceHands(loadPieces());
+    const items = gen.listItems(node);
+    expect(items).toHaveLength(2 + 4 + 4 + 2 + 6);
+    for (const params of items) {
+      const inst = gen.generate(node, params, { rng: createRng(1), mode: "instrument" });
+      const play = inst.expected.play;
+      expect(play?.kind).toBe("performance");
+      if (play?.kind !== "performance") continue;
+      expect(new Set(play.notes.map((n) => n.hand))).toEqual(new Set(["lh", "rh"]));
+    }
   });
 
   it("every enabled node's generators can enumerate and generate items", () => {

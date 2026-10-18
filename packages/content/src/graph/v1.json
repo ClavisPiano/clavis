@@ -1,5 +1,5 @@
 {
-  "contentVersion": "2026.10.16",
+  "contentVersion": "2026.10.18",
   "nodes": [
     {
       "id": "ear.degrees.major.135",
@@ -720,6 +720,21 @@
         "distinctSessions": 2
       },
       "keyDependent": false
+    },
+    {
+      "id": "apply.pieces-hands",
+      "strand": "APPLY",
+      "title": "Pieces, hands together",
+      "description": "Tunes you have played with one hand, now with left-hand chords, phrase by phrase from the grand staff.",
+      "prerequisites": [],
+      "itemGenerators": ["pieceHands"],
+      "params": {},
+      "mastery": {
+        "minAccuracy": 0.8,
+        "windowAttempts": 5,
+        "distinctSessions": 2
+      },
+      "keyDependent": false
     }
   ],
   "generators": [
@@ -806,6 +821,13 @@
       "seedDurationSec": 60,
       "awayEligible": false,
       "requires": ["keys", "notation"]
+    },
+    {
+      "id": "pieceHands",
+      "implemented": true,
+      "seedDurationSec": 40,
+      "awayEligible": false,
+      "requires": ["keys", "polyphonic", "notation"]
     },
     {
       "id": "bassChordRead",

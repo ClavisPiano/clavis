@@ -20,6 +20,7 @@ export * from "./lh-pattern-variants.js";
 export * from "./by-ear-phrase.js";
 export * from "./piece-ear.js";
 export * from "./piece-line.js";
+export * from "./piece-hands.js";
 export * from "./registry.js";
 export { createRng, type Rng } from "../random.js";
 export * from "./family.js";

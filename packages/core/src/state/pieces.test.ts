@@ -32,10 +32,22 @@ const EAR_NODE = {
   itemGenerators: ["pieceEar" as const],
 };
 const EAR_GENERATOR: GeneratorInfo = { ...PIECE_GENERATOR, id: "pieceEar", seedDurationSec: 60 };
+const HANDS_NODE = {
+  ...PIECES_NODE,
+  id: "apply.pieces-hands",
+  title: "Pieces, hands together",
+  itemGenerators: ["pieceHands" as const],
+};
+const HANDS_GENERATOR: GeneratorInfo = {
+  ...PIECE_GENERATOR,
+  id: "pieceHands",
+  seedDurationSec: 40,
+  requires: ["keys", "polyphonic", "notation"],
+};
 const GRAPH: SkillGraph = {
   ...FIXTURE_GRAPH,
-  generators: [...FIXTURE_GRAPH.generators, PIECE_GENERATOR, EAR_GENERATOR],
-  nodes: [...FIXTURE_GRAPH.nodes, PIECES_NODE, EAR_NODE],
+  generators: [...FIXTURE_GRAPH.generators, PIECE_GENERATOR, EAR_GENERATOR, HANDS_GENERATOR],
+  nodes: [...FIXTURE_GRAPH.nodes, PIECES_NODE, EAR_NODE, HANDS_NODE],
 };
 const C = ctx(GRAPH);
 const fold = (events: readonly LearningEvent[]) => foldEvents(events, C);
@@ -122,6 +134,31 @@ describe("piece progress (MP)", () => {
     expect(s.pieces).toEqual({});
     expect(s.attempts["apply.piece-ear"]).toHaveLength(1);
     expect(s.cards[`apply.piece-ear|phrase=1|piece=${HCB}`]?.nodeId).toBe("apply.piece-ear");
+    expect(s.warnings).toBe(0);
+  });
+
+  it("hands-together phrases (T5.6) are progress on the hands piece, under its own id", () => {
+    const b = new Builder();
+    const sid = b.sessionId(1);
+    const HANDS = `${ODE}-hands`;
+    const s = fold([
+      b.start(T0, sid),
+      ...b.phrase(T0 + 1000, sid, HANDS, 2, { hands: true, correct: false }),
+      ...b.phrase(T0 + 30_000, sid, HANDS, 2, { hands: true }),
+      b.pieceCompleted(T0 + 60_000, sid, HANDS, 4, 4),
+      b.end(T0 + 90_000, sid),
+    ]);
+    expect(Object.keys(s.pieces)).toEqual([HANDS]);
+    expect(s.pieces[HANDS]?.phrases["2"]).toMatchObject({
+      attempts: 2,
+      correct: 1,
+      lastCorrect: true,
+    });
+    expect(s.pieces[HANDS]?.completedAt).toBe(T0 + 60_000);
+    expect(s.cards[`apply.pieces-hands|phrase=2|piece=${HANDS}`]?.nodeId).toBe(
+      "apply.pieces-hands",
+    );
+    expect(s.attempts["apply.pieces"]).toBeUndefined();
     expect(s.warnings).toBe(0);
   });
 

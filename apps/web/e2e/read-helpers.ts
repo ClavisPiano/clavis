@@ -27,6 +27,8 @@ export async function seedLearner(
     placedMastered?: readonly string[];
     /** Piece phrases already played (MP), each as a presented item and an attempt. */
     pieceAttempts?: readonly { pieceId: string; phrase: number; correct: boolean }[];
+    /** Pieces already played through (a `piece.completed` with every phrase right). */
+    piecesCompleted?: readonly { pieceId: string; phrases: number }[];
   } = {},
 ): Promise<number> {
   const at = Date.now() - 3 * 86_400_000;
@@ -109,6 +111,16 @@ export async function seedLearner(
         },
       ];
     }),
+    ...(opts.piecesCompleted ?? []).map((c, i) => ({
+      ...base,
+      id: id(400 + i),
+      at: at + 50_000 + i,
+      type: "piece.completed",
+      sessionId,
+      pieceId: c.pieceId,
+      phrases: c.phrases,
+      correctPhrases: c.phrases,
+    })),
     {
       ...base,
       id: id(3 + nodes.length),

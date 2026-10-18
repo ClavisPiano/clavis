@@ -10,7 +10,16 @@
 
   const dots = (n: number): number[] => Array.from({ length: n }, (_, i) => i);
 
-  const hand = (r: PieceRow): string => (r.hand === "right" ? "Right hand" : "Left hand");
+  const hand = (r: PieceRow): string =>
+    r.hand === "right" ? "Right hand" : r.hand === "left" ? "Left hand" : "Both hands";
+
+  /** What still unlocks a locked piece: skills, and for a hands-together piece its tune. */
+  function locked(r: PieceRow): string {
+    const parts: string[] = [];
+    if (r.missing.length > 0) parts.push(`needs ${r.missing.join(", ")}`);
+    if (r.after !== undefined) parts.push(`play ${r.after} through first`);
+    return `Locked: ${parts.join("; ")}`;
+  }
 
   function status(r: PieceRow): string {
     switch (r.status) {
@@ -23,43 +32,54 @@
       case "next":
         return "Up next";
       case "locked":
-        return `Locked: needs ${r.missing.join(", ")}`;
+        return locked(r);
     }
   }
 </script>
+
+{#snippet currentPiece(c: PieceRow, testId: string)}
+  <div class="current" data-testid={testId} data-piece={c.id} data-status={c.status}>
+    <p class="title">
+      <strong data-testid="current-title">{c.title}</strong>
+      <span class="muted">{hand(c)}</span>
+    </p>
+    {#if c.hand === "both"}
+      <p class="muted" data-testid="midi-note">Played with both hands on a MIDI keyboard.</p>
+    {/if}
+    <p
+      class="progress"
+      data-testid="phrase-progress"
+      role="img"
+      aria-label={`${String(c.learned)} of ${String(c.phraseCount)} phrases learned`}
+    >
+      {#each dots(c.phraseCount) as i (i)}
+        <span class="dot" class:done={i < c.learned} aria-hidden="true"></span>
+      {/each}
+    </p>
+    {#if c.status === "ready"}
+      <p>You have played every phrase. Now play it from start to finish.</p>
+      <a class="button primary" href={resolve(`/session?run=${c.id}`)} data-testid="play-through">
+        <strong>Play it through</strong>
+      </a>
+    {:else}
+      <p class="muted" data-testid="piece-hint">
+        {String(c.learned)} of {String(c.phraseCount)} phrases learned. Your next sessions bring the next
+        phrases.
+      </p>
+    {/if}
+  </div>
+{/snippet}
 
 <section class="pieces" aria-labelledby="pieces-h" data-testid="piece-card">
   <h2 id="pieces-h">Pieces</h2>
 
   {#if card.current}
-    {@const c = card.current}
-    <div class="current" data-testid="current-piece" data-status={c.status}>
-      <p class="title">
-        <strong data-testid="current-title">{c.title}</strong>
-        <span class="muted">{hand(c)}</span>
-      </p>
-      <p
-        class="progress"
-        data-testid="phrase-progress"
-        role="img"
-        aria-label={`${String(c.learned)} of ${String(c.phraseCount)} phrases learned`}
-      >
-        {#each dots(c.phraseCount) as i (i)}
-          <span class="dot" class:done={i < c.learned} aria-hidden="true"></span>
-        {/each}
-      </p>
-      {#if c.status === "ready"}
-        <p>You have played every phrase. Now play it from start to finish.</p>
-        <a class="button primary" href={resolve(`/session?run=${c.id}`)} data-testid="play-through">
-          <strong>Play it through</strong>
-        </a>
-      {:else}
-        <p class="muted" data-testid="piece-hint">
-          {String(c.learned)} of {String(c.phraseCount)} phrases learned. Your next sessions bring the
-          next phrases.
-        </p>
-      {/if}
-    </div>
+    <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+    {@render currentPiece(card.current, "current-piece")}
+    {#if card.handsCurrent}
+      <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- rendering a local snippet -->
+      {@render currentPiece(card.handsCurrent, "current-hands-piece")}
+    {/if}
   {:else if card.completed.length > 0}
     <p data-testid="all-done">You have played through every piece that is unlocked so far.</p>
   {:else}

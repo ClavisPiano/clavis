@@ -7,7 +7,10 @@ import { ScoreSpecSchema, type ScoreSpec } from "../score/schema.js";
  * and the grading expectations (`sequence`, `rhythm`) are derived from it in TP.4.
  *
  * v1 pieces are a single line: one staff, one pitch per note, full measures only (no pickup bar).
- * Hands together waits for M5.
+ * A library piece can instead be hands together (T5.6): `handsOf` names the one-hand piece whose
+ * melody it is, and its score is a grand staff, the melody as a single line on the treble staff
+ * and block chords on the bass staff. Imported pieces stay single-line (`UserPieceSchema` has no
+ * `handsOf`), so `content.imported` v1 accepts exactly what it did.
  */
 
 /** Length of a whole note in the unit used to total a measure (64ths, so a dotted 16th is whole). */
@@ -52,14 +55,32 @@ interface Refinable {
   score: ScoreSpec;
   phrases: Phrase[];
   requiredNodeIds: string[];
+  handsOf?: string | undefined;
 }
 
 function refinePiece(piece: Refinable, ctx: z.RefinementCtx): void {
   const staff = piece.score.staves[0];
   if (staff === undefined) return;
-  // Phrases, hands and line notes read the first staff only; grand-staff pieces are T5.6. This
-  // also keeps `content.imported` v1, which validates its payload as a user piece, as it shipped.
-  if (piece.score.staves.length > 1) {
+  const grand = piece.handsOf !== undefined;
+  if (grand) {
+    // Hands together (T5.6): the melody on the treble staff, chords on the bass staff.
+    const bass = piece.score.staves[1];
+    if (piece.score.staves.length !== 2 || staff.clef !== "treble" || bass?.clef !== "bass") {
+      ctx.addIssue({
+        code: "custom",
+        message: "a hands-together piece has a treble staff and a bass staff",
+        path: ["score", "staves"],
+      });
+    } else if (bass.measures.length !== staff.measures.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "both staves need the same number of measures",
+        path: ["score", "staves", 1, "measures"],
+      });
+    }
+  } else if (piece.score.staves.length > 1) {
+    // Phrases, hands and line notes of a one-hand piece read the first staff only. This also keeps
+    // `content.imported` v1, which validates its payload as a user piece, as it shipped.
     ctx.addIssue({
       code: "custom",
       message: "a piece has a single staff",
@@ -80,33 +101,39 @@ function refinePiece(piece: Refinable, ctx: z.RefinementCtx): void {
   if (units === null) {
     ctx.addIssue({ code: "custom", message: "a piece needs a meter", path: ["score", "meter"] });
   }
-  staff.measures.forEach((measure, m) => {
-    if (measure.length === 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: `measure ${String(m + 1)} is empty`,
-        path: ["score", "staves", 0, "measures", m],
+  // A one-hand piece has one staff; a hands-together piece checks both, and only its bass staff
+  // may hold chords.
+  const staves = grand ? piece.score.staves.slice(0, 2) : [staff];
+  staves.forEach((s, st) => {
+    s.measures.forEach((measure, m) => {
+      if (measure.length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: `measure ${String(m + 1)} is empty`,
+          path: ["score", "staves", st, "measures", m],
+        });
+        return;
+      }
+      if (units !== null) {
+        const total = measure.reduce((sum, el) => sum + durationUnits(el.duration), 0);
+        if (total !== units) {
+          ctx.addIssue({
+            code: "custom",
+            message: `measure ${String(m + 1)} does not fill the meter (${String(total)}/64 of ${String(units)}/64)`,
+            path: ["score", "staves", st, "measures", m],
+          });
+        }
+      }
+      if (st > 0) return;
+      measure.forEach((el, e) => {
+        if (el.kind === "note" && el.pitches.length !== 1) {
+          ctx.addIssue({
+            code: "custom",
+            message: "a piece is a single line: one pitch per note",
+            path: ["score", "staves", 0, "measures", m, e, "pitches"],
+          });
+        }
       });
-      return;
-    }
-    if (units !== null) {
-      const total = measure.reduce((sum, el) => sum + durationUnits(el.duration), 0);
-      if (total !== units) {
-        ctx.addIssue({
-          code: "custom",
-          message: `measure ${String(m + 1)} does not fill the meter (${String(total)}/64 of ${String(units)}/64)`,
-          path: ["score", "staves", 0, "measures", m],
-        });
-      }
-    }
-    measure.forEach((el, e) => {
-      if (el.kind === "note" && el.pitches.length !== 1) {
-        ctx.addIssue({
-          code: "custom",
-          message: "a piece is a single line: one pitch per note",
-          path: ["score", "staves", 0, "measures", m, e, "pitches"],
-        });
-      }
     });
   });
 
@@ -143,6 +170,14 @@ export const PieceSchema = z
     ...pieceShape,
     /** Skill nodes the learner needs before the piece is offered (see `listPieces`). */
     requiredNodeIds: z.array(z.string().min(1)).min(1),
+    /**
+     * Hands together (T5.6): the one-hand piece whose melody this is. The piece is then a grand
+     * staff, and it is offered only once that piece has been played through (see `listPieces`).
+     */
+    handsOf: z
+      .string()
+      .regex(/^piece\.[a-z0-9-]+$/)
+      .optional(),
   })
   .superRefine(refinePiece);
 
@@ -174,22 +209,34 @@ export const UserPieceSchema = z
   .superRefine(refinePiece);
 export type Piece = z.infer<typeof PieceSchema>;
 
-/** Right hand plays the treble staff, left hand the bass staff. */
-export function pieceHand(piece: Pick<Piece, "score">): "right" | "left" {
+/** True for a hands-together piece (T5.6): a grand staff played with both hands. */
+export function isHandsPiece(piece: Pick<Piece, "handsOf">): boolean {
+  return piece.handsOf !== undefined;
+}
+
+/**
+ * Right hand plays the treble staff, left hand the bass staff, and a hands-together piece (T5.6)
+ * both.
+ */
+export function pieceHand(piece: Pick<Piece, "score" | "handsOf">): "right" | "left" | "both" {
+  if (isHandsPiece(piece)) return "both";
   return piece.score.staves[0]?.clef === "bass" ? "left" : "right";
 }
 
-/** The measures of phrase `index` (0-based) as a score of their own, ids and key unchanged. */
+/**
+ * The measures of phrase `index` (0-based) as a score of their own, ids and key unchanged. Every
+ * staff is cut at the same measures, so a hands-together phrase keeps both hands.
+ */
 export function phraseScore(piece: Piece, index: number): ScoreSpec {
   const phrase = piece.phrases[index];
-  const staff = piece.score.staves[0];
-  if (phrase === undefined || staff === undefined) {
+  if (phrase === undefined || piece.score.staves.length === 0) {
     throw new RangeError(`piece ${piece.id} has no phrase ${String(index)}`);
   }
   return {
     ...piece.score,
-    staves: [
-      { ...staff, measures: staff.measures.slice(phrase.firstMeasure - 1, phrase.lastMeasure) },
-    ],
+    staves: piece.score.staves.map((staff) => ({
+      ...staff,
+      measures: staff.measures.slice(phrase.firstMeasure - 1, phrase.lastMeasure),
+    })),
   };
 }

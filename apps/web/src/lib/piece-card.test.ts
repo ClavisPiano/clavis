@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { loadGraph, loadPieces } from "@clavis/content";
-import type { LearnerState, NodeState, SkillGraph } from "@clavis/core";
+import {
+  pieceHand as pieceHandOf,
+  type LearnerState,
+  type NodeState,
+  type SkillGraph,
+} from "@clavis/core";
 import { pieceCard, piecesEnabled } from "./piece-card";
 
 const shipped = loadGraph();
@@ -16,9 +21,10 @@ function learner(
     completed?: string[];
     runs?: Record<string, number>;
     bass?: NodeState;
+    coord?: NodeState;
   } = {},
 ): LearnerState {
-  const nodes: LearnerState["nodes"] = {};
+  const nodes: LearnerState["nodes"] = { "hands.coord.basic": { state: o.coord ?? "locked" } };
   for (const id of ["landmarks", "steps", "skips"]) {
     nodes[`read.treble.${id}`] = { state: treble };
     nodes[`read.bass.${id}`] = { state: o.bass ?? "locked" };
@@ -155,5 +161,45 @@ describe("pieceCard", () => {
     const before = JSON.stringify(state);
     pieceCard(pieces, state, graph);
     expect(JSON.stringify(state)).toBe(before);
+  });
+
+  it("a hands-together piece (T5.6) waits for its tune and hands.coord.basic", () => {
+    const HANDS = "piece.ode-to-joy-hands";
+    const locked = pieceCard(pieces, learner("fluent", { coord: "learning" }), graph);
+    expect(row(locked, HANDS)).toMatchObject({
+      status: "locked",
+      hand: "both",
+      missing: ["Hands together, block chords"],
+      after: "Ode to Joy",
+    });
+    const tuneOnly = pieceCard(pieces, learner("fluent", { coord: "fluent" }), graph);
+    expect(row(tuneOnly, HANDS)).toMatchObject({ status: "locked", missing: [] });
+  });
+
+  it("teaches the current hands piece alongside the current one-hand piece", () => {
+    const HANDS = "piece.hot-cross-buns-hands";
+    const data = pieceCard(pieces, learner("fluent", { coord: "fluent", completed: [HCB] }), graph);
+    expect(data?.current?.id).toBe(ODE);
+    expect(data?.handsCurrent?.id).toBe(HANDS);
+    expect(row(data, HANDS)?.status).toBe("playing");
+    // Only the first unlocked hands piece is current; the next one waits.
+    const two = pieceCard(
+      pieces,
+      learner("fluent", { coord: "fluent", completed: [HCB, ODE] }),
+      graph,
+    );
+    expect(row(two, HANDS)?.status).toBe("playing");
+    expect(row(two, "piece.ode-to-joy-hands")?.status).toBe("next");
+  });
+
+  it("makes the hands piece the current one once no one-hand piece is left", () => {
+    const treble = pieces.filter((p) => pieceHandOf(p) === "right").map((p) => p.id);
+    const data = pieceCard(
+      pieces,
+      learner("fluent", { coord: "fluent", completed: treble }),
+      graph,
+    );
+    expect(data?.current?.id).toBe("piece.hot-cross-buns-hands");
+    expect(data?.handsCurrent).toBeUndefined();
   });
 });

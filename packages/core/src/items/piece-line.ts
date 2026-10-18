@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { SkillNode } from "../graph/schema.js";
 import type { Piece } from "../pieces/schema.js";
-import { phraseScore } from "../pieces/schema.js";
+import { isHandsPiece, phraseScore } from "../pieces/schema.js";
 import { spelledToMidi, type ScoreSpec } from "../score/schema.js";
 import type { StimulusEvent } from "../stimulus/types.js";
 import type { VoiceRange } from "../theory/keys.js";
@@ -77,7 +77,9 @@ export function responseWindowMs(onsetsBeats: readonly number[], tempoBpm: numbe
  * Built over the library because `core` cannot import `content`, so the caller supplies the pieces
  * (the composer's generator registry is injectable for the same reason).
  */
-export function createPieceLine(pieces: readonly Piece[]): Generator {
+export function createPieceLine(library: readonly Piece[]): Generator {
+  // One hand only: hands-together pieces (T5.6) are `pieceHands` phrases.
+  const pieces = library.filter((p) => !isHandsPiece(p));
   const find = (params: ItemParams) => {
     const { piece: pieceId, phrase } = PieceLineItemParams.parse(params);
     const piece = pieces.find((p) => p.id === pieceId);
