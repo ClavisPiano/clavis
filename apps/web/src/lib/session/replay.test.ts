@@ -151,7 +151,7 @@ describe("replay of a two-hand performance", () => {
   } as unknown as ItemInstance;
 
   it("plays the count-in, then both hands of each onset together", () => {
-    const spec = buildReplaySpec(performanceInstance, { notes: [], frames: [] });
+    const spec = buildReplaySpec(performanceInstance, { notes: [] });
     const targets = spec.events.filter((e) => e.role === "target");
     expect(targets.map((e) => e.midi)).toEqual([[67, 43, 47], [69]]);
     expect((targets[1]?.atSec ?? 0) - (targets[0]?.atSec ?? 0)).toBeCloseTo(1, 5);
