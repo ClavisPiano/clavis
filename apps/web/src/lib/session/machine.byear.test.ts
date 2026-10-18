@@ -8,18 +8,10 @@ import {
   type PlannedItem,
 } from "@clavis/core";
 import { describe, expect, it } from "vitest";
-import { SessionMachine, type SessionState } from "./machine";
-import {
-  FakeNotation,
-  logOf,
-  makeHarness,
-  playCorrect,
-  singCorrect,
-  sungFrames,
-  type Harness,
-} from "./test-harness";
+import { CUE_PROMPT, SessionMachine, type SessionState } from "./machine";
+import { FakeNotation, logOf, makeHarness, playCorrect, type Harness } from "./test-harness";
 
-/* By-ear melodies (BYEAR, T7.2): hear, sing, play, reveal. Real graph, real generator and real
+/* By-ear melodies (BYEAR, T7.2, R29): hear, cue (sing or hum it, ungraded), play, reveal. Real graph, real generator and real
    scorer; the plan is the one melody and the notation port is a fake. */
 
 const NODE = "byear.melody.simple";
@@ -76,30 +68,19 @@ async function until(
   return r.machine.state;
 }
 
-const phase = (p: "sing" | "play") => (s: SessionState) => s.kind === "listening" && s.phase === p;
+const play = (s: SessionState): boolean => s.kind === "listening" && !s.cue && !s.practice;
+const cue = (s: SessionState): boolean => s.kind === "listening" && s.cue;
 const feedback = (s: SessionState): boolean => s.kind === "feedback";
 
-/** Sing the melody (right, or with the note at `wrongAt` three semitones up), once the sung phase is open. */
-async function sing(r: Rig, wrongAt?: number): Promise<void> {
-  await until(r, phase("sing"));
-  const expected = r.machine.debug().expected;
-  const target = expected?.sing;
-  if (target?.kind !== "sungSequence") throw new Error("not a sung sequence");
-  const start = r.h.clock.ctxMs + 200;
-  if (wrongAt === undefined) {
-    singCorrect(r.h.input, expected ?? { responseWindowMs: 1 }, start);
-  } else {
-    target.midi.forEach((m, i) => {
-      for (const f of sungFrames(m + (i === wrongAt ? 3 : 0), start + i * 400)) {
-        r.h.input.emitFrame(f);
-      }
-    });
-  }
-  await until(r, phase("play"));
+/** Leave the cue step, as the Ready button does. */
+async function ready(r: Rig): Promise<void> {
+  await until(r, cue);
+  r.machine.ready();
+  await until(r, play);
 }
 
 async function playMelody(r: Rig): Promise<void> {
-  await until(r, phase("play"));
+  await ready(r);
   const expected = r.machine.debug().expected;
   playCorrect(r.h.input, expected ?? { responseWindowMs: 1 }, r.h.clock.ctxMs + 700);
   await until(r, feedback);
@@ -112,18 +93,22 @@ function attemptsOf(log: LearningEvent[]) {
   );
 }
 
-describe("a by-ear melody (T7.2)", () => {
-  it("hear: plays the key-setting cadence then the melody, with no score and the sung part first", async () => {
+describe("a by-ear melody (T7.2, R29)", () => {
+  it("hear: plays the key-setting cadence then the melody, with no score, then holds at the cue", async () => {
     const r = await makeRig();
     await r.machine.start();
-    const s = await until(r, phase("sing"));
+    const s = await until(r, cue);
     if (s.kind !== "listening") throw new Error("not listening");
     expect(s.item).toMatchObject({ block: "apply", generator: "byEarPhrase", nodeId: NODE });
     expect(s.item.display).toBeUndefined();
     expect(s.item.revealed).toBeUndefined();
-    expect(s.prompt).toBe("Sing it");
-    expect(s.phaseCount).toBe(2);
+    expect(s.prompt).toBe(CUE_PROMPT);
+    expect(s.prompt).toBe("Sing or hum it, out loud or in your head");
+    expect(s.phaseCount).toBe(1);
+    expect(s.practice).toBe(false);
+    expect(s.canHear).toBe(true);
     expect(r.notation.shows).toHaveLength(0);
+    expect(r.machine.debug().phase).toBe("listening-cue");
 
     const events = r.h.player.plays.at(-1)?.spec.events ?? [];
     const cadence = events.filter((e) => e.role === "cadence");
@@ -134,20 +119,45 @@ describe("a by-ear melody (T7.2)", () => {
     expect(Math.min(...targets.map((e) => e.atSec))).toBeGreaterThanOrEqual(cadenceEnd);
   });
 
-  it("sing: a right sung part opens the played part, still with no score", async () => {
+  it("cue: grades nothing, writes no attempt and has no timer", async () => {
     const r = await makeRig();
     await r.machine.start();
-    await sing(r);
+    await until(r, cue);
+    // Notes played during the cue are not answers, and ten minutes pass without a timeout.
+    playCorrect(
+      r.h.input,
+      r.machine.debug().expected ?? { responseWindowMs: 1 },
+      r.h.clock.ctxMs + 200,
+    );
+    await r.h.advance(600_000);
+    expect(cue(r.machine.state)).toBe(true);
+    expect(attemptsOf(await r.h.log())).toHaveLength(0);
+  });
+
+  it("cue: Hear it again replays the tune and stays at the cue", async () => {
+    const r = await makeRig();
+    await r.machine.start();
+    await until(r, cue);
+    const plays = r.h.player.plays.length;
+    r.machine.hear("full");
+    expect(r.h.player.plays.length).toBe(plays + 1);
+    await until(r, cue);
+    expect(r.machine.state).toMatchObject({ kind: "listening", cue: true });
+  });
+
+  it("ready: opens the played part with the play prompt, still with no score", async () => {
+    const r = await makeRig();
+    await r.machine.start();
+    await ready(r);
     const s = r.machine.state;
     if (s.kind !== "listening") throw new Error("not listening");
-    expect(s.prompt).toBe("Now play it");
+    expect(s).toMatchObject({ cue: false, prompt: "Play it" });
     expect(r.notation.shows).toHaveLength(0);
   });
 
   it("play and reveal: the score appears only after the answer, with every note marked right", async () => {
     const r = await makeRig();
     await r.machine.start();
-    await sing(r);
     await playMelody(r);
     await r.machine.settled();
     const done = r.machine.state;
@@ -164,53 +174,46 @@ describe("a by-ear melody (T7.2)", () => {
     );
   });
 
-  it("records one attempt on the by-ear node with both sub-scores", async () => {
+  it("records one attempt on the by-ear node with only the played sub-score", async () => {
     const r = await makeRig();
     await r.machine.start();
-    await sing(r);
     await playMelody(r);
     const log = await logOf(r);
     const attempt = attemptsOf(log).at(-1);
     expect(attempt).toMatchObject({ nodeId: NODE, itemId: ITEM_ID, outcome: { correct: true } });
-    expect(attempt?.subScores?.sing).toBeDefined();
-    expect(attempt?.subScores?.play).toBeDefined();
+    expect(attempt?.subScores).toEqual({ play: 1 });
     const presented = log.filter((e) => e.type === "item.presented").at(-1);
     expect(presented).toMatchObject({ generator: "byEarPhrase", block: "apply", isNew: true });
     expect(r.h.service.state.cards[ITEM_ID]?.reps).toBe(1);
   });
 
-  it("a wrong sung note reads Not quite and names the singing, even with the playing right", async () => {
+  it("latency counts from Ready, not from the end of the tune", async () => {
     const r = await makeRig();
     await r.machine.start();
-    await sing(r, 2);
-    await playMelody(r);
-    await r.machine.settled();
-    const done = r.machine.state;
-    if (done.kind !== "feedback") throw new Error("not feedback");
-    expect(done.feedback.correct).toBe(false);
-    expect(done.item.revealed).toBe(true);
+    await until(r, cue);
+    await r.h.advance(120_000);
+    await ready(r);
+    playCorrect(
+      r.h.input,
+      r.machine.debug().expected ?? { responseWindowMs: 1 },
+      r.h.clock.ctxMs + 700,
+    );
+    await until(r, feedback);
     const attempt = attemptsOf(await logOf(r)).at(-1);
-    expect(attempt?.outcome.correct).toBe(false);
-    expect(attempt?.errors?.length).toBeGreaterThan(0);
-    expect(attempt?.errors?.every((e) => e.detail?.part === "sing")).toBe(true);
-    expect(attempt?.subScores?.play).toBe(1);
-    expect(attempt?.subScores?.sing ?? 1).toBeLessThan(1);
-    expect(done.feedback.lines.join(" ")).toMatch(/you sang/i);
-    // The reveal marks the sung note that was wrong.
-    expect(r.notation.marks.at(-1)?.filter((m) => m.kind === "wrong")).toHaveLength(1);
+    expect(attempt?.outcome.correct).toBe(true);
+    expect(attempt?.outcome.latencyMs).toBeLessThan(10_000);
   });
 
-  it("a wrong played note is not correct and names the playing, with the singing right", async () => {
+  it("a wrong played note is not correct, names the playing, and never mentions singing", async () => {
     const r = await makeRig();
     await r.machine.start();
-    await sing(r);
-    await until(r, phase("play"));
-    const play = r.machine.debug().expected?.play;
-    if (play?.kind !== "line") throw new Error("not a line");
+    await ready(r);
+    const expectedPlay = r.machine.debug().expected?.play;
+    if (expectedPlay?.kind !== "line") throw new Error("not a line");
     const start = r.h.clock.ctxMs + 700;
-    const beatMs = 60000 / play.tempoBpm;
-    play.midi.forEach((m, i) => {
-      const onset = start + (play.onsetsBeats[i] ?? 0) * beatMs;
+    const beatMs = 60000 / expectedPlay.tempoBpm;
+    expectedPlay.midi.forEach((m, i) => {
+      const onset = start + (expectedPlay.onsetsBeats[i] ?? 0) * beatMs;
       r.h.input.emitNote({
         pitch: i === 3 ? m + 1 : m,
         onsetMs: onset,
@@ -219,19 +222,25 @@ describe("a by-ear melody (T7.2)", () => {
       });
     });
     await until(r, feedback);
+    await r.machine.settled();
+    const done = r.machine.state;
+    if (done.kind !== "feedback") throw new Error("not feedback");
+    expect(done.feedback.correct).toBe(false);
+    expect(done.item.revealed).toBe(true);
     const attempt = attemptsOf(await logOf(r)).at(-1);
     expect(attempt?.outcome.correct).toBe(false);
-    expect(attempt?.errors?.every((e) => e.detail?.part === "play")).toBe(true);
-    expect(attempt?.subScores?.sing).toBe(1);
-    expect(r.machine.state.kind === "feedback" && r.machine.state.feedback.lines.join(" ")).toMatch(
-      /you played/i,
-    );
+    expect(attempt?.errors?.length).toBeGreaterThan(0);
+    expect(JSON.stringify(attempt?.errors)).not.toMatch(/sing|sang|sung/i);
+    expect(attempt?.subScores?.sing).toBeUndefined();
+    expect(done.feedback.lines.join(" ")).toMatch(/you played/i);
+    expect(done.feedback.lines.join(" ")).not.toMatch(/sang|sung|sing/i);
+    // The reveal marks the note that was wrong.
+    expect(r.notation.marks.at(-1)?.filter((m) => m.kind === "wrong")).toHaveLength(1);
   });
 
   it("moving on clears the revealed score", async () => {
     const r = await makeRig();
     await r.machine.start();
-    await sing(r);
     await playMelody(r);
     await r.machine.settled();
     const hides = r.notation.count("hide");

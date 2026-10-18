@@ -50,12 +50,6 @@ describe("conceptTip", () => {
       "Feel the beat under the rhythm and keep it steady. The gaps are measured against your own tempo.",
     ],
     [
-      "no sung note",
-      [e("sing.none")],
-      "major",
-      'Sing on an open vowel such as "ah", loud enough to be heard, and hold the note steady for about a second.',
-    ],
-    [
       "the first error with a tip wins",
       [e("response.timeout"), e("degree.confusion.1-5"), e("rhythm.extra")],
       "major",
@@ -68,7 +62,8 @@ describe("conceptTip", () => {
   it.each([
     ["no errors", []],
     ["a chromatic degree", [e("degree.confusion.3-b3")]],
-    ["flat singing (a practical issue, not a concept)", [e("sing.flat", { cents: -40 })]],
+    ["an old sung-pitch error from before R29", [e("sing.flat", { cents: -40 })]],
+    ["an old silent-voice error from before R29", [e("sing.none")]],
     ["a timeout", [e("response.timeout")]],
     ["a cell wrong note without degrees", [e("sequence.wrong-note", { index: 0 })]],
   ] as const)("gives nothing for %s", (_name, errors) => {

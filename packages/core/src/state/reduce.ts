@@ -20,7 +20,7 @@ import type {
 } from "./types.js";
 
 /** Bump whenever reducer semantics change. Snapshots from other versions are discarded (R8). */
-export const REDUCER_VERSION = 5;
+export const REDUCER_VERSION = 6;
 
 export const DURATION_WINDOW = 20;
 /** Fewer samples than this and the graph seed is used instead of the median. */
@@ -52,6 +52,7 @@ export function initialState(ctx: FoldContext): LearnerState {
     attempts: {},
     pieces: {},
     imported: {},
+    benchmarks: {},
     sessions: {},
     presented: {},
     durations: {},
@@ -240,6 +241,23 @@ function reduceInPlace(state: LearnerState, event: LearningEvent, ctx: FoldConte
         source: event.source,
         partIndex: event.partIndex,
         staff: event.staff,
+        at: event.at,
+        eventId: event.id,
+      };
+      return;
+    }
+    case "benchmark.recorded": {
+      // One per month: the last write by (at, id) wins, whatever order the events arrive in.
+      const prev = state.benchmarks[event.month];
+      if (prev !== undefined && compareEvents({ at: prev.at, id: prev.eventId }, event) > 0) return;
+      state.benchmarks[event.month] = {
+        benchmarkId: event.benchmarkId,
+        pieceId: event.pieceId,
+        month: event.month,
+        blobKey: event.blobKey,
+        contentType: event.contentType,
+        durationMs: event.durationMs,
+        sizeBytes: event.sizeBytes,
         at: event.at,
         eventId: event.id,
       };

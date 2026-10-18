@@ -18,8 +18,6 @@ export const DEFAULT_AWAY_BUDGET_SEC = 300;
 export const DEFAULT_WEEKLY_TARGET_DAYS = 5;
 export const NEW_ITEMS_PER_DAY_MIN = 3;
 export const NEW_ITEMS_PER_DAY_MAX = 15;
-export const DEFAULT_VOICE_LOW = 48;
-export const DEFAULT_VOICE_HIGH = 72;
 
 export const BUDGET_OPTIONS_MIN = [5, 8, 12, 15, 20] as const;
 export const AWAY_BUDGET_OPTIONS_MIN = [3, 5, 8] as const;
@@ -32,8 +30,6 @@ export const WEEK_DAYS = 7;
 export interface EffectiveSettings {
   budgetSec: number;
   awayBudgetSec: number;
-  voiceRangeLow: number;
-  voiceRangeHigh: number;
   /** Undefined until the learner has answered (the session asks once). */
   headphones: boolean | undefined;
   weeklyTargetDays: number;
@@ -44,8 +40,6 @@ export function effectiveSettings(s: SettingsPatch): EffectiveSettings {
   return {
     budgetSec: s.budgetSec ?? DEFAULT_BUDGET_SEC,
     awayBudgetSec: s.awayBudgetSec ?? DEFAULT_AWAY_BUDGET_SEC,
-    voiceRangeLow: s.voiceRangeLow ?? DEFAULT_VOICE_LOW,
-    voiceRangeHigh: s.voiceRangeHigh ?? DEFAULT_VOICE_HIGH,
     headphones: s.headphones,
     weeklyTargetDays: s.weeklyTargetDays ?? DEFAULT_WEEKLY_TARGET_DAYS,
     newItemsPerDay: s.newItemsPerDay ?? DEFAULT_NEW_ITEM_CAP,
@@ -56,41 +50,6 @@ export function minutesLabel(budgetSec: number): string {
   return `${String(Math.max(1, Math.round(budgetSec / 60)))} min`;
 }
 
-const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
-
-/** MIDI 60 is C4. */
-export function noteName(midi: number): string {
-  const name = NAMES[((midi % 12) + 12) % 12] ?? "C";
-  return `${name}${String(Math.floor(midi / 12) - 1)}`;
-}
-
-export interface RangePreset {
-  id: "low" | "mid" | "high";
-  label: string;
-  low: number;
-  high: number;
-}
-
-export const RANGE_PRESETS: readonly RangePreset[] = [
-  { id: "low", label: "Low voice (E2-E4)", low: 40, high: 64 },
-  { id: "mid", label: "Mid voice (A2-A4)", low: 45, high: 69 },
-  { id: "high", label: "High voice (C3-C5)", low: 48, high: 72 },
-];
-
-/** The preset matching a range exactly, if any. */
-export function presetFor(low: number, high: number): RangePreset | undefined {
-  return RANGE_PRESETS.find((p) => p.low === low && p.high === high);
-}
-
-/** Notes offered by the range pickers: C1 to C6 covers any voice. */
-export const PICKER_MIDI_MIN = 24;
-export const PICKER_MIDI_MAX = 84;
-
-export function rangeError(low: number, high: number): string | undefined {
-  if (low >= high) return "The lowest note must be below the highest note.";
-  return undefined;
-}
-
 /** Only the keys whose value differs from the current effective settings. */
 export function settingsDiff(
   current: EffectiveSettings,
@@ -99,8 +58,6 @@ export function settingsDiff(
   const patch: SettingsPatch = {};
   if (draft.budgetSec !== current.budgetSec) patch.budgetSec = draft.budgetSec;
   if (draft.awayBudgetSec !== current.awayBudgetSec) patch.awayBudgetSec = draft.awayBudgetSec;
-  if (draft.voiceRangeLow !== current.voiceRangeLow) patch.voiceRangeLow = draft.voiceRangeLow;
-  if (draft.voiceRangeHigh !== current.voiceRangeHigh) patch.voiceRangeHigh = draft.voiceRangeHigh;
   if (draft.headphones !== undefined && draft.headphones !== current.headphones) {
     patch.headphones = draft.headphones;
   }

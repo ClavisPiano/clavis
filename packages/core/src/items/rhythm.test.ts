@@ -45,7 +45,6 @@ describe("rhythmEcho pitch", () => {
       { pattern: "r01" },
       {
         rng: createRng(1),
-        voiceRange: { low: 48, high: 72 },
         mode: "instrument",
         ...(preferredKey ? { preferredKey } : {}),
       },
@@ -74,7 +73,6 @@ describe("rhythmEcho staff", () => {
       { pattern: "r06" },
       {
         rng: createRng(1),
-        voiceRange: { low: 48, high: 72 },
         mode: "instrument",
       },
     );

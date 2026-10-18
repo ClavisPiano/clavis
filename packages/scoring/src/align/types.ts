@@ -1,4 +1,4 @@
-import type { InputSource } from "@clavis/core";
+import type { Hand, InputSource } from "@clavis/core";
 
 /** One note the score expects. Chords are several notes sharing `onsetBeats`. */
 export interface ExpectedNote {
@@ -7,6 +7,8 @@ export interface ExpectedNote {
   /** Onset in beats (the unit `tempoBpm` counts), from the start of the score. */
   onsetBeats: number;
   durationBeats: number;
+  /** The hand that plays it, from its staff: `rh` treble, `lh` bass. Absent on a percussion staff. */
+  hand?: Hand;
 }
 
 /** One note the performer played. Polyphonic: several may overlap. */
@@ -25,6 +27,13 @@ export interface AlignOptions {
   clusterWindowMs?: number;
   /** A note held for less than this fraction of its expected length is `short`. Default 0.5. */
   shortFraction?: number;
+  /**
+   * Pair a note left `missed` with an unmatched performed note of the same pitch within this many
+   * local beats of its predicted onset, so it is early or late instead of missed plus extra.
+   * Two hands that are not quite together split one onset into two clusters, and only one of
+   * them can be aligned to it. Default 0 (off).
+   */
+  strayWindowBeats?: number;
 }
 
 export interface AlignInput {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SessionState } from "./machine";
 import { targetOnly } from "./machine";
-import { makeHarness, noteAt, playCorrect, singCorrect, type Harness } from "./test-harness";
+import { makeHarness, noteAt, playCorrect, type Harness } from "./test-harness";
 
 /* The practice step before degree answers, and hearing an item again while listening. */
 
@@ -54,15 +54,10 @@ describe("practice step", () => {
 
     h.machine.ready();
     expect(h.machine.state).toMatchObject({ kind: "listening", practice: false });
-    // The answer now counts, phase by phase.
-    const phases = ["sing", "play"] as const;
-    for (const phase of phases) {
-      if (h.machine.state.kind !== "listening") break;
-      await h.advance(400);
-      if (phase === "sing") singCorrect(h.input, expected, h.clock.ctxMs + 100);
-      else playCorrect(h.input, expected, h.clock.ctxMs + 100);
-      await until(h, (x) => !(x.kind === "listening" && x.phase === phase));
-    }
+    // The answer now counts.
+    await h.advance(400);
+    playCorrect(h.input, expected, h.clock.ctxMs + 100);
+    await until(h, (x) => x.kind !== "listening");
     expect(h.machine.state).toMatchObject({ kind: "feedback", feedback: { correct: true } });
   });
 

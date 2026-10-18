@@ -59,7 +59,6 @@ describe("scoring left-hand pattern variants from MIDI", () => {
         const key = MAJOR[i % MAJOR.length];
         const item = generator.generate(node, params, {
           rng: createRng(i),
-          voiceRange: { low: 48, high: 72 },
           mode: "instrument",
           ...(key ? { preferredKey: key } : {}),
         });
@@ -80,7 +79,6 @@ describe("scoring left-hand pattern variants from MIDI", () => {
       if (!params) throw new Error("no items");
       const item = generator.generate(node, params, {
         rng: createRng(3),
-        voiceRange: { low: 48, high: 72 },
         mode: "instrument",
       });
       const take = perfectTake(item, 700);

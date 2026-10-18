@@ -105,7 +105,7 @@ describe("v1 skill graph", () => {
     }
   });
 
-  it("enables the ear M2 nodes and the nine reading nodes", () => {
+  it("enables the ear M2 nodes and the ten reading nodes", () => {
     const enabled = graph.nodes.filter((n) => isNodeEnabled(n, graph.generators)).map((n) => n.id);
     for (const id of [
       "ear.degrees.major.135",
@@ -116,8 +116,10 @@ describe("v1 skill graph", () => {
     ]) {
       expect(enabled).toContain(id);
     }
-    // R18: bassNoteRead covers five nodes, rhythmRead one. Grand staff and chords wait for M5.
+    // R18: bassNoteRead covers five nodes, rhythmRead one. T5.10: bassChordRead the bass chords.
+    // The grand staff nodes wait for sightLine.
     expect(enabled.filter((id) => id.startsWith("read.")).sort()).toEqual([
+      "read.bass.chords",
       "read.bass.intervals",
       "read.bass.landmarks",
       "read.bass.skips",
@@ -194,10 +196,25 @@ describe("v1 skill graph", () => {
         if (item === undefined) throw new Error(`no items for ${node.id}`);
         const inst = gen.generate(node, item, {
           rng: createRng(1),
-          voiceRange: { low: 48, high: 72 },
           mode: "instrument",
         });
         expect(inst.nodeId).toBe(node.id);
+      }
+    }
+  });
+
+  it("no item of any enabled generator has a sing target, and every item has a play target (R29)", () => {
+    for (const node of graph.nodes) {
+      for (const g of node.itemGenerators) {
+        const gen = GENERATORS[g];
+        if (gen === undefined) continue;
+        for (const params of gen.listItems(node)) {
+          for (const mode of ["instrument", "away"] as const) {
+            const inst = gen.generate(node, params, { rng: createRng(3), mode });
+            expect(inst.expected.sing, `${node.id} ${g}`).toBeUndefined();
+            expect(inst.expected.play, `${node.id} ${g}`).toBeDefined();
+          }
+        }
       }
     }
   });

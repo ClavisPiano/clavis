@@ -10,6 +10,7 @@ import placementCompleted from "./placement.completed.json";
 import contentImported from "./content.imported.json";
 import pieceCompleted from "./piece.completed.json";
 import sessionEnded from "./session.ended.json";
+import benchmarkRecorded from "./benchmark.recorded.json";
 
 /** One realistic example of every real event type, keyed by type. Test support only. */
 export const eventFixtures: Readonly<Record<string, unknown>> = {
@@ -23,6 +24,7 @@ export const eventFixtures: Readonly<Record<string, unknown>> = {
   "piece.completed": pieceCompleted,
   "content.imported": contentImported,
   "session.ended": sessionEnded,
+  "benchmark.recorded": benchmarkRecorded,
 };
 
 /** Shipped v1 events that must keep parsing and upcasting to the latest version. */

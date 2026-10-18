@@ -1,7 +1,7 @@
 import type { InputSource, NoteEvent, PitchFrame, VoiceRange } from "@clavis/core";
 
 /**
- * A source of played or sung notes (architecture 4.1). Mic, on-screen keyboard (tap) and MIDI all
+ * A source of played notes (architecture 4.1). Mic, on-screen keyboard (tap) and MIDI all
  * look the same to the session runner.
  *
  * Every timestamp (`NoteEvent.onsetMs` / `offsetMs`, `PitchFrame.atMs`) is on the AudioContext

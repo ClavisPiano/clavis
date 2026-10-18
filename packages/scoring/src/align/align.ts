@@ -442,6 +442,30 @@ export function alignPerformance(input: AlignInput): AlignResult {
     // Expected notes left in `freeE` stay `missed`; performed ones left in `freeP` become extras.
   }
 
+  // Optionally pair a missed note with a stray note of its pitch near its predicted onset.
+  const strayBeats = options.strayWindowBeats ?? 0;
+  if (strayBeats > 0) {
+    results.forEach((r, ei) => {
+      if (r.cls !== "missed") return;
+      const pred = model.predict(req(expected[ei]).onsetBeats);
+      let pick: number | undefined;
+      performed.forEach((p, pi) => {
+        if (usedPerformed.has(pi) || p.midi !== r.midi) return;
+        const d = Math.abs(p.onsetMs - pred.ms);
+        if (d > strayBeats * pred.beatMs) return;
+        if (pick === undefined || d < Math.abs(req(performed[pick]).onsetMs - pred.ms)) pick = pi;
+      });
+      if (pick === undefined) return;
+      usedPerformed.add(pick);
+      const dev = req(performed[pick]).onsetMs - pred.ms;
+      r.performedIndex = pick;
+      r.deviationMs = dev;
+      r.cls = Math.abs(dev) > tolMs ? (dev < 0 ? "early" : "late") : "correct";
+      pitchCorrect++;
+      credits.push(timingCredit(dev, tolMs));
+    });
+  }
+
   const extras: ExtraResult[] = [];
   performed.forEach((p, i) => {
     if (!usedPerformed.has(i)) extras.push({ performedIndex: i, midi: p.midi, onsetMs: p.onsetMs });

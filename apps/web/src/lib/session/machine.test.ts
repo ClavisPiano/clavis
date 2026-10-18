@@ -1,8 +1,7 @@
-import type { FakeInputAdapter } from "@clavis/audio";
 import type { LearnerState, LearningEvent } from "@clavis/core";
 import { describe, expect, it } from "vitest";
 import { SessionMachine, type SessionState } from "./machine";
-import { T0, makeHarness, noteAt, playCorrect, singCorrect, type Harness } from "./test-harness";
+import { T0, makeHarness, noteAt, playCorrect, type Harness } from "./test-harness";
 
 /* Drives the machine with a manual clock, a fake player and the real composer, generators,
    scorer and learner state. Time only moves through `advance`. */
@@ -24,27 +23,25 @@ const isKind =
   (s: SessionState): boolean =>
     s.kind === kind;
 
-const isListening = (phase?: "sing" | "play") => (s: SessionState) =>
-  s.kind === "listening" && (phase === undefined || s.phase === phase);
+const isListening = () => (s: SessionState) => s.kind === "listening";
 
-/** Answer the current listening phase correctly through the right adapter. */
-async function answer(h: Harness, singAdapter?: FakeInputAdapter): Promise<void> {
+/** Answer the current listening step correctly. A cue step (R29) is left with Ready first. */
+async function answer(h: Harness): Promise<void> {
   const s = h.machine.state;
   if (s.kind !== "listening") throw new Error("not listening");
+  if (s.cue) h.machine.ready();
   const expected = h.machine.debug().expected;
   if (!expected) throw new Error("no expected response");
-  const start = h.clock.ctxMs + 200;
-  if (s.phase === "sing") singCorrect(singAdapter ?? h.input, expected, start);
-  else playCorrect(h.input, expected, start);
+  playCorrect(h.input, expected, h.clock.ctxMs + 200);
   await h.machine.settled();
 }
 
-/** From the item's presenting state to its feedback, answering every phase correctly. */
-async function playItem(h: Harness, singAdapter?: FakeInputAdapter): Promise<void> {
+/** From the item's presenting state to its feedback, answering correctly. */
+async function playItem(h: Harness): Promise<void> {
   for (;;) {
     const s = await until(h, (x) => x.kind === "listening" || x.kind === "feedback");
     if (s.kind === "feedback") return;
-    await answer(h, singAdapter);
+    await answer(h);
     if (h.machine.state.kind === "feedback") return;
     // Wait for a state change out of the phase we just answered (sequences need a quiet moment).
     const phase = s.kind === "listening" ? s.phase : undefined;
@@ -73,12 +70,12 @@ function kinds(states: SessionState[]): string[] {
   return out;
 }
 
-async function runWholeSession(h: Harness, singAdapter?: FakeInputAdapter): Promise<void> {
+async function runWholeSession(h: Harness): Promise<void> {
   await h.machine.start();
   for (let guard = 0; guard < 40 && h.machine.state.kind !== "summary"; guard++) {
     const s = h.machine.state;
     if (s.kind === "orient" || s.kind === "intro") h.machine.next();
-    else if (s.kind === "presenting" || s.kind === "listening") await playItem(h, singAdapter);
+    else if (s.kind === "presenting" || s.kind === "listening") await playItem(h);
     else if (s.kind === "feedback") h.machine.next();
     await h.advance(50);
   }
@@ -206,7 +203,7 @@ describe("played answers", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    const first = await until(h, isListening("play"));
+    const first = await until(h, isListening());
     expect(first).toMatchObject({ phase: "play", phaseIndex: 0, phaseCount: 1, prompt: "Play it" });
     await answer(h);
     await until(h, isKind("feedback"));
@@ -221,7 +218,7 @@ describe("played answers", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const expected = h.machine.debug().expected;
     const target = expected?.play?.kind === "pitchClass" ? expected.play.targetMidi : 60;
     h.input.emitNote(noteAt(target + 1, h.clock.ctxMs + 200, "mic"));
@@ -246,7 +243,7 @@ describe("played answers", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     expect(h.input.expectedRange).toEqual(range);
     await answer(h);
     await until(h, isKind("feedback"));
@@ -259,7 +256,7 @@ describe("played answers", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     await answer(h);
     await until(h, isKind("feedback"));
     expect(h.input.expectedRangeCalls.every((r) => r === null)).toBe(true);
@@ -273,7 +270,7 @@ describe("played answers", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     expect(h.input.expectedRange).toEqual(range);
     h.machine.pause();
     expect(h.input.expectedRange).toBeNull();
@@ -284,7 +281,7 @@ describe("played answers", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     h.machine.answerDone();
     await h.machine.settled();
     expect(h.machine.state.kind).toBe("feedback");
@@ -318,28 +315,23 @@ describe("Away mode", () => {
     expect(h.player.plays.every((p) => p.spec.events.some((e) => e.role === "cadence"))).toBe(true);
   });
 
-  it("never creates a mic input for sung parts", async () => {
-    let created = 0;
-    const h = await makeHarness({ mode: "away", budgetSec: 90, withSingInput: false });
-    h.deps.createSingInput = () => {
-      created++;
-      return h.singInput;
-    };
+  it("answers degree items, including the old degreeSing ones, on the on-screen keys (R29)", async () => {
+    const h = await makeHarness({ mode: "away", budgetSec: 90 });
     await h.machine.start();
-    expect(created).toBe(0);
-  });
-});
-
-describe("MIDI keyboard at the piano", () => {
-  it("leaves the mic closed when no item needs singing", async () => {
-    let created = 0;
-    const h = await makeHarness({ budgetSec: 90, inputSource: "midi", withSingInput: false });
-    h.deps.createSingInput = () => {
-      created++;
-      return h.singInput;
-    };
-    await h.machine.start();
-    expect(created).toBe(0);
+    h.machine.next();
+    for (let i = 0; i < 2; i++) {
+      const s = await until(h, isListening());
+      expect(s).toMatchObject({ phase: "play", cue: false });
+      expect(h.machine.debug().expected?.sing).toBeUndefined();
+      await answer(h);
+      await until(h, isKind("feedback"));
+      h.machine.next();
+    }
+    const events = await h.log();
+    expect(byType(events, "item.presented").map((p) => p.generator)).toContain("degreeSing");
+    const attempts = byType(events, "attempt.completed");
+    expect(attempts.every((a) => a.inputSource === "tap")).toBe(true);
+    expect(attempts.every((a) => a.subScores?.sing === undefined)).toBe(true);
   });
 });
 
@@ -361,7 +353,7 @@ describe("stimulus gating (T1.6)", () => {
     expect(h.input.emitNote(noteAt(60, h.clock.ctxMs, "mic"))).toBeUndefined();
     expect(h.input.emitFrame({ hz: 261.63, atMs: h.clock.ctxMs })).toBeUndefined();
 
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const end = h.machine.debug().stimulusEndMs ?? 0;
     expect(h.clock.ctxMs).toBe(end + 150);
 
@@ -383,7 +375,7 @@ describe("stimulus gating (T1.6)", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const end = h.machine.debug().stimulusEndMs ?? 0;
     expect(h.clock.ctxMs).toBe(end + 400);
     h.input.emitNote(noteAt(targetOf(h), end + 300, "mic"));
@@ -396,7 +388,7 @@ describe("stimulus gating (T1.6)", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     // Listening: the adapter delivers.
     expect(h.input.emitNote(noteAt(60, h.clock.ctxMs + 500, "mic"))).toBeDefined();
     h.machine.answerDone();
@@ -411,7 +403,7 @@ describe("latency offsets", () => {
     const h = await makeHarness({ mode: "away", budgetSec: 90, latency: { tapMs: 50 } });
     await h.machine.start();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const end = h.machine.debug().stimulusEndMs ?? 0;
     const play = h.machine.debug().expected?.play;
     if (play?.kind !== "pitchClass") throw new Error("expected a pitch class target");
@@ -432,7 +424,7 @@ describe("latency offsets", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const end = h.machine.debug().stimulusEndMs ?? 0;
     const play = h.machine.debug().expected?.play;
     if (play?.kind !== "pitchClass") throw new Error("expected a pitch class target");
@@ -450,7 +442,7 @@ describe("latency offsets", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const end = h.machine.debug().stimulusEndMs ?? 0;
     const play = h.machine.debug().expected?.play;
     if (play?.kind !== "pitchClass") throw new Error("expected a pitch class target");
@@ -466,7 +458,7 @@ describe("latency offsets", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const end = h.machine.debug().stimulusEndMs ?? 0;
     const play = h.machine.debug().expected?.play;
     if (play?.kind !== "pitchClass") throw new Error("expected a pitch class target");
@@ -483,7 +475,7 @@ describe("response completion", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const window = h.machine.debug().expected?.responseWindowMs ?? 0;
     const end = h.machine.debug().stimulusEndMs ?? 0;
     await h.advance(end + window - h.clock.ctxMs - 100);
@@ -501,7 +493,7 @@ describe("skip", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const window = h.machine.debug().expected?.responseWindowMs;
     h.machine.skip();
     await h.machine.settled();
@@ -604,7 +596,7 @@ describe("feedback fading", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     h.machine.skip();
     await h.machine.settled();
     const fb = h.machine.state;
@@ -637,7 +629,7 @@ describe("feedback fading", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     h.machine.answerDone();
     h.machine.answerDone();
     await h.machine.settled();
@@ -676,7 +668,7 @@ describe("backgrounding", () => {
     await h.machine.start();
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     const stopsBefore = h.player.stops;
     const playsBefore = h.player.plays.length;
     h.machine.pause();
@@ -691,7 +683,7 @@ describe("backgrounding", () => {
     h.machine.resume();
     expect(h.machine.state.kind).toBe("presenting");
     expect(h.player.plays).toHaveLength(playsBefore + 1);
-    await until(h, isListening("play"));
+    await until(h, isListening());
     await answer(h);
     await until(h, isKind("feedback"));
     const presented = byType(await h.log(), "item.presented");
@@ -741,7 +733,7 @@ describe("open sessions", () => {
     await h0.machine.start();
     h0.machine.next();
     h0.machine.next();
-    await until(h0, isListening("play"));
+    await until(h0, isListening());
     // The page is reloaded here: the store keeps a session.started without a session.ended.
     const history = await h0.log();
     const orphan = byType(history, "session.started")[0]?.sessionId ?? "";
@@ -793,7 +785,7 @@ describe("headphones prompt", () => {
     // No headphones selects the long gate tail.
     h.machine.next();
     h.machine.next();
-    await until(h, isListening("play"));
+    await until(h, isListening());
     expect(h.clock.ctxMs).toBe((h.machine.debug().stimulusEndMs ?? 0) + 400);
   });
 
@@ -807,10 +799,8 @@ describe("headphones prompt", () => {
       budgetSec: 90,
       headphones: undefined,
       askHeadphones: true,
-      withSingInput: false,
     });
-    // Tap input and no sung item reaches the mic: here a sung item is planned but there is no
-    // factory, so the mic is never used and the question is skipped.
+    // Tap input never reaches the mic, so the question is skipped.
     await tap.machine.start();
     expect(kinds(tap.states)).not.toContain("headphones");
   });

@@ -18,11 +18,7 @@ const node: SkillNode = {
 };
 
 function generate(prog: string[], seed = 7) {
-  return bassMotion.generate(
-    node,
-    { prog },
-    { rng: createRng(seed), voiceRange: { low: 48, high: 72 }, mode: "away" },
-  );
+  return bassMotion.generate(node, { prog }, { rng: createRng(seed), mode: "away" });
 }
 
 function play(midis: number[], source: NoteEvent["source"] = "tap"): NoteEvent[] {

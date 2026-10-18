@@ -1,5 +1,6 @@
 import {
   FIXTURE_BASS_F3_G_MAJOR,
+  FIXTURE_GRAND_STAFF,
   FIXTURE_INTERVAL_C3_G3,
   composeSession,
   getGenerator,
@@ -257,9 +258,9 @@ describe("prompts and the item view", () => {
       play: { kind: "exactPitch", targetMidi: 54 },
       responseWindowMs: 5000,
     };
-    expect(promptFor("play", ["play"], expected, "instrument")).toBe("Play it");
-    expect(promptFor("play", ["play"], expected, "away")).toBe("Tap it on the keyboard");
-    expect(promptFor("sing", ["sing", "play"], expected, "instrument", true)).toBe("Sing it");
+    expect(promptFor(expected, "instrument")).toBe("Play it");
+    expect(promptFor(expected, "away")).toBe("Tap it on the keyboard");
+    expect(promptFor(expected, "instrument", true)).toBe("Play this note");
   });
 });
 
@@ -526,6 +527,16 @@ describe("feedbackMarks", () => {
       { noteId: "n1", kind: "wrong" },
       { noteId: "n2", kind: "target" },
     ]);
+  });
+
+  it("marks a performance's wrong or missed notes by id, a chord tone marking its chord", () => {
+    const marks = feedbackMarks(FIXTURE_GRAND_STAFF, false, [
+      { code: "note.wrong", detail: { id: "n2", measure: 1, beat: 2, hand: "rh" } },
+      { code: "note.missed", detail: { id: "n6.1", measure: 1, beat: 1, hand: "lh" } },
+      { code: "note.late", detail: { id: "n7", measure: 2, beat: 1, hand: "lh" } },
+    ]);
+    expect(marks.filter((m) => m.kind === "wrong").map((m) => m.noteId)).toEqual(["n2", "n6"]);
+    expect(marks).toHaveLength(8);
   });
 });
 

@@ -46,7 +46,6 @@ const MAJOR_KEYS = ALL_KEYS.filter((k) => k.mode === "major");
 const PROGS = enumerateBassMotions(CHORDS);
 const ctx = (seed: number, preferredKey?: Key): GenerateContext => ({
   rng: createRng(seed),
-  voiceRange: { low: 48, high: 72 },
   mode: "instrument",
   ...(preferredKey === undefined ? {} : { preferredKey }),
 });

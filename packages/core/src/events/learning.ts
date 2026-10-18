@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  MAX_BLOB_BYTES,
+  baseContentType,
+  isAllowedBlobType,
+  isValidBlobName,
+} from "../blobs/index.js";
 import { GeneratorIdSchema } from "../graph/schema.js";
 import { InputSourceSchema } from "../input/types.js";
 import { JsonObjectSchema } from "../json.js";
@@ -189,3 +195,44 @@ export const SessionEndedV1 = z.strictObject({
   sessionId: ulid,
   reason: z.enum(["completed", "abandoned", "timeout"]),
 });
+
+/** The longest benchmark take (R28): three minutes. */
+export const MAX_BENCHMARK_MS = 180_000;
+/** A calendar month, "YYYY-MM". */
+export const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+/** `benchmark-<ulid>.<ext>`: the ULID is the benchmark id. */
+export const BENCHMARK_BLOB_KEY_REGEX =
+  /^benchmark-([0-7][0-9A-HJKMNP-TV-Z]{25})\.([a-z0-9]{1,8})$/;
+
+/**
+ * A monthly benchmark take was recorded (T6.5, R28): the learner played a whole library piece from
+ * its score and the audio was stored as the blob `blobKey`. Not graded. `month` is the learner-local
+ * month of the recording. One benchmark per month: the latest event for a month by `(at, id)`
+ * replaces earlier ones.
+ */
+export const BenchmarkRecordedV1 = z
+  .strictObject({
+    ...envelopeShape,
+    type: z.literal("benchmark.recorded"),
+    v: z.literal(1),
+    benchmarkId: ulid,
+    pieceId: z
+      .string()
+      .regex(/^piece\.[a-z0-9-]+$/)
+      .refine((id) => !USER_PIECE_ID_REGEX.test(id), "must be a library piece"),
+    month: z.string().regex(MONTH_REGEX, "must be YYYY-MM"),
+    blobKey: z.string().regex(BENCHMARK_BLOB_KEY_REGEX).refine(isValidBlobName),
+    contentType: z
+      .string()
+      .refine(
+        (t) => isAllowedBlobType(t) && t === baseContentType(t),
+        "must be an accepted audio type without parameters",
+      ),
+    durationMs: z.int().min(1).max(MAX_BENCHMARK_MS),
+    sizeBytes: z.int().min(1).max(MAX_BLOB_BYTES),
+  })
+  .refine((e) => BENCHMARK_BLOB_KEY_REGEX.exec(e.blobKey)?.[1] === e.benchmarkId, {
+    message: "blobKey must name the benchmark id",
+    path: ["blobKey"],
+  });
+export type BenchmarkRecorded = z.infer<typeof BenchmarkRecordedV1>;

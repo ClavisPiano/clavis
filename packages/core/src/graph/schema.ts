@@ -51,8 +51,8 @@ export type GeneratorId = z.infer<typeof GeneratorIdSchema>;
 /**
  * Skill graph node (spec 3.2). One deliberate deviation from the spec: a node
  * lists several `itemGenerators` (first is the default) rather than a single
- * `itemGenerator`, because degree nodes are drilled both by `degreeSing`
- * (sing then play) and `degreeId` (play only, and the Away tap variant).
+ * `itemGenerator`, because degree nodes list both `degreeSing` and `degreeId`. Since R29 the two
+ * behave the same (play only, and the Away tap variant); `degreeSing` is a historical name.
  */
 export const SkillNodeSchema = z.object({
   id: z.string().min(1),

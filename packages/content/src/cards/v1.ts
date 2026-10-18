@@ -230,7 +230,7 @@ export const CARDS_V1: unknown[] = [
     howTo: [
       "Listen to the cadence, then one chord held for two beats.",
       "Tap the button that names its quality, such as major or minor.",
-      "There is nothing to play or sing. Away mode works the same way.",
+      "There is nothing to play: you choose an answer. Away mode works the same way.",
       "Quick answers count for more than slow ones, but get it right first.",
     ],
     examples: [
@@ -266,7 +266,7 @@ export const CARDS_V1: unknown[] = [
     howTo: [
       "Listen to the cadence, then one progression.",
       "Tap the progression you heard. The Roman numerals show the chords, such as I-V-vi-IV.",
-      "There is nothing to play or sing. Away mode works the same way.",
+      "There is nothing to play: you choose an answer. Away mode works the same way.",
       "Quick answers count for more than slow ones, but get it right first.",
     ],
     examples: [
@@ -302,7 +302,7 @@ export const CARDS_V1: unknown[] = [
     howTo: [
       "Listen to two warm-up chords, then the two chord ending.",
       "Tap the name of the cadence you heard.",
-      "There is nothing to play or sing. Away mode works the same way.",
+      "There is nothing to play: you choose an answer. Away mode works the same way.",
       "Quick answers count for more than slow ones, but get it right first.",
     ],
     examples: [
@@ -339,7 +339,7 @@ export const CARDS_V1: unknown[] = [
       "Listen to the minor cadence, then one progression.",
       "Tap the progression you heard. The Roman numerals show the chords, such as i-iv-v.",
       "A capital numeral is a major chord and a small one is minor.",
-      "There is nothing to play or sing. Away mode works the same way.",
+      "There is nothing to play: you choose an answer. Away mode works the same way.",
     ],
     examples: [
       {
@@ -378,7 +378,7 @@ export const CARDS_V1: unknown[] = [
       "Listen to the cadence, then one progression with a colour chord.",
       "Tap the progression you heard, such as I-bVII-IV-I.",
       "A small b before a numeral means that chord is lowered a half step.",
-      "There is nothing to play or sing. Away mode works the same way.",
+      "There is nothing to play: you choose an answer. Away mode works the same way.",
     ],
     examples: [
       {
@@ -535,14 +535,14 @@ export const CARDS_V1: unknown[] = [
     title: "Playing a heard melody",
     body: [
       "Playing by ear means hearing a tune and finding it on your instrument with no music in front of you. Start with a short, simple tune: it moves mostly by step, begins on 1, 3 or 5, and comes to rest on 1, home.",
-      "Singing it first is the trick. If you can sing the tune, you have heard it in your head, and your fingers only need to follow. Hear the shape and the rhythm as well as the notes: where it rises, where it settles, where it breathes.",
+      "Hearing it in your head first is the trick. Sing it or hum it, out loud or silently: if you can hold the tune in your head, your fingers only need to follow. Hear the shape and the rhythm as well as the notes: where it rises, where it settles, where it breathes. Nobody checks your voice, so this step is for you.",
       "Afterwards the score appears, so you can check what you did against what is written.",
     ],
     howTo: [
       "Listen to the cadence, then the whole tune. Replay it if you need to.",
-      "Sing it back. Any octave will do, but every note and the order must be right.",
-      "Now play it on your piano, in the exact octave you heard. Your rhythm is judged against your own pace.",
-      "Both parts count: a wrong sung note is a miss, even if the playing is right. The score then shows what you got right and wrong.",
+      "Sing or hum it, out loud or in your head. Hear it again as often as you like, and press Ready when you are sure of it. Nothing listens to your voice and nothing is timed.",
+      "Now play it on your piano, in the exact octave you heard. Only what you play is marked, and your rhythm is judged against your own pace.",
+      "The score then shows what you got right and wrong.",
     ],
     examples: [
       {

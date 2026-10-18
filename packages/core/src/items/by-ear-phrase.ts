@@ -10,12 +10,18 @@ import { writtenAccidental } from "../theory/staff.js";
 import { cadenceStimulus, chooseKey, keyToJson, latencyField } from "./build.js";
 import { itemId } from "./ids.js";
 import { PIECE_KEYBOARD_MARGIN, responseWindowMs } from "./piece-line.js";
-import type { GenerateContext, Generator, ItemInstance, ItemParams } from "./types.js";
+import {
+  DEFAULT_KEYBOARD_RANGE,
+  type GenerateContext,
+  type Generator,
+  type ItemInstance,
+  type ItemParams,
+} from "./types.js";
 
 /**
  * By-ear melodies (BYEAR, T7.2): a short diatonic tune is heard after the key-setting cadence with
- * no notation. The learner sings it back, plays it back, and then the score is revealed to check
- * (spec 9, stages 1, 2, 4 and 7). Both parts must be right (R12) and errors name their part.
+ * no notation. The learner is cued to sing or hum it back (ungraded, R29), plays it back, and then
+ * the score is revealed to check (spec 9, stages 1, 2, 4 and 7). Only the played line is graded.
  *
  * Stages the spec describes but this generator leaves out: "find the tonic" (the cadence already
  * sets home, and a played tonic adds a third response to the loop), "bass" and "harmonise" (they
@@ -27,11 +33,9 @@ import type { GenerateContext, Generator, ItemInstance, ItemParams } from "./typ
 export const BYEAR_BARS = [4, 6, 8] as const;
 /** Melodies per length. Slot numbers are the item identity within a length (R1). */
 export const BYEAR_SLOTS_PER_LENGTH = 6;
-/** Quarter notes per minute. A gentle pace: the learner sings and plays from memory. */
+/** Quarter notes per minute. A gentle pace: the learner audiates and plays from memory. */
 export const BYEAR_TEMPO_BPM = 80;
 export const BYEAR_BEATS_PER_BAR = 4;
-/** Sung notes must be within this many cents of the tune (spec 7). */
-const SUNG_TOLERANCE_CENTS = 50;
 /** A little air between notes so each one is heard as a new note. */
 const NOTE_GAP = 0.92;
 /** The tune spans at most an octave (7 scale steps). */
@@ -247,8 +251,8 @@ export const byEarPhrase: Generator = {
     const seed = rng.int(0, 0x7fffffff);
     const melody = melodyFor(bars, slot);
 
-    // In the singer's comfortable range, so the tune can be sung back. The keyboard follows it.
-    const range: VoiceRange = ctx.voiceRange;
+    // The register follows the keyboard (R29): the tune is played back, not sung.
+    const range: VoiceRange = ctx.keyboardRange ?? DEFAULT_KEYBOARD_RANGE;
     const { tonicMidi } = tonicMidiForRange(key, range, {
       low: Math.min(...melody.degrees),
       high: Math.max(...melody.degrees),
@@ -301,8 +305,8 @@ export const byEarPhrase: Generator = {
       stimulus: { events, tempoBpm },
       reveal: melodyScore(melody, key, tonicMidi, midi),
       inputRange,
+      cue: true,
       expected: {
-        sing: { kind: "sungSequence", midi, toleranceCents: SUNG_TOLERANCE_CENTS },
         play: {
           kind: "line",
           midi,

@@ -18,7 +18,6 @@ function degreeItem(nodeId: string, degree: number, tonic: string, mode: "major"
     {
       rng: createRng(1),
       preferredKey: { tonic, mode },
-      voiceRange: { low: 48, high: 72 },
       mode: "instrument",
     },
   );
@@ -62,7 +61,7 @@ describe("keyNotes", () => {
     const cell = getGenerator("cellEcho").generate(
       node("ear.cells.major.2-4"),
       { cell: [1, 2, 3] },
-      { rng: createRng(1), voiceRange: { low: 48, high: 72 }, mode: "instrument" },
+      { rng: createRng(1), mode: "instrument" },
     );
     expect(keyNotes(cell, node("ear.cells.major.2-4"))).toBeUndefined();
   });
@@ -82,7 +81,6 @@ describe("answerLine", () => {
       {
         rng: createRng(1),
         preferredKey: { tonic: "G", mode: "major" },
-        voiceRange: { low: 48, high: 72 },
         mode: "instrument",
       },
     );

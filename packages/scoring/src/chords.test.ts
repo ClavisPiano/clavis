@@ -214,11 +214,9 @@ describe("scoreAttempt with a chordLine target", () => {
       notes,
       stimulusEndMs: 0,
       source: "midi",
-      part: "play",
     });
     expect(r.outcome.correct).toBe(true);
     expect(r.subScores.play).toBeGreaterThan(0.95);
-    expect(r.subScores.sing).toBeUndefined();
 
     const wrong = scoreAttempt({
       expected: {
@@ -230,6 +228,154 @@ describe("scoreAttempt with a chordLine target", () => {
       source: "midi",
     });
     expect(wrong.outcome.correct).toBe(false);
-    expect(wrong.errors[0]).toMatchObject({ code: "chord.wrong-tone", detail: { part: "play" } });
+    expect(wrong.errors[0]?.code).toBe("chord.wrong-tone");
+  });
+});
+
+/*
+ * A chord read from the bass staff (T5.10): one chord, graded on its tones only. F major in first
+ * inversion, A2 C3 F3, held as a whole note; the score was shown at 0.
+ */
+describe("scoreChordLine with gradeTiming false (one chord, tones only)", () => {
+  const ONE: ChordLineTarget["chords"] = [
+    { roman: "IV", symbol: "F/A", midi: [45, 48, 53], onsetBeats: 0, durationBeats: 4 },
+  ];
+  const AT = 2400;
+  const block = (at = AT): Play[] => [45, 48, 53].map((pitch) => ({ pitch, at }));
+
+  function tones(plays: Play[], gradeTiming = false, offsetAfterMs?: number) {
+    return scoreChordLine({
+      chords: ONE,
+      tempoBpm: 60,
+      notes: plays.map((p) => ({
+        pitch: p.pitch,
+        onsetMs: p.at,
+        ...(offsetAfterMs === undefined ? {} : { offsetMs: p.at + offsetAfterMs }),
+        confidence: 1,
+        source: "midi" as const,
+      })),
+      stimulusEndMs: 0,
+      responseWindowMs: 10000,
+      source: "midi",
+      gradeTiming,
+    });
+  }
+
+  const cases: {
+    name: string;
+    play: () => Play[];
+    correct: boolean;
+    codes: string[];
+    detail?: Record<string, unknown>;
+  }[] = [
+    { name: "the chord played together", play: () => block(), correct: true, codes: [] },
+    {
+      name: "the chord found one finger at a time over 250 ms",
+      play: () => block().map((p, i) => ({ ...p, at: p.at + i * 125 })),
+      correct: true,
+      codes: [],
+    },
+    {
+      name: "the chord played late in the window is not late",
+      play: () => block(9000),
+      correct: true,
+      codes: [],
+    },
+    {
+      name: "a wrong tone (G for F)",
+      play: () => tweak(block(), (p) => (p.pitch === 53 ? { ...p, pitch: 55 } : p)),
+      correct: false,
+      codes: ["chord.wrong-tone"],
+      detail: { index: 0, roman: "IV", symbol: "F/A", expected: 53, played: 55 },
+    },
+    {
+      name: "the root position instead of the first inversion",
+      play: () => tweak(block(), (p) => (p.pitch === 53 ? { ...p, pitch: 41 } : p)),
+      correct: false,
+      codes: ["chord.wrong-tone"],
+      detail: { expected: 53, played: 41 },
+    },
+    {
+      name: "the right chord an octave too low",
+      play: () => block().map((p) => ({ ...p, pitch: p.pitch - 12 })),
+      correct: false,
+      codes: ["chord.wrong-tone", "chord.wrong-tone", "chord.wrong-tone"],
+    },
+    {
+      name: "a tone left out",
+      play: () => tweak(block(), (p) => (p.pitch === 48 ? undefined : p)),
+      correct: false,
+      codes: ["chord.missing-tone"],
+      detail: { expected: 48 },
+    },
+    {
+      name: "one stray key before the chord is forgiven but named",
+      play: () => [{ pitch: 40, at: 1200 }, ...block()],
+      correct: true,
+      codes: ["chord.extra"],
+      detail: { count: 1, played: 40 },
+    },
+    {
+      name: "a wrong chord, then the right one",
+      play: () => [...block(1200).map((p) => ({ ...p, pitch: p.pitch + 2 })), ...block()],
+      correct: false,
+      codes: ["chord.extra"],
+      detail: { count: 3 },
+    },
+  ];
+
+  it.each(cases.map((c) => [c.name, c] as const))("%s", (_name, c) => {
+    const r = tones(c.play());
+    expect(r.outcome.correct).toBe(c.correct);
+    expect(codes(r.errors)).toEqual(c.codes);
+    if (c.detail !== undefined) expect(r.errors[0]?.detail).toMatchObject(c.detail);
+    expect(r.outcome.partial).toBeGreaterThanOrEqual(0);
+    expect(r.outcome.partial).toBeLessThanOrEqual(1);
+  });
+
+  it("never reports timing, and scores a right chord 1 however it was held", () => {
+    for (const held of [50, 400, 3000]) {
+      const r = tones(block(), false, held);
+      expect(r.outcome.correct).toBe(true);
+      expect(r.outcome.partial).toBe(1);
+    }
+    const rolled = block().map((p, i) => ({ ...p, at: p.at + i * 125 }));
+    expect(tones(rolled).outcome.partial).toBe(1);
+    // Graded for timing, the same rolled chord is three onsets, not one chord.
+    expect(tones(rolled, true).outcome.correct).toBe(false);
+  });
+
+  it("measures latency from the score being shown, to the first note", () => {
+    expect(tones(block()).outcome.latencyMs).toBe(AT);
+    expect(tones([{ pitch: 40, at: 1200 }, ...block()]).outcome.latencyMs).toBe(1200);
+  });
+
+  it("times out with nothing played", () => {
+    const r = tones([]);
+    expect(r.outcome.correct).toBe(false);
+    expect(r.outcome.latencyMs).toBe(10000);
+    expect(codes(r.errors)).toEqual(["response.timeout", "chord.missed"]);
+  });
+
+  it("is passed through by scoreAttempt from the target", () => {
+    const notes: NoteEvent[] = block().map((p, i) => ({
+      pitch: p.pitch,
+      onsetMs: p.at + i * 125,
+      confidence: 1,
+      source: "midi",
+    }));
+    const target = { kind: "chordLine", chords: ONE, tempoBpm: 60, beatsPerBar: 4 } as const;
+    const run = (gradeTiming?: boolean) =>
+      scoreAttempt({
+        expected: {
+          play: gradeTiming === undefined ? target : { ...target, gradeTiming },
+          responseWindowMs: 10000,
+        },
+        notes,
+        stimulusEndMs: 0,
+        source: "midi",
+      }).outcome.correct;
+    expect(run(false)).toBe(true);
+    expect(run()).toBe(false);
   });
 });
