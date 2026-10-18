@@ -10,7 +10,7 @@ Deploys run in Cloudflare Workers Builds, connected to this repository from the 
 | --- | --- |
 | Root directory | `/` (the pnpm workspace root) |
 | Build command | `pnpm --filter @clavis/web build` |
-| Deploy command | `npx wrangler d1 migrations apply clavis --remote --config apps/worker/wrangler.jsonc && npx wrangler deploy --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
+| Deploy command | `pnpm --filter @clavis/worker run deploy:ci` |
 | Non-production branch deploy command | `npx wrangler versions upload --config apps/worker/wrangler.jsonc --var VERSION:$WORKERS_CI_COMMIT_SHA` |
 | Production branch | `main` |
 | Build variable | `NODE_VERSION=22` if `.nvmrc` is not picked up |
@@ -18,7 +18,7 @@ Deploys run in Cloudflare Workers Builds, connected to this repository from the 
 - The Worker name in the dashboard must match `name` in `apps/worker/wrangler.jsonc` (`clavis`), or the build fails.
 - The static assets directory comes from `wrangler.jsonc` (`../web/build`, relative to the config file), so no output directory is set in the dashboard.
 - `/api/health` reports the deployed commit sha as `version`.
-- Migrations run first in the deploy command, so a new migration is live before the code that needs it. The step is a no-op when nothing is pending, and a failed migration stops the deploy. Because the old Worker keeps serving until the deploy finishes, write every migration so the previous code still works against it (add columns and tables, never drop or rename in the same release; remove old columns in a later release). The Workers Builds API token needs D1 edit permission (Workers & Pages, clavis, Settings, Build, API token).
+- The `deploy:ci` script (`apps/worker/package.json`) runs `wrangler d1 migrations apply clavis --remote` and then `wrangler deploy --var VERSION:$WORKERS_CI_COMMIT_SHA`, so the exact steps live in the repo and the dashboard only names the script. Migrations run first, so a new migration is live before the code that needs it. The step is a no-op when nothing is pending, and a failed migration stops the deploy. Because the old Worker keeps serving until the deploy finishes, write every migration so the previous code still works against it (add columns and tables, never drop or rename in the same release; remove old columns in a later release). The Workers Builds API token needs D1 edit permission (Workers & Pages, clavis, Settings, Build, API token).
 - Every push to `main` deploys, whether or not CI is green. Merge only green PRs. Workers Builds cannot wait for GitHub checks. Gating a deploy on CI means deploying from a GitHub Actions job that runs after CI passes, which needs a Cloudflare API token stored as a repository secret (this repo deliberately holds none today). Until that is decided, protect `main` with the required `check` and `e2e` status checks so only green PRs can be merged.
 - Other branches upload a non-production version with a preview URL, shown on the PR by the Cloudflare GitHub app. Preview URLs must be enabled for the Worker (Settings, Domains & Routes, Preview URLs). Preview versions get no production traffic.
 

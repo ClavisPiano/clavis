@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "pnpm --filter @clavis/web build && wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:ci": "wrangler d1 migrations apply clavis --remote && wrangler deploy --var VERSION:${WORKERS_CI_COMMIT_SHA:-dev}",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },
