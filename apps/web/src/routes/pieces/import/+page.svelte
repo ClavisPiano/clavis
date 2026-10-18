@@ -207,6 +207,7 @@
       <NotationView
         {port}
         label={`Staff showing phrase ${String(phraseIndex + 1)} of ${String(phraseCount)}`}
+        revealPitches
       />
       {#if previewFailed}
         <p class="muted" data-testid="preview-failed">

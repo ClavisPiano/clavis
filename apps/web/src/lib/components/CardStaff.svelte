@@ -22,4 +22,4 @@
   });
 </script>
 
-<NotationView {port} {label} maxWidth="16rem" />
+<NotationView {port} {label} maxWidth="16rem" revealPitches />
