@@ -137,6 +137,28 @@ describe("DELETE /api/me", () => {
     expect(bucket.keys()).toEqual([]);
   });
 
+  it("sweeps again after the D1 delete, so an upload that raced the first sweep is removed", async () => {
+    const bucket = fakeBucket();
+    let raced = false;
+    const racing = {
+      ...bucket,
+      list: bucket.list.bind(bucket),
+      delete: (keys: string | string[]) => {
+        const done = bucket.delete(keys);
+        if (!raced) {
+          // Another device's upload lands right after the first sweep deleted its objects.
+          raced = true;
+          void bucket.put("u1/late.webm", new Uint8Array([9]));
+        }
+        return done;
+      },
+    } as unknown as R2Bucket;
+    const { env } = makeEnv({ BLOBS: racing });
+    await seed(env, "u1", 1, ["a.webm"]);
+    expect((await del(env, "u1")).status).toBe(200);
+    expect(bucket.keys()).toEqual([]);
+  });
+
   it("works for an account with nothing stored", async () => {
     const { env } = makeEnv();
     expect((await del(env, "u3")).status).toBe(200);

@@ -58,6 +58,14 @@ async function deleteAccount(request: Request, env: Env): Promise<Response> {
     console.error("account deletion failed", error);
     return json({ error: "internal" }, 500);
   }
+  // An upload from another device can land between the first sweep and the D1 delete. Uploads are
+  // refused once the user row is gone, so one more sweep leaves nothing behind. The account is
+  // already deleted, so a failure here is logged, not reported as a failed deletion.
+  try {
+    await deleteRecordings(env, userId);
+  } catch (error) {
+    console.error("account deleted but a late recording sweep failed", error);
+  }
   const headers = new Headers(API_HEADERS);
   for (const cookie of expiredCookies()) headers.append("set-cookie", cookie);
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
@@ -102,6 +110,7 @@ async function* exportChunks(env: Env, userId: string): AsyncGenerator<string> {
   do {
     const page = await env.BLOBS.list({
       prefix: `${userId}/`,
+      limit: R2_BATCH,
       ...(cursor === undefined ? {} : { cursor }),
     });
     for (const object of page.objects) {
