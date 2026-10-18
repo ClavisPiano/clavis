@@ -44,6 +44,8 @@ export interface AuthRepo {
   listCredentials(userId: string): Promise<CredentialRecord[]>;
   /** Record a successful assertion. */
   touchCredential(id: string, counter: number, nowMs: number): Promise<void>;
+  /** How many accounts were created at or after `sinceMs`. */
+  countUsersSince(sinceMs: number): Promise<number>;
   userExists(userId: string): Promise<boolean>;
   /** The user's session epoch, or null when the user does not exist. */
   sessionEpoch(userId: string): Promise<number | null>;
@@ -158,6 +160,14 @@ export function createAuthRepo(sql: AsyncSql): AuthRepo {
         nowMs,
         id,
       );
+    },
+
+    async countUsersSince(sinceMs) {
+      const rows = await sql.all<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM users WHERE created_at >= ?",
+        sinceMs,
+      );
+      return rows[0]?.n ?? 0;
     },
 
     async userExists(userId) {

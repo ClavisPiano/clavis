@@ -74,6 +74,10 @@ pnpm --filter @clavis/worker exec wrangler d1 migrations apply clavis --local
 
 Each user row has a `session_epoch` (migration `0003_session_epoch.sql`). Tokens carry the epoch they were issued under (`ep`, 0 when absent), and every authenticated request checks it with one indexed D1 read, which also rejects tokens for users that no longer exist. `POST /api/auth/logout/all` bumps the epoch, ending every session on every device. Using a recovery code bumps it too, because a recovery usually means a lost or stolen passkey. Plain `logout` still only clears this device's cookie. A key id in the token for `SESSION_SECRET` rotation is not implemented yet.
 
+### Registration cap
+
+`register/options` and `register/verify` return 503 `registration_paused` (Retry-After 3600) when `MAX_REGISTRATIONS_PER_HOUR` (100, in `auth/handlers.ts`) accounts were created in the last hour, counted from `users.created_at` (index added by `0005_users_created_at.sql`). It is global, so it bounds a flood spread across many IPs; the per-IP limiters stay as the first line. The cap logs a warning when it trips, and a limiter that errors logs `auth rate limiter failed` and lets the request through. Sign in is never capped. Raising the cap is a code change and a deploy.
+
 ## Practice cue (Web Push)
 
 The practice cue (spec 14) is a daily push notification at a time the learner picks. The Worker sends it from a cron trigger (`triggers.crons` is `*/15 * * * *` in `wrangler.jsonc`, so cues normally land within 15 minutes of the chosen time).
