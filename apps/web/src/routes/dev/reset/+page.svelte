@@ -3,6 +3,7 @@
   import { resolve } from "$app/paths";
   import { makeBackupFile, saveFile } from "../../../lib/backup-file";
   import { useLearner } from "../../../lib/learner.svelte";
+  import { recordBackupNow } from "../../../lib/backup-nudge";
   import { isSignedInHint } from "../../../lib/sync/hint";
   import { SYNCED_NOTICE } from "../../../lib/sync/notice";
   import { resetEverything, resetProgress } from "../../../lib/reset";
@@ -41,6 +42,7 @@
           contentVersion: graph.contentVersion,
         });
         saveFile(file);
+        recordBackupNow();
       }
       if (kind === "progress") await resetProgress(store);
       else await resetEverything(store, local());

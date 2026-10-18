@@ -18,6 +18,17 @@
   import { pieceCard } from "../lib/piece-card";
   import { PLACEMENT_SKIPPED_META_KEY, shouldOfferPlacement } from "../lib/placement";
   import { benchmarkMonth, needsBenchmark } from "@clavis/core";
+  import { makeBackupFile, saveFile } from "../lib/backup-file";
+  import {
+    readLastBackup,
+    readNudgeDismissed,
+    readPersistState,
+    recordBackup,
+    recordNudgeDismissed,
+    shouldNudgeBackup,
+    type PersistState,
+  } from "../lib/backup-nudge";
+  import { isSignedInHint } from "../lib/sync/hint";
 
   const learner = useLearner();
   let now = $state(Date.now());
@@ -27,7 +38,31 @@
   /** Undefined until the skip flag has been read, so the offer never flashes and vanishes. */
   let placementSkipped = $state<boolean | undefined>();
 
+  /** T8.1: inputs for the backup card, read once from this device's localStorage. */
+  let backupInputs = $state<
+    | { persist: PersistState; signedIn: boolean; lastBackupAt?: number; dismissedAt?: number }
+    | undefined
+  >();
+  let backupStatus = $state("");
+
+  function localStore(): Storage | undefined {
+    try {
+      return localStorage;
+    } catch {
+      return undefined;
+    }
+  }
+
   onMount(() => {
+    const local = localStore();
+    const lastBackupAt = readLastBackup(local);
+    const dismissedAt = readNudgeDismissed(local);
+    backupInputs = {
+      persist: readPersistState(local),
+      signedIn: isSignedInHint(),
+      ...(lastBackupAt === undefined ? {} : { lastBackupAt }),
+      ...(dismissedAt === undefined ? {} : { dismissedAt }),
+    };
     let dismissed = false;
     try {
       dismissed = localStorage.getItem(HINT_DISMISSED_KEY) !== null;
@@ -90,6 +125,18 @@
   const benchmarkDue = $derived(
     snap && !firstRun ? needsBenchmark(snap, benchmarkMonth(now, deviceTzOffsetMin())) : false,
   );
+  const backupNudge = $derived(
+    snap && backupInputs && !firstRun
+      ? shouldNudgeBackup({
+          now,
+          signedIn: backupInputs.signedIn,
+          persist: backupInputs.persist,
+          eventCount: snap.eventCount,
+          lastBackupAt: backupInputs.lastBackupAt,
+          dismissedAt: backupInputs.dismissedAt,
+        })
+      : false,
+  );
   const cells = $derived(snap ? lastDays(snap, now, deviceTzOffsetMin()) : []);
   const week = $derived(weekProgress(cells, settings.weeklyTargetDays));
 
@@ -100,6 +147,32 @@
     } catch {
       // Best effort: the offer comes back next time.
     }
+  }
+
+  async function backUpNow() {
+    backupStatus = "";
+    try {
+      const { store, deviceId, graph } = learner.ctx;
+      const { file } = await makeBackupFile({
+        store,
+        deviceId,
+        contentVersion: graph.contentVersion,
+      });
+      saveFile(file);
+      const at = Date.now();
+      recordBackup(localStore(), at);
+      if (backupInputs) backupInputs = { ...backupInputs, lastBackupAt: at };
+      now = at;
+    } catch {
+      backupStatus = "The backup could not be saved. Try again.";
+    }
+  }
+
+  function snoozeBackup() {
+    const at = Date.now();
+    recordNudgeDismissed(localStore(), at);
+    if (backupInputs) backupInputs = { ...backupInputs, dismissedAt: at };
+    now = at;
   }
 
   function dismiss() {
@@ -224,6 +297,30 @@
     <a href={resolve("/progress/benchmarks/record")} data-testid="benchmark-record-link"
       >Record this month's benchmark</a
     >
+  </section>
+{/if}
+
+{#if backupNudge}
+  <section class="card" data-testid="backup-nudge" aria-labelledby="backup-h">
+    <h2 id="backup-h">Back up your practice</h2>
+    <p>
+      Your practice is stored only in this browser, which can clear it without warning. Save a
+      backup file, or <a href={resolve("/settings")}>create an account</a> to keep a copy online.
+    </p>
+    <div class="offer-actions">
+      <button
+        type="button"
+        class="button primary"
+        data-testid="backup-now"
+        onclick={() => void backUpNow()}
+      >
+        <strong>Save a backup</strong>
+      </button>
+      <button type="button" class="skip-offer" data-testid="backup-snooze" onclick={snoozeBackup}>
+        Not now
+      </button>
+    </div>
+    {#if backupStatus}<p role="status">{backupStatus}</p>{/if}
   </section>
 {/if}
 
