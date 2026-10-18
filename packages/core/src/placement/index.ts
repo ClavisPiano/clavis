@@ -9,4 +9,4 @@ export type {
   StageOutcome,
 } from "./types.js";
 export { mergePlacement, placementResults } from "./evaluate.js";
-export { nextPlacementStep, placementPlan } from "./plan.js";
+export { nextPlacementStep, placementPlan, type PlacementPlanOptions } from "./plan.js";

@@ -33,6 +33,8 @@ const EAR_DIATONIC = "ear.degrees.major.diatonic";
 const READ_LANDMARKS = "read.bass.landmarks";
 const READ_STEPS = "read.bass.steps";
 const READ_SKIPS = "read.bass.skips";
+const HANDS_LH = "hands.lh.triads.root";
+const HANDS_COORD = "hands.coord.basic";
 
 async function until(
   h: Harness,
@@ -79,9 +81,17 @@ async function runPlacement(
       h.machine.skip();
     } else {
       if (how === "slow") await h.advance(6000);
-      const expected = h.machine.debug().expected;
+      const debug = h.machine.debug();
+      const expected = debug.expected;
       if (!expected) throw new Error("no expected response");
-      playCorrect(h.input, expected, h.clock.ctxMs + 200);
+      // HANDS items keep time with a count-in: the first beat falls one beat after it ends.
+      const kind = expected.play?.kind;
+      const counted = kind === "chordLine" || kind === "performance";
+      playCorrect(
+        h.input,
+        expected,
+        counted ? (debug.stimulusEndMs ?? 0) + 700 : h.clock.ctxMs + 200,
+      );
     }
     await h.machine.settled();
   }
@@ -286,5 +296,116 @@ describe("placement mode: abandon and degraded runs", () => {
       expect(again.service.state.nodes[id]?.state).toBe("mastered");
     }
     expect((await again.log()).filter((e) => e.type === "placement.completed")).toHaveLength(2);
+  });
+});
+
+describe("placement mode: HANDS section (T5.9, R27)", () => {
+  const midi = (extra: HarnessOptions = {}): HarnessOptions =>
+    opts({ inputSource: "midi", ...extra });
+
+  it("runs with MIDI input: chords, then hands together, each placed at fluent", async () => {
+    const h = await makeHarness(midi());
+    const order = await runPlacement(h, () => "fast");
+    expect(order).toHaveLength(29);
+    expect(order.slice(27)).toEqual([HANDS_LH, HANDS_COORD]);
+
+    // Presented as in a session's Apply block, in C major, with a count-in.
+    const listening = h.states.filter(
+      (s): s is Extract<SessionState, { kind: "listening" }> =>
+        s.kind === "listening" && s.item.nodeId.startsWith("hands."),
+    );
+    expect(listening.map((s) => [s.item.generator, s.item.block])).toEqual([
+      ["lhPattern", "apply"],
+      ["coordTask", "apply"],
+    ]);
+    expect(listening[1]?.item.bothHands).toBe(true);
+    expect(listening.map((s) => s.item.chords?.map((c) => c.symbol))).toEqual([
+      ["C", "F", "G", "C"],
+      ["C", "F", "G", "C"],
+    ]);
+
+    const [event] = await placementEvents(h);
+    expect(event?.results[HANDS_LH]).toBe("fluent");
+    expect(event?.results[HANDS_COORD]).toBe("fluent");
+    expect((await h.log()).map((e) => e.type)).toEqual(["placement.completed"]);
+    const s = h.machine.state;
+    expect(s.kind === "summary" && s.summary.placed?.slice(-2).map((p) => p.state)).toEqual([
+      "fluent",
+      "fluent",
+    ]);
+    expect(h.service.state.nodes[HANDS_COORD]?.state).toBe("fluent");
+  });
+
+  it("places hands together at available when only the chords are right", async () => {
+    const h = await makeHarness(midi());
+    const order = await runPlacement(h, (n) => (n === HANDS_COORD ? "wrong" : "fast"));
+    expect(order.slice(-2)).toEqual([HANDS_LH, HANDS_COORD]);
+    const [event] = await placementEvents(h);
+    expect(event?.results[HANDS_LH]).toBe("fluent");
+    expect(event?.results[HANDS_COORD]).toBe("available");
+  });
+
+  it("skips hands together after a wrong chord item, which places the chords at available", async () => {
+    const h = await makeHarness(midi());
+    const order = await runPlacement(h, (n) => (n.startsWith("hands.") ? "wrong" : "fast"));
+    expect(order.at(-1)).toBe(HANDS_LH);
+    expect(order).not.toContain(HANDS_COORD);
+    const [event] = await placementEvents(h);
+    expect(event?.results[HANDS_LH]).toBe("available");
+    expect(event?.results[HANDS_COORD]).toBeUndefined();
+  });
+
+  it("runs even when EAR and READ stop at their first stage", async () => {
+    const h = await makeHarness(midi());
+    const order = await runPlacement(h, (n) => (n.startsWith("hands.") ? "fast" : "wrong"));
+    expect(order).toHaveLength(13 + 2);
+    const [event] = await placementEvents(h);
+    expect(event?.results).toEqual({
+      [EAR_135]: "available",
+      [READ_LANDMARKS]: "available",
+      [HANDS_LH]: "fluent",
+      [HANDS_COORD]: "fluent",
+    });
+  });
+
+  it("is skipped with the microphone, so the hands roots stay as they were (R9)", async () => {
+    const h = await makeHarness(opts({ inputSource: "mic" }));
+    const before = h.service.state.nodes[HANDS_LH]?.state;
+    const order = await runPlacement(h, () => "fast");
+    expect(order).toHaveLength(27);
+    expect(order.some((n) => n.startsWith("hands."))).toBe(false);
+    const [event] = await placementEvents(h);
+    expect(Object.keys(event?.results ?? {}).some((n) => n.startsWith("hands."))).toBe(false);
+    expect(before).toBe("available");
+    expect(h.service.state.nodes[HANDS_LH]?.state).toBe("available");
+    expect(h.service.state.nodes[HANDS_COORD]?.state).not.toBe("fluent");
+  });
+
+  it("is skipped, with READ, when notation cannot load", async () => {
+    const failing: NotationPort = {
+      preload: () => Promise.reject(new Error("no worker")),
+      show: () => Promise.resolve(),
+      highlight: () => undefined,
+      hide: () => undefined,
+    };
+    const h = await makeHarness(midi({ notation: failing }));
+    const order = await runPlacement(h, () => "fast");
+    expect(order).toHaveLength(17);
+    const s = h.machine.state;
+    expect(s.kind === "summary" ? s.summary.notes : []).toEqual([
+      "Reading and hands were skipped because notation could not load.",
+    ]);
+  });
+
+  it("re-running never lowers a hands node placed before", async () => {
+    const h = await makeHarness(midi());
+    await runPlacement(h, (n) => (n.startsWith("hands.") ? "fast" : "wrong"));
+    const again = await makeHarness({ ...midi({ idSalt: 40 }), history: await h.log() });
+    await runPlacement(again, () => "wrong");
+    const events = await placementEvents(again);
+    // The first run placed the chords at fluent, this one at available.
+    expect(events.map((e) => e.results[HANDS_LH]).sort()).toEqual(["available", "fluent"]);
+    expect(again.service.state.nodes[HANDS_LH]?.state).toBe("fluent");
+    expect(again.service.state.nodes[HANDS_COORD]?.state).toBe("fluent");
   });
 });

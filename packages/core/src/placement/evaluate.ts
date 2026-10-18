@@ -15,16 +15,22 @@ import type { PlacementAttempt, PlacementSection, PlacementState, StageOutcome }
  * READ stages ("read" rule), per node: mastered needs every item correct and within its target
  * latency; fluent is at least n-1 correct (3 of 4, 2 of 3) with no latency condition.
  *
+ * HANDS stages ("task" rule, R27), one item each: correct is fluent, otherwise available. The
+ * section runs only with polyphonic input (MIDI): a plan without it has no HANDS stages, and
+ * `walk` is told which sections the plan holds. HANDS comes last, so a run without it places
+ * EAR and READ exactly as before and the hands roots stay available (R9).
+ *
  * Gating: the diatonic stage runs only if 1-3-5 is mastered. A READ stage runs only if the previous
  * READ stage is at least fluent (the section stops at the first available). The EAR 1-3-5 stage
- * scoring available stops the EAR section. The sections are independent.
+ * scoring available stops the EAR section. The hands-together stage runs only if the left-hand
+ * stage is fluent. The sections are independent.
  */
 
 export interface StageSpec {
   id: string;
   section: PlacementSection;
   nodeId: string;
-  rule: "ear" | "read";
+  rule: "ear" | "read" | "task";
   size: number;
   /** The previous stage in the section must reach at least this state for the stage to run. */
   gate: PlacementState | null;
@@ -71,7 +77,26 @@ export const STAGE_SPECS: readonly StageSpec[] = [
     size: 3,
     gate: "fluent",
   },
+  {
+    id: "hands.lh",
+    section: "HANDS",
+    nodeId: "hands.lh.triads.root",
+    rule: "task",
+    size: 1,
+    gate: null,
+  },
+  {
+    id: "hands.coord",
+    section: "HANDS",
+    nodeId: "hands.coord.basic",
+    rule: "task",
+    size: 1,
+    gate: "fluent",
+  },
 ];
+
+/** Every placement section, in the order the stages run. */
+export const ALL_SECTIONS: ReadonlySet<PlacementSection> = new Set(["EAR", "READ", "HANDS"]);
 
 const RANK: Record<PlacementState, number> = { available: 0, fluent: 1, mastered: 2 };
 
@@ -102,6 +127,7 @@ export function scoreStage(spec: StageSpec, attempts: readonly PlacementAttempt[
   const n = spec.size;
   const correct = attempts.filter((a) => a.correct);
   const c = correct.length;
+  if (spec.rule === "task") return c === n ? "fluent" : "available";
   if (spec.rule === "ear") {
     if (c >= n - 1 && medianWithinTarget(correct)) return "mastered";
     if (c >= n - 2) return "fluent";
@@ -122,12 +148,17 @@ export interface Progress {
 /**
  * Walk the stages in order, consuming attempts by node id (the first `size` attempts of a node
  * belong to its stage; later ones are ignored). Stops at the first stage that is not complete.
+ * Stages of a section not in `sections` are left out entirely (not run, not listed as skipped).
  */
-export function walk(attempts: readonly PlacementAttempt[]): Progress {
+export function walk(
+  attempts: readonly PlacementAttempt[],
+  sections: ReadonlySet<PlacementSection> = ALL_SECTIONS,
+): Progress {
   const completed: StageOutcome[] = [];
   const skipped: StageSpec[] = [];
   const stopped = new Set<PlacementSection>();
   for (const spec of STAGE_SPECS) {
+    if (!sections.has(spec.section)) continue;
     if (stopped.has(spec.section)) {
       skipped.push(spec);
       continue;
@@ -154,7 +185,8 @@ export function walk(attempts: readonly PlacementAttempt[]): Progress {
 /**
  * Per-node placed state, capped by prerequisites: a node never exceeds the lowest placed state of
  * its prerequisites. Prerequisites that were not placed do not cap. Unreached or incomplete nodes
- * have no entry.
+ * have no entry. A section that was not run (HANDS without MIDI) comes last and has no attempts,
+ * so it places nothing.
  */
 export function placementResults(
   attempts: readonly PlacementAttempt[],
