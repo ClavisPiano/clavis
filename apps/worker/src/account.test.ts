@@ -159,6 +159,35 @@ describe("DELETE /api/me", () => {
     expect(bucket.keys()).toEqual([]);
   });
 
+  it("empties the event log before and after the D1 delete, so a late push cannot leave events behind", async () => {
+    const real = makeEnv().env.USER_EVENTS;
+    const order: string[] = [];
+    const watched = {
+      idFromName: (name: string) => real.idFromName(name),
+      get: (id: DurableObjectId) => {
+        const stub = real.get(id);
+        return {
+          fetch: async (input: string, init?: RequestInit) => {
+            if (input.endsWith("/delete")) {
+              const rows = await env.DB.prepare("SELECT id FROM users WHERE id = ?")
+                .bind("u1")
+                .all();
+              order.push(
+                rows.results.length > 0
+                  ? "event log deleted, user still there"
+                  : "event log deleted, user gone",
+              );
+            }
+            return stub.fetch(input, init);
+          },
+        };
+      },
+    } as unknown as DurableObjectNamespace;
+    const { env } = makeEnv({ USER_EVENTS: watched });
+    expect((await del(env, "u1")).status).toBe(200);
+    expect(order).toEqual(["event log deleted, user still there", "event log deleted, user gone"]);
+  });
+
   it("works for an account with nothing stored", async () => {
     const { env } = makeEnv();
     expect((await del(env, "u3")).status).toBe(200);

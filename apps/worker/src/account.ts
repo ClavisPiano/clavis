@@ -42,6 +42,12 @@ async function deleteRecordings(env: Env, userId: string): Promise<void> {
   throw new Error("too many recordings to delete in one request");
 }
 
+/** Empty the user's Durable Object (events and quota counters). Safe to repeat. */
+async function deleteEventLog(env: Env, userId: string): Promise<void> {
+  const res = await userStub(env, userId).fetch("https://user-events/delete", { method: "POST" });
+  if (!res.ok) throw new Error(`event log delete failed (${String(res.status)})`);
+}
+
 async function deleteAccount(request: Request, env: Env): Promise<Response> {
   const userId = await authenticate(request, env);
   if (userId === null) return json({ error: "unauthorized" }, 401);
@@ -51,20 +57,20 @@ async function deleteAccount(request: Request, env: Env): Promise<Response> {
   }
   try {
     await deleteRecordings(env, userId);
-    const res = await userStub(env, userId).fetch("https://user-events/delete", { method: "POST" });
-    if (!res.ok) throw new Error(`event log delete failed (${String(res.status)})`);
+    await deleteEventLog(env, userId);
     await createAuthRepo(d1Sql(env.DB)).deleteUser(userId);
   } catch (error) {
     console.error("account deletion failed", error);
     return json({ error: "internal" }, 500);
   }
-  // An upload from another device can land between the first sweep and the D1 delete. Uploads are
-  // refused once the user row is gone, so one more sweep leaves nothing behind. The account is
-  // already deleted, so a failure here is logged, not reported as a failed deletion.
+  // An upload or an event push from another device can land between the first sweeps and the D1
+  // delete. Both are refused once the user row is gone, so one more sweep leaves nothing behind.
+  // The account is already deleted, so a failure here is logged, not reported as a failed deletion.
   try {
     await deleteRecordings(env, userId);
+    await deleteEventLog(env, userId);
   } catch (error) {
-    console.error("account deleted but a late recording sweep failed", error);
+    console.error("account deleted but a late sweep failed", error);
   }
   const headers = new Headers(API_HEADERS);
   for (const cookie of expiredCookies()) headers.append("set-cookie", cookie);
