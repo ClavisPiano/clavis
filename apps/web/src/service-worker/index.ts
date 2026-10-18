@@ -2,6 +2,7 @@ import { version } from "$app/env";
 import { assets, immutable, prerendered } from "$app/manifest";
 import { self as sw } from "$app/service-worker";
 import { parseCuePayload } from "../lib/pwa/cue-payload";
+import { networkFirst } from "../lib/pwa/navigate";
 import {
   WARM_NOTATION_MESSAGE,
   isWorkerChunk,
@@ -169,11 +170,12 @@ async function cacheFirst(href: string, request: Request): Promise<Response> {
 // Network first so a fresh deploy's shell is used when online, falling back to the precached SPA
 // shell (which client-side routing turns into the right page) when offline.
 async function navigate(request: Request): Promise<Response> {
-  try {
-    return await fetch(request);
-  } catch {
-    const cache = await caches.open(PRECACHE);
-    const shell = await cache.match(new URL(SHELL, sw.location.href).href, { ignoreVary: true });
-    return shell ?? Response.error();
-  }
+  return networkFirst(
+    () => fetch(request),
+    async () => {
+      const cache = await caches.open(PRECACHE);
+      const shell = await cache.match(new URL(SHELL, sw.location.href).href, { ignoreVary: true });
+      return shell ?? Response.error();
+    },
+  );
 }

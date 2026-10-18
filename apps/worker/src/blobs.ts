@@ -1,7 +1,7 @@
 import { MAX_BLOB_BYTES, baseContentType, isAllowedBlobType, isValidBlobName } from "@clavis/core";
 import { authenticate } from "./auth/guard";
 import type { Env } from "./env";
-import { API_HEADERS, json, methodNotAllowed } from "./http";
+import { API_HEADERS, json, methodNotAllowed, readLimited } from "./http";
 
 /*
  * Recording storage in R2 (T4.5). The object key is always `${userId}/${name}` with the user id
@@ -46,31 +46,6 @@ export function parseBlobName(pathname: string): string | null {
     return null;
   }
   return isValidBlobName(name) ? name : null;
-}
-
-/** Read the body, giving up as soon as it exceeds the cap (a lying content-length cannot buffer more). */
-async function readLimited(request: Request, limit: number): Promise<Uint8Array | null> {
-  if (!request.body) return new Uint8Array(0);
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = (await reader.read()) as ReadableStreamReadResult<Uint8Array>;
-    if (done) break;
-    total += value.byteLength;
-    if (total > limit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const c of chunks) {
-    out.set(c, offset);
-    offset += c.byteLength;
-  }
-  return out;
 }
 
 /** CSRF defence for state-changing blob calls: the content type is audio, so Origin is the check. */

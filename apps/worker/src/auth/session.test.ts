@@ -61,9 +61,14 @@ describe("extractToken", () => {
   const req = (headers: Record<string, string>) => new Request("https://x.test/", { headers });
   it("reads bearer and cookie, bearer first", () => {
     expect(extractToken(req({ authorization: "Bearer abc" }))).toBe("abc");
-    expect(extractToken(req({ cookie: "a=1; clavis_session=tok; b=2" }))).toBe("tok");
-    expect(extractToken(req({ authorization: "Bearer one", cookie: "clavis_session=two" }))).toBe(
-      "one",
+    expect(extractToken(req({ cookie: "a=1; __Host-clavis_session=tok; b=2" }))).toBe("tok");
+    expect(
+      extractToken(req({ authorization: "Bearer one", cookie: "__Host-clavis_session=two" })),
+    ).toBe("one");
+    // The name used before the __Host- prefix still works, and the new name wins when both exist.
+    expect(extractToken(req({ cookie: "clavis_session=old" }))).toBe("old");
+    expect(extractToken(req({ cookie: "clavis_session=old; __Host-clavis_session=new" }))).toBe(
+      "new",
     );
     expect(extractToken(req({ authorization: "Basic abc" }))).toBeNull();
     expect(extractToken(req({ cookie: "other=1" }))).toBeNull();

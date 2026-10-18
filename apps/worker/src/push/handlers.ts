@@ -4,7 +4,7 @@ import { authenticate } from "../auth/guard";
 import { fromBase64Url } from "../auth/session";
 import { d1Sql } from "../auth/sql";
 import { nowMs, type Env } from "../env";
-import { csrfFailure, json, methodNotAllowed } from "../http";
+import { csrfFailure, json, methodNotAllowed, readLimited } from "../http";
 import { weekdaysToMask } from "./due";
 import { isAcceptableEndpoint } from "./endpoint";
 import { createPushRepo } from "./repo";
@@ -45,8 +45,8 @@ async function readBody<S extends z.ZodType>(
   request: Request,
   schema: S,
 ): Promise<z.output<S> | null> {
-  const raw = await request.arrayBuffer();
-  if (raw.byteLength > MAX_BODY_BYTES) return null;
+  const raw = await readLimited(request, MAX_BODY_BYTES);
+  if (raw === null) return null;
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder().decode(raw));
