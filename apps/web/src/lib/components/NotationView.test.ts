@@ -53,6 +53,31 @@ describe("NotationView", () => {
     expect(screen.getByRole("img", { name: "Test score" })).toBeTruthy();
   });
 
+  it("describes the score for screen readers without naming the pitches by default", async () => {
+    const { port, view } = setup();
+    await port.show(FIXTURE_INTERVAL_C3_G3);
+    const img = screen.getByRole("img", { name: "Test score" });
+    const describedBy = img.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    const text = view.container.querySelector(`#${describedBy ?? ""}`)?.textContent ?? "";
+    expect(text).toContain("Bass clef");
+    expect(text).not.toMatch(/\b[A-G] [0-9]\b/);
+  });
+
+  it("lists the notes when revealPitches is on", async () => {
+    const port = createNotationViewPort(new StubRenderer());
+    const view = render(NotationView, { port, label: "Example", revealPitches: true });
+    await port.show(FIXTURE_INTERVAL_C3_G3);
+    expect(view.container.querySelector("[data-testid=notation-description]")?.textContent).toMatch(
+      /C 3/,
+    );
+  });
+
+  it("has no description before a score is shown", () => {
+    const { view } = setup();
+    expect(view.container.querySelector("[data-testid=notation-description]")).toBeNull();
+  });
+
   it("highlight sets the mark classes by note id and clears them", async () => {
     const { port, view } = setup();
     await port.show(FIXTURE_INTERVAL_C3_G3);

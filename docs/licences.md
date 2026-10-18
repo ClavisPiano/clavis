@@ -11,7 +11,8 @@
   Enforcement options are in `docs/cla-setup.md`.
 - Dependency audit (October 2026, `pnpm licenses list`): every production dependency is MIT,
   BSD-3-Clause, Apache-2.0 or 0BSD, except Verovio (LGPL-3.0-or-later, see below). Dev-only tools
-  include `lightningcss` (MPL-2.0) and `sharp-libvips` (LGPL-3.0); neither is shipped. There are no
+  include `lightningcss` (MPL-2.0), `@axe-core/playwright` and `axe-core` (MPL-2.0, accessibility checks in the
+  Playwright tests) and `sharp-libvips` (LGPL-3.0); none is shipped. There are no
   GPL or AGPL packages. Re-run the audit when adding a dependency, and keep new ones out of GPL and
   AGPL.
 - The app shows these on Settings, "Licences and source code" (`/settings/about`): a link to the

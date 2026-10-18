@@ -9,12 +9,13 @@ import {
 import { z } from "zod";
 import { nowMs, type Env } from "../env";
 import { API_HEADERS, csrfFailure, json, methodNotAllowed, readLimited } from "../http";
-import { authenticate } from "./guard";
+import { authenticate, authenticateSession } from "./guard";
 import { createAuthRepo, type AuthRepo, type ChallengeKind } from "./repo";
 import {
   COOKIE_NAME,
   LEGACY_COOKIE_NAME,
   fromBase64Url,
+  type SessionClaims,
   signSession,
   toBase64Url,
 } from "./session";
@@ -23,6 +24,12 @@ import { d1Sql } from "./sql";
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 export const RECOVERY_CODE_COUNT = 10;
+/**
+ * Global cap on new accounts per hour, across all clients. The per-IP limiters are approximate,
+ * per location and fail open, so this bounds what a distributed account-creation flood can store.
+ */
+export const MAX_REGISTRATIONS_PER_HOUR = 100;
+const REGISTRATION_WINDOW_MS = 60 * 60 * 1000;
 const RP_NAME = "Clavis";
 const MAX_AUTH_BODY_BYTES = 64 * 1024;
 
@@ -63,6 +70,26 @@ async function withSession(
   const exp = Math.floor(nowMs(env) / 1000) + SESSION_TTL_SECONDS;
   const token = await signSession({ sub: userId, exp, ep: epoch }, env.SESSION_SECRET);
   return json(body, status, { "set-cookie": sessionCookie(token, SESSION_TTL_SECONDS) });
+}
+
+/**
+ * Sliding renewal: a fresh `Set-Cookie` value when a cookie-authenticated request arrives with
+ * under half the lifetime left, otherwise null. Bearer callers manage their own tokens. The new
+ * token keeps the epoch, so "sign out everywhere" still revokes it.
+ */
+export async function renewalCookie(
+  request: Request,
+  env: Env,
+  claims: SessionClaims,
+): Promise<string | null> {
+  if (request.headers.has("authorization")) return null;
+  const nowS = Math.floor(nowMs(env) / 1000);
+  if (claims.exp - nowS >= SESSION_TTL_SECONDS / 2) return null;
+  const token = await signSession(
+    { sub: claims.sub, exp: nowS + SESSION_TTL_SECONDS, ep: claims.ep ?? 0 },
+    env.SESSION_SECRET,
+  );
+  return sessionCookie(token, SESSION_TTL_SECONDS);
 }
 
 /** Parse the JSON body against a schema; null on any failure. Empty bodies count as `{}`. */
@@ -125,8 +152,20 @@ function registrationOptions(
   });
 }
 
+/** 503 while the hourly cap is reached, otherwise null. Retry-After is the window length. */
+async function registrationsPaused(env: Env, repo: AuthRepo): Promise<Response | null> {
+  const recent = await repo.countUsersSince(nowMs(env) - REGISTRATION_WINDOW_MS);
+  if (recent < MAX_REGISTRATIONS_PER_HOUR) return null;
+  console.warn(`registration cap reached: ${String(recent)} accounts in the last hour`);
+  return json({ error: "registration_paused" }, 503, {
+    "retry-after": String(REGISTRATION_WINDOW_MS / 1000),
+  });
+}
+
 async function registerOptions(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
   if ((await readBody(request, NoBody)) === null) return invalidRequest();
+  const paused = await registrationsPaused(env, repo);
+  if (paused) return paused;
   const userId = randomId();
   const options = await registrationOptions(env, userId, []);
   const challengeId = await newChallenge(repo, env, "register", options.challenge, userId);
@@ -136,6 +175,9 @@ async function registerOptions(request: Request, env: Env, repo: AuthRepo): Prom
 async function registerVerify(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
   const body = await readBody(request, VerifyBody);
   if (!body) return invalidRequest();
+  // Checked again here: options may have been issued before the cap was reached.
+  const paused = await registrationsPaused(env, repo);
+  if (paused) return paused;
   const stored = await repo.consumeChallenge(body.challengeId, "register", nowMs(env));
   if (!stored?.userId) return invalidChallenge();
   const verification = await verifyRegistration(env, body.response, stored.challenge);
@@ -298,13 +340,19 @@ async function logoutAll(request: Request, env: Env, repo: AuthRepo): Promise<Re
 }
 
 async function me(request: Request, env: Env, repo: AuthRepo): Promise<Response> {
-  const userId = await authenticate(request, env);
-  if (userId === null) return json({ error: "unauthorized" }, 401);
-  const [passkeys, recoveryCodesLeft] = await Promise.all([
+  const claims = await authenticateSession(request, env);
+  if (claims === null) return json({ error: "unauthorized" }, 401);
+  const userId = claims.sub;
+  const [passkeys, recoveryCodesLeft, renewed] = await Promise.all([
     repo.listCredentials(userId),
     repo.recoveryCodesLeft(userId),
+    renewalCookie(request, env, claims),
   ]);
-  return json({ userId, passkeys: passkeys.length, recoveryCodesLeft });
+  return json(
+    { userId, passkeys: passkeys.length, recoveryCodesLeft },
+    200,
+    renewed ? { "set-cookie": renewed } : undefined,
+  );
 }
 
 type PostHandler = (request: Request, env: Env, repo: AuthRepo) => Promise<Response>;

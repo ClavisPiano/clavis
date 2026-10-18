@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import worker from "../index";
 import type { Env } from "../env";
 import { ORIGIN, RP_ID, fakeLimiter, makeEnv } from "../test-support";
 import {
   CHALLENGE_TTL_MS,
+  MAX_REGISTRATIONS_PER_HOUR,
   RATE_LIMIT_RETRY_AFTER_S,
   RECOVERY_CODE_COUNT,
   SESSION_TTL_SECONDS,
@@ -337,6 +338,58 @@ describe("session, me and logout", () => {
     expect((await get(env, "/api/me", cookie)).status).toBe(401);
   });
 
+  it("renews the cookie on /api/me and sync only when under half the lifetime remains", async () => {
+    const { env, clock, device } = setup();
+    const reg = await register(env, device);
+    const cookie = cookieOf(reg.res);
+    const day = 24 * 3600 * 1000;
+    clock.t += 10 * day;
+    expect((await get(env, "/api/me", cookie)).headers.get("set-cookie")).toBeNull();
+    expect((await get(env, "/api/sync/pull?after=0", cookie)).headers.get("set-cookie")).toBeNull();
+    clock.t += 6 * day; // 14 days left
+    const renewed = await get(env, "/api/me", cookie);
+    const header = renewed.headers.get("set-cookie") ?? "";
+    expect(header).toMatch(/^__Host-clavis_session=[^;]+; HttpOnly; Secure; SameSite=Lax; Path=/);
+    expect(header).toContain(`Max-Age=${String(SESSION_TTL_SECONDS)}`);
+    // The renewed token outlives the original one.
+    clock.t += 20 * day;
+    expect((await get(env, "/api/me", cookie)).status).toBe(401);
+    expect((await get(env, "/api/me", header.split(";")[0])).status).toBe(200);
+    // Sync renews too.
+    const pull = await get(env, "/api/sync/pull?after=0", header.split(";")[0]);
+    expect(pull.status).toBe(200);
+    const again = pull.headers.get("set-cookie") ?? "";
+    expect(again).toMatch(/^__Host-clavis_session=/);
+    clock.t += 20 * day;
+    expect((await get(env, "/api/sync/pull?after=0", again.split(";")[0])).status).toBe(200);
+  });
+
+  it("a renewed token is revoked by sign out everywhere", async () => {
+    const { env, clock, device } = setup();
+    const reg = await register(env, device);
+    clock.t += 20 * 24 * 3600 * 1000;
+    const renewed = cookieOf(await get(env, "/api/me", cookieOf(reg.res)));
+    expect((await get(env, "/api/me", renewed)).status).toBe(200);
+    await post(env, "/api/auth/logout/all", {}, { cookie: renewed });
+    expect((await get(env, "/api/me", renewed)).status).toBe(401);
+  });
+
+  it("does not renew bearer callers or failed requests", async () => {
+    const { env, clock, device } = setup();
+    const reg = await register(env, device);
+    const token = cookieOf(reg.res).split("=")[1] ?? "";
+    clock.t += 20 * 24 * 3600 * 1000;
+    const res = await worker.fetch(
+      new Request(`${ORIGIN}/api/me`, { headers: { authorization: `Bearer ${token}` } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toBeNull();
+    const bad = await get(env, "/api/sync/pull?after=nope", cookieOf(reg.res));
+    expect(bad.status).toBe(400);
+    expect(bad.headers.get("set-cookie")).toBeNull();
+  });
+
   it("sign out everywhere ends all sessions, including a later passkey login's older ones", async () => {
     const { env, device } = setup();
     const reg = await register(env, device);
@@ -528,10 +581,64 @@ describe("rate limiting", () => {
     expect(general.keys).toEqual([]);
   });
 
-  it("fails open when the limiter itself errors", async () => {
+  it("fails open when the limiter itself errors, and logs it", async () => {
     const { env } = setup();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     env.AUTH_LIMITER = { limit: () => Promise.reject(new Error("limiter down")) };
     const res = await post(env, "/api/auth/login/options", {});
     expect(res.status).toBe(200);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining("rate limiter failed"),
+      expect.any(Error),
+    );
+    log.mockRestore();
+  });
+});
+
+describe("registration cap", () => {
+  async function fill(env: Env, count: number, at: number) {
+    for (let i = 0; i < count; i++) {
+      await env.DB.prepare("INSERT INTO users (id, created_at) VALUES (?, ?)")
+        .bind(`bulk-${String(i)}-${String(at)}`, at)
+        .run();
+    }
+  }
+
+  it("refuses new registrations with 503 once the hourly cap is reached", async () => {
+    const { env, clock } = setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await fill(env, MAX_REGISTRATIONS_PER_HOUR, clock.t - 1000);
+    const res = await post(env, "/api/auth/register/options", {});
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("3600");
+    expect(await res.json()).toEqual({ error: "registration_paused" });
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("also refuses at verify when the cap was reached after options were issued", async () => {
+    const { env, clock, device } = setup();
+    const optRes = await post(env, "/api/auth/register/options", {});
+    const issued = await optRes.json<Issued>();
+    const response = await device.register({ challenge: issued.options.challenge });
+    await fill(env, MAX_REGISTRATIONS_PER_HOUR, clock.t - 1000);
+    const res = await post(env, "/api/auth/register/verify", {
+      challengeId: issued.challengeId,
+      response,
+    });
+    expect(res.status).toBe(503);
+  });
+
+  it("counts only the last hour, and never blocks sign in", async () => {
+    const { env, clock, device } = setup();
+    const reg = await register(env, device);
+    expect(reg.res.status).toBe(200);
+    await fill(env, MAX_REGISTRATIONS_PER_HOUR - 2, clock.t - 1000);
+    // One short of the cap including the first registration: still allowed.
+    expect((await post(env, "/api/auth/register/options", {})).status).toBe(200);
+    clock.t += 61 * 60 * 1000; // all of them have aged out of the window
+    expect((await post(env, "/api/auth/register/options", {})).status).toBe(200);
+    await fill(env, MAX_REGISTRATIONS_PER_HOUR, clock.t - 1000);
+    expect((await post(env, "/api/auth/login/options", {})).status).toBe(200);
   });
 });

@@ -10,6 +10,7 @@
     type ValidatedImport,
   } from "../../../lib/backup";
   import { useLearner } from "../../../lib/learner.svelte";
+  import { recordBackupNow } from "../../../lib/backup-nudge";
   import { isSignedInHint } from "../../../lib/sync/hint";
   import { SYNCED_NOTICE } from "../../../lib/sync/notice";
   import { ReactiveSyncStatus } from "../../../lib/sync/status.svelte";
@@ -54,6 +55,7 @@
     try {
       const { file, count } = await makeExport();
       saveFile(file);
+      recordBackupNow();
       exportStatus = `Exported ${String(count)} events as ${file.name}`;
     } catch (e) {
       exportStatus = `Export failed: ${e instanceof Error ? e.message : String(e)}`;

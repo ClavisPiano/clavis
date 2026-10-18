@@ -2,6 +2,8 @@
   import { resolve } from "$app/paths";
 </script>
 
+<svelte:head><title>Install</title></svelte:head>
+
 <h1>Install Clavis</h1>
 <p>
   On iPhone and iPad, Clavis works best when added to your Home Screen. It then opens full screen

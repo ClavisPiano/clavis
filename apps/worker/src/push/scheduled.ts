@@ -1,7 +1,7 @@
 import { learnerDay } from "@clavis/core";
 import { d1Sql } from "../auth/sql";
 import type { Env } from "../env";
-import { dueSubscriptions } from "./due";
+import { CRON_INTERVAL_MIN, CUE_WINDOW_MIN, dueSubscriptions, minutesSinceCue } from "./due";
 import { isAcceptableEndpoint } from "./endpoint";
 import { createPushRepo, type PushSubscriptionRow } from "./repo";
 import { sendWebPush, type VapidKeys } from "./webpush";
@@ -21,6 +21,10 @@ export interface CueRunResult {
   sent: number;
   pruned: number;
   failed: number;
+  /** Due cues left for the next run because this one hit `MAX_SENDS_PER_RUN`. */
+  deferred: number;
+  /** Deferred cues whose window closes before the next run, so they will never be sent. */
+  dropped: number;
 }
 
 export interface CueRunOptions {
@@ -30,7 +34,7 @@ export interface CueRunOptions {
 
 /** Send today's practice cues that are due at `nowMs`. Called from the cron `scheduled` handler. */
 export async function runPracticeCues(env: Env, options: CueRunOptions): Promise<CueRunResult> {
-  const result: CueRunResult = { due: 0, sent: 0, pruned: 0, failed: 0 };
+  const result: CueRunResult = { due: 0, sent: 0, pruned: 0, failed: 0, deferred: 0, dropped: 0 };
   if (!env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY || !env.VAPID_SUBJECT) {
     console.warn("practice cue: VAPID keys are not configured, skipping");
     return result;
@@ -41,16 +45,25 @@ export async function runPracticeCues(env: Env, options: CueRunOptions): Promise
     subject: env.VAPID_SUBJECT,
   };
   const repo = createPushRepo(d1Sql(env.DB));
-  // Rows stored before the push service allowlist existed: never send to them, just drop them.
+  // Only rows near their cue time are read. Rows stored before the push service allowlist existed
+  // are never sent to; they are dropped when they come up.
   const allowed: PushSubscriptionRow[] = [];
   const gone: string[] = [];
-  for (const row of await repo.listAll()) {
+  for (const row of await repo.listNearDue(options.nowMs)) {
     if (isAcceptableEndpoint(row.endpoint)) allowed.push(row);
     else gone.push(row.endpoint);
   }
   const due = dueSubscriptions(allowed, options.nowMs);
   result.due = due.length;
   const batch = due.slice(0, MAX_SENDS_PER_RUN);
+  const over = due.slice(MAX_SENDS_PER_RUN);
+  result.deferred = over.length;
+  result.dropped = over.filter(
+    (row) => (minutesSinceCue(row, options.nowMs) ?? 0) + CRON_INTERVAL_MIN >= CUE_WINDOW_MIN,
+  ).length;
+  if (result.dropped > 0) {
+    console.warn(`practice cue: ${String(result.dropped)} cues will miss their window (send cap)`);
+  }
   const sent: { endpoint: string; day: string }[] = [];
   const outcomes = await Promise.all(
     batch.map((sub) =>

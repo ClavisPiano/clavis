@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { NotationViewPort } from "../notation/view-port";
   import type { NotationMark } from "../notation/port";
+  import { describeScore } from "../notation/describe";
+  import type { ScoreSpec } from "@clavis/core";
 
   interface Props {
     /** Where the SVG and highlights come from. */
@@ -9,9 +11,20 @@
     label: string;
     /** The score scales to its container up to this width. */
     maxWidth?: string;
+    /**
+     * List every note in the screen reader description. Leave off for a reading item, where the
+     * notes are the question; turn on for worked examples and previews.
+     */
+    revealPitches?: boolean;
   }
 
-  let { port, label, maxWidth = "36rem" }: Props = $props();
+  let { port, label, maxWidth = "36rem", revealPitches = false }: Props = $props();
+
+  // Unique per instance, so two scores on one page each point at their own description.
+  const uid = $props.id();
+  const descriptionId = `notation-desc-${uid}`;
+  let score = $state.raw<ScoreSpec | undefined>();
+  const description = $derived(score ? describeScore(score, { pitches: revealPitches }) : "");
 
   let svg = $state("");
   let marks = $state.raw<readonly NotationMark[]>([]);
@@ -21,6 +34,7 @@
     port.subscribe((s) => {
       svg = s.svg;
       marks = s.marks;
+      score = s.score;
     }),
   );
 
@@ -43,6 +57,7 @@
     class="notation"
     role="img"
     aria-label={label}
+    aria-describedby={description ? descriptionId : undefined}
     data-testid="notation"
     style:max-width={maxWidth}
     bind:this={host}
@@ -50,9 +65,24 @@
     <!-- eslint-disable-next-line svelte/no-at-html-tags -- trusted: SVG from our own renderer, built from our own ScoreSpec -->
     {@html svg}
   </div>
+  {#if description}
+    <p id={descriptionId} class="sr-only" data-testid="notation-description">{description}</p>
+  {/if}
 {/if}
 
 <style>
+  /* Read by screen readers, not shown. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
   .notation {
     width: 100%;
     margin-inline: auto;

@@ -3,7 +3,7 @@ import { metaCursorStore, syncOnce, type SyncResult } from "@clavis/core";
 import { uploadPendingBlobs } from "../blobs/app";
 import { getLearnerState } from "../learner";
 import { createSyncController, type SyncController } from "./controller";
-import { isSignedInHint, setSignedInHint } from "./hint";
+import { isSignedInHint, setSessionExpired, setSignedInHint } from "./hint";
 import { createFetchTransport } from "./transport";
 
 let controller: SyncController | undefined;
@@ -45,6 +45,7 @@ export function getSyncController(): SyncController {
     win: window,
     isSignedIn: isSignedInHint,
     onSignedOut: () => {
+      setSessionExpired(true);
       setSignedInHint(false);
     },
   });
