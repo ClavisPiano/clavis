@@ -5,6 +5,7 @@ import {
   shouldWelcomeBack,
   type LearnerState,
   type SessionMode,
+  type SessionPlan,
   type SkillGraph,
 } from "@clavis/core";
 import { effectiveSettings, hasStartedItems } from "./home";
@@ -81,7 +82,12 @@ export function startWouldBeEmpty(opts: {
   budgetSec: number;
 }): boolean {
   const plan = composeSession({ ...opts, ...pieceInputs(opts.state), seed: 0 });
-  return plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0) === 0;
+  return plannedItemCount(plan) === 0;
+}
+
+/** Items a plan would ask the learner to do: Ear, Read and Apply together. */
+function plannedItemCount(plan: SessionPlan): number {
+  return plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0);
 }
 
 export interface WelcomeBackOffer {
@@ -110,8 +116,7 @@ export function welcomeBackOffer(opts: {
     recovery: true,
     seed: 0,
   });
-  const count = plan.blocks.ear.length + plan.blocks.read.length + (plan.blocks.apply?.length ?? 0);
-  if (count === 0) return undefined;
+  if (plannedItemCount(plan) === 0) return undefined;
   return { missed: missedDays(opts.state, opts.now, opts.tzOffsetMin), sec: plan.budgetSec };
 }
 

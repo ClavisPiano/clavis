@@ -1,5 +1,5 @@
 import type { TranscribedNote, Transcriber } from "@clavis/audio";
-import type { WorkerReply, WorkerRequest } from "./messages";
+import { WorkerReplySchema, type WorkerReply, type WorkerRequest } from "./messages";
 
 /** Where `static/models/basic-pitch/model.json` is served. */
 export const MODEL_URL = "/models/basic-pitch/model.json";
@@ -49,14 +49,16 @@ export function createBasicPitchTranscriber(
   const stop = (): void => {
     worker?.terminate();
     worker = undefined;
-    for (const settle of pending.values()) settle({ id: 0, ok: false, error: "stopped" });
+    for (const [id, settle] of [...pending]) settle({ id, ok: false, error: "stopped" });
     pending.clear();
   };
 
   const start = (): WorkerLike => {
     const w = createWorker();
     w.addEventListener("message", (event) => {
-      pending.get(event.data.id)?.(event.data);
+      // A reply that does not parse is dropped; its request then ends at the timeout.
+      const reply = WorkerReplySchema.safeParse(event.data);
+      if (reply.success) pending.get(reply.data.id)?.(reply.data);
     });
     w.addEventListener("error", stop);
     worker = w;
