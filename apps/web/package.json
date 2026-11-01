@@ -39,7 +39,7 @@
     "@testing-library/dom": "10.4.2",
     "@testing-library/svelte": "5.4.2",
     "fake-indexeddb": "6.2.5",
-    "happy-dom": "20.14.6",
+    "happy-dom": "21.0.4",
     "sharp": "0.35.5",
     "svelte": "5.57.2",
     "svelte-check": "4.7.6",
