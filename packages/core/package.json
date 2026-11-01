@@ -14,7 +14,7 @@
   "dependencies": {
     "@tonaljs/key": "4.10.0",
     "@tonaljs/note": "4.11.0",
-    "ts-fsrs": "5.4.2",
+    "ts-fsrs": "6.0.0",
     "zod": "4.6.5"
   }
 }
