@@ -17,6 +17,6 @@
     "@clavis/core": "workspace:*",
     "pitchy": "4.1.0",
     "smplr": "1.1.0",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   }
 }
